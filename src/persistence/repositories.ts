@@ -1,5 +1,6 @@
 import type { PersistenceResult } from './errors'
 import type { ModelProfile, ProviderConnection } from '../provider-config'
+import type { DebateParticipantConfig } from '../participant-config'
 
 export interface DebateRecord {
   id: string
@@ -17,16 +18,6 @@ export interface SessionRecord {
   currentStage: string
   createdAt: string
   updatedAt: string
-}
-
-export interface ParticipantRecord {
-  id: string
-  debateId: string
-  sessionId?: string
-  role: string
-  name: string
-  modelProfileId?: string
-  createdAt: string
 }
 
 export interface TurnRecord {
@@ -71,7 +62,6 @@ export interface EntityRepository<T extends { id: string }> {
 
 export interface DebateRepository extends EntityRepository<DebateRecord> {}
 export interface SessionRepository extends EntityRepository<SessionRecord> {}
-export interface ParticipantRepository extends EntityRepository<ParticipantRecord> {}
 export interface TurnRepository extends EntityRepository<TurnRecord> {}
 export interface EventRepository extends EntityRepository<EventRecord> {}
 export interface UsageRepository extends EntityRepository<UsageRecord> {}
@@ -98,13 +88,21 @@ export interface ModelProfileRepository {
   delete(id: string): PersistenceResult<boolean>
 }
 
+export interface DebateParticipantRepository {
+  create(participant: DebateParticipantConfig): PersistenceResult<void>
+  get(id: string): PersistenceResult<DebateParticipantConfig | undefined>
+  listBySession(sessionId: string): PersistenceResult<DebateParticipantConfig[]>
+  update(participant: DebateParticipantConfig): PersistenceResult<boolean>
+  delete(id: string): PersistenceResult<boolean>
+}
+
 export interface RepositoryCollection {
   settings: SettingsRepository
   providerConnections: ProviderConnectionRepository
   modelProfiles: ModelProfileRepository
+  participants: DebateParticipantRepository
   debates?: DebateRepository
   sessions?: SessionRepository
-  participants?: ParticipantRepository
   turns?: TurnRepository
   events?: EventRepository
   usage?: UsageRepository

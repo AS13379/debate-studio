@@ -127,6 +127,54 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_model_profiles_connection_id ON model_profiles(connection_id);
       CREATE UNIQUE INDEX idx_model_profiles_connection_model ON model_profiles(connection_id, model_id);
     `
+  },
+  {
+    version: 3,
+    name: 'participant_model_bindings',
+    sql: `
+      ALTER TABLE participants ADD COLUMN system_prompt_template TEXT;
+      ALTER TABLE participants ADD COLUMN updated_at TEXT;
+      UPDATE participants SET updated_at = created_at WHERE updated_at IS NULL;
+
+      CREATE UNIQUE INDEX idx_participants_session_role ON participants(session_id, role);
+
+      CREATE TRIGGER participants_validate_role_insert
+      BEFORE INSERT ON participants
+      WHEN NEW.role NOT IN ('affirmative', 'negative', 'moderator', 'judge')
+      BEGIN
+        SELECT RAISE(ABORT, 'invalid participant role');
+      END;
+
+      CREATE TRIGGER participants_validate_role_update
+      BEFORE UPDATE OF role ON participants
+      WHEN NEW.role NOT IN ('affirmative', 'negative', 'moderator', 'judge')
+      BEGIN
+        SELECT RAISE(ABORT, 'invalid participant role');
+      END;
+
+      CREATE TRIGGER participants_require_model_profile_insert
+      BEFORE INSERT ON participants
+      WHEN NEW.model_profile_id IS NULL
+        OR NOT EXISTS (SELECT 1 FROM model_profiles WHERE id = NEW.model_profile_id)
+      BEGIN
+        SELECT RAISE(ABORT, 'participant model profile does not exist');
+      END;
+
+      CREATE TRIGGER participants_require_model_profile_update
+      BEFORE UPDATE OF model_profile_id ON participants
+      WHEN NEW.model_profile_id IS NULL
+        OR NOT EXISTS (SELECT 1 FROM model_profiles WHERE id = NEW.model_profile_id)
+      BEGIN
+        SELECT RAISE(ABORT, 'participant model profile does not exist');
+      END;
+
+      CREATE TRIGGER model_profiles_restrict_participant_delete
+      BEFORE DELETE ON model_profiles
+      WHEN EXISTS (SELECT 1 FROM participants WHERE model_profile_id = OLD.id)
+      BEGIN
+        SELECT RAISE(ABORT, 'model profile is assigned to a participant');
+      END;
+    `
   }
 ]
 

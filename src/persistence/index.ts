@@ -8,11 +8,10 @@ export type { Migration, MigrationResult } from './migrations'
 export type {
   DebateRecord,
   DebateRepository,
+  DebateParticipantRepository,
   EntityRepository,
   EventRecord,
   EventRepository,
-  ParticipantRecord,
-  ParticipantRepository,
   ModelProfileRepository,
   ProviderConnectionRepository,
   RepositoryCollection,
@@ -24,5 +23,6 @@ export type {
   UsageRecord,
   UsageRepository
 } from './repositories'
+export { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-repository'
 export { SQLiteModelProfileRepository, SQLiteProviderConnectionRepository } from './sqlite-provider-repositories'
 export { SQLiteSettingsRepository } from './sqlite-settings-repository'

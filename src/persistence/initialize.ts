@@ -2,6 +2,7 @@ import { Database, type DatabaseOptions } from './database'
 import { type PersistenceResult } from './errors'
 import { MigrationManager } from './migrations'
 import type { RepositoryCollection } from './repositories'
+import { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-repository'
 import { SQLiteModelProfileRepository, SQLiteProviderConnectionRepository } from './sqlite-provider-repositories'
 import { SQLiteSettingsRepository } from './sqlite-settings-repository'
 
@@ -31,7 +32,8 @@ export function initializePersistence(options: DatabaseOptions): PersistenceResu
       repositories: {
         settings: new SQLiteSettingsRepository(database),
         providerConnections: new SQLiteProviderConnectionRepository(database),
-        modelProfiles: new SQLiteModelProfileRepository(database)
+        modelProfiles: new SQLiteModelProfileRepository(database),
+        participants: new SQLiteDebateParticipantRepository(database)
       }
     }
   }
