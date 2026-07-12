@@ -40,7 +40,7 @@ export interface DebateState {
   currentTurnId?: string
 }
 
-export type DebateTurnStatus = 'completed' | 'skipped' | 'forced'
+export type DebateTurnStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped' | 'forced'
 
 export interface DebateTurn {
   id: string
@@ -49,7 +49,15 @@ export interface DebateTurn {
   participantId: string
   status: DebateTurnStatus
   content?: string
+  retryOfTurnId?: string
+  error?: string
   createdAt: string
+}
+
+export interface TurnCompletion {
+  turnId?: string
+  content?: string
+  retryOfTurnId?: string
 }
 
 export type DebateCommand =
@@ -72,7 +80,7 @@ export type DebateEvent =
     }
   | {
       id: string
-      type: 'mockSpeech'
+      type: 'turnCompleted'
       sessionId: string
       createdAt: string
       turn: DebateTurn
@@ -96,4 +104,3 @@ export interface DebateError {
 export type EngineResult =
   | { ok: true; state: DebateState; events: DebateEvent[] }
   | { ok: false; state: DebateState; events: []; error: DebateError }
-

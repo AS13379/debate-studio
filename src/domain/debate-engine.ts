@@ -12,7 +12,8 @@ import type {
   DebateTurn,
   DebateTurnStatus,
   EngineResult,
-  ParticipantRole
+  ParticipantRole,
+  TurnCompletion
 } from './debate-types'
 
 const FLOW: readonly DebateStage[] = [
@@ -72,6 +73,12 @@ export class DebateEngine {
     return [...this.eventLog]
   }
 
+  getCurrentParticipant(): DebateParticipant | undefined {
+    if (!this.isActiveStage(this.state.stage)) return undefined
+    const participant = this.participantFor(this.state.stage)
+    return participant ? { ...participant } : undefined
+  }
+
   dispatch(command: DebateCommand): EngineResult {
     switch (command.type) {
       case 'start':
@@ -100,8 +107,8 @@ export class DebateEngine {
     }
   }
 
-  /** Completes the current stage with deterministic Mock output and enters the next stage. */
-  advance(): EngineResult {
+  /** Records an externally produced turn and enters the next stage. */
+  advance(completion: TurnCompletion = {}): EngineResult {
     if (this.state.status !== 'running' || !this.isActiveStage(this.state.stage)) {
       return this.reject('advance')
     }
@@ -109,10 +116,17 @@ export class DebateEngine {
     const participant = this.participantFor(this.state.stage)
     if (!participant) return this.missingParticipant(this.state.stage)
 
-    const turn = this.createTurn(this.state.stage, participant, 'completed', this.mockSpeech(this.state.stage, participant))
+    const turn = this.createTurn(
+      this.state.stage,
+      participant,
+      'completed',
+      completion.content,
+      completion.turnId,
+      completion.retryOfTurnId
+    )
     const speechEvent: DebateEvent = {
       id: this.createId(),
-      type: 'mockSpeech',
+      type: 'turnCompleted',
       sessionId: this.session.id,
       createdAt: this.timestamp(),
       turn
@@ -185,15 +199,18 @@ export class DebateEngine {
     stage: Exclude<DebateStage, 'draft' | 'completed'>,
     participant: DebateParticipant,
     status: DebateTurnStatus,
-    content?: string
+    content?: string,
+    turnId?: string,
+    retryOfTurnId?: string
   ): DebateTurn {
     return {
-      id: this.createId(),
+      id: turnId ?? this.createId(),
       sessionId: this.session.id,
       stage,
       participantId: participant.id,
       status,
       content,
+      retryOfTurnId,
       createdAt: this.timestamp()
     }
   }
@@ -201,10 +218,6 @@ export class DebateEngine {
   private participantFor(stage: Exclude<DebateStage, 'draft' | 'completed'>): DebateParticipant | undefined {
     const acceptedRoles = STAGE_ROLE[stage]
     return this.session.participants.find((participant) => acceptedRoles.includes(participant.role))
-  }
-
-  private mockSpeech(stage: Exclude<DebateStage, 'draft' | 'completed'>, participant: DebateParticipant): string {
-    return `[Mock] ${participant.name} 完成阶段：${stage}`
   }
 
   private isActiveStage(stage: DebateStage): stage is Exclude<DebateStage, 'draft' | 'completed'> {

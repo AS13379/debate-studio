@@ -14,6 +14,6 @@ export type {
   DebateTurn,
   DebateTurnStatus,
   EngineResult,
-  ParticipantRole
+  ParticipantRole,
+  TurnCompletion
 } from './debate-types'
-

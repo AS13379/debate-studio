@@ -50,7 +50,7 @@ describe('DebateEngine', () => {
     expect(engine.getState().status).toBe('completed')
     expect(engine.getTurns()).toHaveLength(8)
     expect(new Set(engine.getTurns().map((turn) => turn.id)).size).toBe(8)
-    expect(engine.getEvents().filter((event) => event.type === 'mockSpeech')).toHaveLength(8)
+    expect(engine.getEvents().filter((event) => event.type === 'turnCompleted')).toHaveLength(8)
   })
 
   it('pauses and resumes without changing the current stage', () => {
