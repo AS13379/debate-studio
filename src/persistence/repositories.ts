@@ -1,4 +1,5 @@
 import type { PersistenceResult } from './errors'
+import type { ModelProfile, ProviderConnection } from '../provider-config'
 
 export interface DebateRecord {
   id: string
@@ -81,8 +82,26 @@ export interface SettingsRepository {
   delete(key: string): PersistenceResult<boolean>
 }
 
+export interface ProviderConnectionRepository {
+  create(connection: ProviderConnection): PersistenceResult<void>
+  findById(id: string): PersistenceResult<ProviderConnection | undefined>
+  list(): PersistenceResult<ProviderConnection[]>
+  update(connection: ProviderConnection): PersistenceResult<boolean>
+  delete(id: string): PersistenceResult<boolean>
+}
+
+export interface ModelProfileRepository {
+  create(profile: ModelProfile): PersistenceResult<void>
+  findById(id: string): PersistenceResult<ModelProfile | undefined>
+  listByConnection(connectionId: string): PersistenceResult<ModelProfile[]>
+  update(profile: ModelProfile): PersistenceResult<boolean>
+  delete(id: string): PersistenceResult<boolean>
+}
+
 export interface RepositoryCollection {
   settings: SettingsRepository
+  providerConnections: ProviderConnectionRepository
+  modelProfiles: ModelProfileRepository
   debates?: DebateRepository
   sessions?: SessionRepository
   participants?: ParticipantRepository
@@ -90,4 +109,3 @@ export interface RepositoryCollection {
   events?: EventRepository
   usage?: UsageRepository
 }
-

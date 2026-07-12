@@ -93,6 +93,40 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_events_session_id ON events(session_id);
       CREATE INDEX idx_usage_records_session_id ON usage_records(session_id);
     `
+  },
+  {
+    version: 2,
+    name: 'provider_configuration',
+    sql: `
+      CREATE TABLE provider_connections (
+        id TEXT PRIMARY KEY,
+        provider_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        protocol_type TEXT NOT NULL,
+        base_url TEXT NOT NULL,
+        credential_ref TEXT NOT NULL,
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE model_profiles (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL REFERENCES provider_connections(id) ON DELETE CASCADE,
+        model_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        alias TEXT,
+        capabilities_json TEXT NOT NULL,
+        context_window INTEGER,
+        max_output_tokens INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_provider_connections_provider_id ON provider_connections(provider_id);
+      CREATE INDEX idx_model_profiles_connection_id ON model_profiles(connection_id);
+      CREATE UNIQUE INDEX idx_model_profiles_connection_model ON model_profiles(connection_id, model_id);
+    `
   }
 ]
 
@@ -155,4 +189,3 @@ export class MigrationManager {
     return result.value
   }
 }
-
