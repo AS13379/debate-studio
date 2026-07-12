@@ -1,6 +1,9 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
+import { initializePersistence, type PersistenceContext } from '../persistence'
 import { createWindowOptions } from './window-options'
+
+let persistence: PersistenceContext | undefined
 
 function createWindow(): void {
   const window = new BrowserWindow(createWindowOptions(join(__dirname, '../preload/index.js')))
@@ -15,6 +18,12 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  const persistenceResult = initializePersistence({ appDataDirectory: app.getPath('userData') })
+  if (!persistenceResult.ok) {
+    throw new Error(`${persistenceResult.error.code}: ${persistenceResult.error.message}`)
+  }
+  persistence = persistenceResult.value
+
   ipcMain.handle('app:get-version', () => app.getVersion())
   createWindow()
 
@@ -23,7 +32,11 @@ app.whenReady().then(() => {
   })
 })
 
+app.on('before-quit', () => {
+  persistence?.database.close()
+  persistence = undefined
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
-
