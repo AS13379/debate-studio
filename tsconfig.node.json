@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["electron.vite.config.ts", "src/main/**/*.ts", "src/preload/**/*.ts", "src/domain/**/*.ts", "src/providers/**/*.ts", "src/execution/**/*.ts", "tests/**/*.ts"]
+  "include": ["electron.vite.config.ts", "src/main/**/*.ts", "src/preload/**/*.ts", "src/domain/**/*.ts", "src/providers/**/*.ts", "src/execution/**/*.ts", "src/persistence/**/*.ts", "tests/**/*.ts"]
 }
