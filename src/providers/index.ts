@@ -20,9 +20,10 @@ export { ModelAdapterError } from './model-adapter'
 export type {
   ModelAdapter,
   UnifiedError,
-  UnifiedModelRuntime,
+  UnifiedMessage,
   UnifiedRequest,
   UnifiedResponse,
+  UnifiedRuntimeMetadata,
   UnifiedStreamEvent
 } from './model-adapter'
 export { OpenAIChatAdapter } from './openai-chat-adapter'

@@ -47,6 +47,7 @@ export class TurnRunner {
     const startedAt = this.timestamp()
     let content = ''
 
+    const resolvedPrompt = prompt ?? `请完成辩论阶段：${state.stage}`
     const request: UnifiedRequest = {
       requestId: this.createId(),
       turnId,
@@ -54,8 +55,18 @@ export class TurnRunner {
       stage: state.stage,
       topic: engine.session.topic,
       participant,
-      prompt: prompt ?? `请完成辩论阶段：${state.stage}`,
-      signal: controller.signal
+      prompt: resolvedPrompt,
+      signal: controller.signal,
+      modelId: '',
+      messages: [{ role: 'user', content: resolvedPrompt }],
+      stream: true,
+      maxTokens: undefined,
+      runtimeMetadata: {
+        sessionId: engine.session.id,
+        role: participant.role,
+        turnId,
+        stage: state.stage
+      }
     }
 
     try {

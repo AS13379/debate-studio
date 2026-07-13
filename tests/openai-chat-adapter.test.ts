@@ -20,10 +20,21 @@ function request(): UnifiedRequest {
     participant: { id: 'affirmative-openai', role: 'affirmative', name: '正方' },
     prompt: '请完成正方立论。',
     signal: new AbortController().signal,
-    modelRuntime: {
-      modelId: 'gpt-test',
+    modelId: 'gpt-test',
+    messages: [
+      { role: 'system', content: '辩题：人工智能是否应当拥有法律人格\n角色：正方（affirmative）' },
+      { role: 'user', content: '请完成正方立论。' }
+    ],
+    stream: false,
+    maxTokens: 2048,
+    runtimeMetadata: {
+      sessionId: 'session-openai',
+      role: 'affirmative',
+      turnId: 'turn-openai',
+      stage: 'affirmative_opening',
       baseUrl: 'https://api.example.test/v1/',
-      maxOutputTokens: 2048
+      modelProfileId: 'profile-openai',
+      providerConnectionId: 'connection-openai'
     }
   }
 }

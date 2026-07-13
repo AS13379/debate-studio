@@ -1,9 +1,18 @@
-import type { DebateParticipant, DebateStage } from '../domain'
+import type { DebateParticipant, DebateStage, ParticipantRole } from '../domain'
 
-export interface UnifiedModelRuntime {
-  modelId: string
-  baseUrl: string
-  maxOutputTokens?: number
+export interface UnifiedMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export interface UnifiedRuntimeMetadata {
+  sessionId: string
+  role: ParticipantRole
+  turnId: string
+  stage: Exclude<DebateStage, 'draft' | 'completed'>
+  modelProfileId?: string
+  providerConnectionId?: string
+  baseUrl?: string
 }
 
 export interface UnifiedRequest {
@@ -15,7 +24,11 @@ export interface UnifiedRequest {
   participant: DebateParticipant
   prompt: string
   signal: AbortSignal
-  modelRuntime?: UnifiedModelRuntime
+  modelId: string
+  messages: UnifiedMessage[]
+  stream: boolean
+  maxTokens: number | undefined
+  runtimeMetadata: UnifiedRuntimeMetadata
 }
 
 export interface UnifiedResponse {
@@ -25,11 +38,14 @@ export interface UnifiedResponse {
 }
 
 export interface UnifiedError {
-  code: 'REQUEST_FAILED' | 'CANCELLED' | 'EMPTY_RESPONSE'
+  code: 'REQUEST_FAILED' | 'CANCELLED' | 'EMPTY_RESPONSE' | 'RUNTIME_CONFIGURATION_ERROR'
   message: string
   retryable: boolean
   statusCode?: number
   providerCode?: string
+  titleZh?: string
+  descriptionZh?: string
+  role?: ParticipantRole
 }
 
 export type UnifiedStreamEvent =

@@ -1,7 +1,7 @@
 import type { DebateParticipantRole } from '../participant-config'
 import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { SessionRecord } from '../persistence'
-import type { ModelAdapter } from '../providers'
+import type { ModelAdapter, UnifiedError, UnifiedRequest } from '../providers'
 
 export interface RuntimeParticipant {
   role: DebateParticipantRole
@@ -36,3 +36,15 @@ export interface RuntimeResolveError {
 export type RuntimeResolveResult =
   | { ok: true; config: DebateRuntimeConfig }
   | { ok: false; errors: RuntimeResolveError[] }
+
+export interface RuntimeTurnExecutionError extends UnifiedError {
+  code: 'RUNTIME_CONFIGURATION_ERROR'
+  titleZh: string
+  descriptionZh: string
+  role: DebateParticipantRole
+  retryable: false
+}
+
+export type RuntimeTurnPreparationResult =
+  | { ok: true; request: UnifiedRequest; participant: RuntimeParticipant }
+  | { ok: false; error: RuntimeTurnExecutionError }

@@ -12,7 +12,17 @@ function createRequest(): UnifiedRequest {
     topic: '测试辩题',
     participant: { id: 'affirmative-1', role: 'affirmative', name: '正方' },
     prompt: '请立论',
-    signal: new AbortController().signal
+    signal: new AbortController().signal,
+    modelId: 'mock-model',
+    messages: [{ role: 'user', content: '请立论' }],
+    stream: true,
+    maxTokens: 1024,
+    runtimeMetadata: {
+      sessionId: 'debate-1',
+      role: 'affirmative',
+      turnId: 'turn-1',
+      stage: 'affirmative_opening'
+    }
   }
 }
 
@@ -31,4 +41,3 @@ describe('MockAdapter', () => {
     })
   })
 })
-

@@ -104,31 +104,25 @@ export class OpenAIChatAdapter implements ModelAdapter {
   }
 
   private createTransportRequest(request: UnifiedRequest, stream: boolean): HttpTransportRequest {
-    const runtime = request.modelRuntime
-    if (!runtime?.modelId.trim() || !runtime.baseUrl.trim()) {
+    const baseUrl = request.runtimeMetadata.baseUrl
+    if (!request.modelId.trim() || !baseUrl?.trim()) {
       throw new ModelAdapterError({
         code: 'REQUEST_FAILED',
-        message: 'OpenAI Chat requires a non-empty modelId and baseUrl in modelRuntime.',
+        message: 'OpenAI Chat requires a non-empty modelId and runtimeMetadata.baseUrl.',
         retryable: false
       })
     }
 
     const body: OpenAIChatRequestBody = {
-      model: runtime.modelId,
-      messages: [
-        {
-          role: 'system',
-          content: `辩题：${request.topic}\n角色：${request.participant.name}（${request.participant.role}）`
-        },
-        { role: 'user', content: request.prompt }
-      ],
+      model: request.modelId,
+      messages: request.messages,
       stream
     }
-    if (runtime.maxOutputTokens !== undefined) body.max_tokens = runtime.maxOutputTokens
+    if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens
 
     return {
       method: 'POST',
-      url: `${runtime.baseUrl.replace(/\/+$/, '')}/chat/completions`,
+      url: `${baseUrl.replace(/\/+$/, '')}/chat/completions`,
       headers: { 'content-type': 'application/json' },
       body,
       signal: request.signal
