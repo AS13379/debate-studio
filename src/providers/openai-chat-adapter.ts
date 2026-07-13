@@ -125,7 +125,10 @@ export class OpenAIChatAdapter implements ModelAdapter {
       url: `${baseUrl.replace(/\/+$/, '')}/chat/completions`,
       headers: { 'content-type': 'application/json' },
       body,
-      signal: request.signal
+      signal: request.signal,
+      metadata: {
+        providerConnectionId: request.runtimeMetadata.providerConnectionId
+      }
     }
   }
 
@@ -168,7 +171,14 @@ export class OpenAIChatAdapter implements ModelAdapter {
       return { code: 'CANCELLED', message: 'OpenAI Chat request was cancelled.', retryable: true }
     }
     if (cause instanceof HttpTransportError) {
-      return { code: 'REQUEST_FAILED', message: cause.message, retryable: cause.retryable }
+      return {
+        code: 'REQUEST_FAILED',
+        message: cause.message,
+        retryable: cause.retryable,
+        statusCode: cause.statusCode,
+        titleZh: cause.titleZh,
+        descriptionZh: cause.descriptionZh
+      }
     }
     return {
       code: 'REQUEST_FAILED',

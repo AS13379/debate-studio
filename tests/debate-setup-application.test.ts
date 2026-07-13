@@ -8,6 +8,8 @@ import { initializeDebateSetupApplication } from '../src/application'
 import type { DebateParticipantConfig, DebateParticipantRole } from '../src/participant-config'
 import { initializePersistence } from '../src/persistence'
 import type { ModelCapabilities, ModelProfile, ProviderConnection } from '../src/provider-config'
+import { MockHttpTransport } from '../src/providers'
+import { MemoryCredentialStore } from '../src/security'
 
 const temporaryDirectories: string[] = []
 
@@ -112,9 +114,12 @@ describe('DebateSetupApplication composition', () => {
   it('loads a complete setup through repositories composed over SQLite', () => {
     const appDataDirectory = temporaryDirectory()
     seedCompleteSetup(appDataDirectory)
+    const transport = new MockHttpTransport()
     const initialized = initializeDebateSetupApplication({
       appDataDirectory,
-      getCapabilityRequirements: () => ({ requiredCapabilities: { textInput: true, streaming: true } })
+      getCapabilityRequirements: () => ({ requiredCapabilities: { textInput: true, streaming: true } }),
+      credentialStore: new MemoryCredentialStore(),
+      openAITransport: transport
     })
     expect(initialized.ok).toBe(true)
     if (!initialized.ok) return
@@ -129,13 +134,25 @@ describe('DebateSetupApplication composition', () => {
     expect(result.setup?.moderator?.participant.role).toBe('moderator')
     expect(result.setup?.judge?.participant.role).toBe('judge')
     expect(result.setup?.availableProtocolTypes).toEqual(['mock', 'openai-chat'])
+    const prepared = initialized.value.prepareDebateRuntime('session-1')
+    expect(prepared.ok).toBe(true)
+    if (prepared.ok) {
+      expect(prepared.runtimeConfig.session.id).toBe('session-1')
+      expect(prepared.runtimeConfig.affirmative.modelProfile.id).toBe('profile-affirmative')
+      expect(prepared.turnRunner).toBeDefined()
+    }
+    expect(transport.requests).toEqual([])
     expect(initialized.value.close()).toEqual({ ok: true, value: undefined })
   })
 
   it('releases the database once and blocks further setup reads', () => {
     const appDataDirectory = temporaryDirectory()
     seedCompleteSetup(appDataDirectory)
-    const initialized = initializeDebateSetupApplication({ appDataDirectory })
+    const initialized = initializeDebateSetupApplication({
+      appDataDirectory,
+      credentialStore: new MemoryCredentialStore(),
+      openAITransport: new MockHttpTransport()
+    })
     expect(initialized.ok).toBe(true)
     if (!initialized.ok) return
 

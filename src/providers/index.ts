@@ -4,9 +4,21 @@ export type {
   AdapterRegistryErrorCode,
   AdapterRegistryResult
 } from './adapter-registry'
+export { AuthenticatedHttpTransport } from './authenticated-http-transport'
+export type { CredentialReferenceResolver } from './authenticated-http-transport'
+export { ConnectionTestService } from './connection-test-service'
+export type {
+  ConnectionTestError,
+  ConnectionTestErrorCode,
+  ConnectionTestResult,
+  ConnectionTestServiceOptions
+} from './connection-test-service'
+export { FetchHttpTransport } from './fetch-http-transport'
+export type { FetchHttpTransportOptions, FetchImplementation } from './fetch-http-transport'
 export { HttpTransportError } from './http-transport'
 export type {
   HttpTransport,
+  HttpTransportErrorCode,
   HttpTransportErrorOptions,
   HttpTransportRequest,
   HttpTransportResponse,

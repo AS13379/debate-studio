@@ -1,9 +1,12 @@
 export interface HttpTransportRequest {
-  method: 'POST'
+  method: 'GET' | 'POST'
   url: string
   headers: Readonly<Record<string, string>>
-  body: unknown
+  body?: unknown
   signal: AbortSignal
+  metadata?: {
+    providerConnectionId?: string
+  }
 }
 
 export interface HttpTransportResponse {
@@ -22,21 +25,37 @@ export interface HttpTransport {
 }
 
 export interface HttpTransportErrorOptions {
-  code?: 'TRANSPORT_FAILED' | 'CANCELLED'
+  code?: HttpTransportErrorCode
   retryable?: boolean
-  cause?: unknown
+  statusCode?: number
+  titleZh?: string
+  descriptionZh?: string
 }
 
+export type HttpTransportErrorCode =
+  | 'TRANSPORT_FAILED'
+  | 'CANCELLED'
+  | 'TIMEOUT'
+  | 'INVALID_JSON'
+  | 'EMPTY_RESPONSE'
+  | 'STREAM_INTERRUPTED'
+  | 'CREDENTIAL_MISSING'
+  | 'CREDENTIAL_STORE_FAILED'
+
 export class HttpTransportError extends Error {
-  readonly code: 'TRANSPORT_FAILED' | 'CANCELLED'
+  readonly code: HttpTransportErrorCode
   readonly retryable: boolean
-  override readonly cause?: unknown
+  readonly statusCode?: number
+  readonly titleZh?: string
+  readonly descriptionZh?: string
 
   constructor(message: string, options: HttpTransportErrorOptions = {}) {
     super(message)
     this.name = 'HttpTransportError'
     this.code = options.code ?? 'TRANSPORT_FAILED'
     this.retryable = options.retryable ?? true
-    this.cause = options.cause
+    this.statusCode = options.statusCode
+    this.titleZh = options.titleZh
+    this.descriptionZh = options.descriptionZh
   }
 }
