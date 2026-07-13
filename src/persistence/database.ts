@@ -102,7 +102,6 @@ export class Database {
   }
 
   private errorCode(cause: unknown): 'DATABASE_CLOSED' | 'QUERY_FAILED' {
-    return cause instanceof Error && /closed/i.test(cause.message) ? 'DATABASE_CLOSED' : 'QUERY_FAILED'
+    return cause instanceof Error && /(closed|not open)/i.test(cause.message) ? 'DATABASE_CLOSED' : 'QUERY_FAILED'
   }
 }
-

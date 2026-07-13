@@ -25,4 +25,5 @@ export type {
 } from './repositories'
 export { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-repository'
 export { SQLiteModelProfileRepository, SQLiteProviderConnectionRepository } from './sqlite-provider-repositories'
+export { SQLiteSessionRepository } from './sqlite-session-repository'
 export { SQLiteSettingsRepository } from './sqlite-settings-repository'

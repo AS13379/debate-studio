@@ -1,9 +1,9 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { initializePersistence, type PersistenceContext } from '../persistence'
+import { initializeDebateSetupApplication, type DebateSetupApplication } from '../application'
 import { createWindowOptions } from './window-options'
 
-let persistence: PersistenceContext | undefined
+let debateSetupApplication: DebateSetupApplication | undefined
 
 function createWindow(): void {
   const window = new BrowserWindow(createWindowOptions(join(__dirname, '../preload/index.js')))
@@ -18,11 +18,14 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  const persistenceResult = initializePersistence({ appDataDirectory: app.getPath('userData') })
-  if (!persistenceResult.ok) {
-    throw new Error(`${persistenceResult.error.code}: ${persistenceResult.error.message}`)
+  const applicationResult = initializeDebateSetupApplication({
+    appDataDirectory: app.getPath('userData'),
+    availableProtocolTypes: []
+  })
+  if (!applicationResult.ok) {
+    throw new Error(`${applicationResult.error.code}: ${applicationResult.error.message}`)
   }
-  persistence = persistenceResult.value
+  debateSetupApplication = applicationResult.value
 
   ipcMain.handle('app:get-version', () => app.getVersion())
   createWindow()
@@ -33,8 +36,8 @@ app.whenReady().then(() => {
 })
 
 app.on('before-quit', () => {
-  persistence?.database.close()
-  persistence = undefined
+  debateSetupApplication?.close()
+  debateSetupApplication = undefined
 })
 
 app.on('window-all-closed', () => {

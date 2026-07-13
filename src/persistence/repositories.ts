@@ -61,7 +61,10 @@ export interface EntityRepository<T extends { id: string }> {
 }
 
 export interface DebateRepository extends EntityRepository<DebateRecord> {}
-export interface SessionRepository extends EntityRepository<SessionRecord> {}
+export interface SessionRepository {
+  get(id: string): PersistenceResult<SessionRecord | undefined>
+  exists(id: string): PersistenceResult<boolean>
+}
 export interface TurnRepository extends EntityRepository<TurnRecord> {}
 export interface EventRepository extends EntityRepository<EventRecord> {}
 export interface UsageRepository extends EntityRepository<UsageRecord> {}
@@ -101,8 +104,8 @@ export interface RepositoryCollection {
   providerConnections: ProviderConnectionRepository
   modelProfiles: ModelProfileRepository
   participants: DebateParticipantRepository
+  sessions: SessionRepository
   debates?: DebateRepository
-  sessions?: SessionRepository
   turns?: TurnRepository
   events?: EventRepository
   usage?: UsageRepository

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { DebateParticipantConfig, DebateParticipantRole } from '../src/participant-config'
 import type { PersistenceResult, SessionRecord } from '../src/persistence'
 import type { ModelCapabilities, ModelProfile, ProviderConnection } from '../src/provider-config'
+import { DebateSetupValidator } from '../src/setup-validation'
 import {
   DebateSetupLoader,
   type DebateSetupLoaderDependencies,
@@ -98,7 +99,7 @@ function fixture(options: FixtureOptions = {}): {
 
   const repositories: DebateSetupLoaderRepositories = {
     sessions: {
-      findById: (id) => success(configuredSession?.id === id ? configuredSession : undefined)
+      get: (id) => success(configuredSession?.id === id ? configuredSession : undefined)
     },
     participants: {
       listBySession: (id) => success(participants.filter((item) => item.sessionId === id))
@@ -123,7 +124,8 @@ function fixture(options: FixtureOptions = {}): {
       environment: {
         getAvailableProtocolTypes: () => ['openai-chat'],
         getCapabilityRequirements: () => ({ requiredCapabilities: { textInput: true, streaming: true } })
-      }
+      },
+      validator: new DebateSetupValidator({ availableProtocolTypes: ['openai-chat'] })
     },
     modelReads,
     connectionReads
@@ -218,7 +220,7 @@ describe('DebateSetupLoader', () => {
 
   it('converts a thrown Repository error into a structured load error', () => {
     const { dependencies } = fixture()
-    dependencies.repositories.sessions.findById = () => { throw new Error('database unavailable') }
+    dependencies.repositories.sessions.get = () => { throw new Error('database unavailable') }
 
     const result = new DebateSetupLoader(dependencies).load(session.id)
 

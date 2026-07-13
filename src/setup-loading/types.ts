@@ -8,6 +8,7 @@ import type {
   SessionRepository
 } from '../persistence'
 import type { DebateCapabilityRequirements, DebateSetupValidationResult } from '../setup-validation'
+import type { DebateSetupValidator } from '../setup-validation'
 
 export type DebateSetupLoadErrorCode =
   | 'INVALID_SESSION_ID'
@@ -17,6 +18,7 @@ export type DebateSetupLoadErrorCode =
   | 'PROVIDER_CONNECTION_NOT_FOUND'
   | 'REPOSITORY_READ_FAILED'
   | 'ENVIRONMENT_READ_FAILED'
+  | 'APPLICATION_CLOSED'
 
 export interface DebateSetupLoadError {
   code: DebateSetupLoadErrorCode
@@ -51,7 +53,7 @@ export interface DebateSetupLoadResult {
 }
 
 export interface DebateSetupLoaderRepositories {
-  sessions: Pick<SessionRepository, 'findById'>
+  sessions: Pick<SessionRepository, 'get'>
   participants: Pick<DebateParticipantRepository, 'listBySession'>
   modelProfiles: Pick<ModelProfileRepository, 'findById'>
   providerConnections: Pick<ProviderConnectionRepository, 'findById'>
@@ -65,5 +67,5 @@ export interface DebateSetupEnvironmentSource {
 export interface DebateSetupLoaderDependencies {
   repositories: DebateSetupLoaderRepositories
   environment: DebateSetupEnvironmentSource
+  validator: Pick<DebateSetupValidator, 'validate'>
 }
-

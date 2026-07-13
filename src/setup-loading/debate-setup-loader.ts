@@ -1,7 +1,7 @@
 import { buildDebateSessionParticipantBindings, type DebateParticipantConfig } from '../participant-config'
 import type { ModelProfile, ProtocolType, ProviderConnection } from '../provider-config'
 import type { PersistenceResult, SessionRecord } from '../persistence'
-import { DebateSetupValidator, type DebateCapabilityRequirements } from '../setup-validation'
+import type { DebateCapabilityRequirements } from '../setup-validation'
 import type {
   DebateSetupLoadError,
   DebateSetupLoaderDependencies,
@@ -34,7 +34,7 @@ export class DebateSetupLoader {
     }
 
     const sessionRead = this.readRepository(
-      () => this.dependencies.repositories.sessions.findById(normalizedSessionId),
+      () => this.dependencies.repositories.sessions.get(normalizedSessionId),
       '读取 Session 失败',
       normalizedSessionId,
       loadErrors
@@ -193,7 +193,7 @@ export class DebateSetupLoader {
   ): DebateSetupLoadResult {
     const protocols = environment?.protocols ?? []
     const requirements = environment?.requirements
-    const validation = new DebateSetupValidator({ availableProtocolTypes: protocols }).validate({
+    const validation = this.dependencies.validator.validate({
       sessionId,
       participants,
       modelProfiles,
@@ -266,4 +266,3 @@ export class DebateSetupLoader {
     return { code, titleZh, descriptionZh, relatedId, retryable }
   }
 }
-
