@@ -1,4 +1,5 @@
 export type ProtocolType =
+  | 'mock'
   | 'openai-chat'
   | 'openai-responses'
   | 'gemini-native'
@@ -50,4 +51,3 @@ export interface ProviderPreset {
   supportedProtocols: readonly ProtocolType[]
   capabilityHints: Partial<ModelCapabilities>
 }
-

@@ -1,15 +1,14 @@
-import type { ProtocolType } from '../provider-config'
 import {
   initializePersistence,
   type DatabaseOptions,
   type PersistenceContext,
   type PersistenceResult
 } from '../persistence'
+import { AdapterRegistry, MockAdapter } from '../providers'
 import { DebateSetupLoader, type DebateSetupLoadResult } from '../setup-loading'
 import { DebateSetupValidator, type DebateCapabilityRequirements } from '../setup-validation'
 
 export interface DebateSetupApplicationOptions extends DatabaseOptions {
-  availableProtocolTypes: readonly ProtocolType[]
   getCapabilityRequirements?: (sessionId: string) => DebateCapabilityRequirements | undefined
 }
 
@@ -20,9 +19,10 @@ export class DebateSetupApplication {
 
   constructor(
     private readonly persistence: PersistenceContext,
-    options: Omit<DebateSetupApplicationOptions, keyof DatabaseOptions>
+    options: Omit<DebateSetupApplicationOptions, keyof DatabaseOptions>,
+    private readonly adapterRegistry: AdapterRegistry
   ) {
-    const availableProtocolTypes = [...options.availableProtocolTypes]
+    const availableProtocolTypes = adapterRegistry.getAvailableProtocolTypes()
     this.validator = new DebateSetupValidator({ availableProtocolTypes })
     this.loader = new DebateSetupLoader({
       repositories: {
@@ -32,7 +32,7 @@ export class DebateSetupApplication {
         providerConnections: persistence.repositories.providerConnections
       },
       environment: {
-        getAvailableProtocolTypes: () => availableProtocolTypes,
+        getAvailableProtocolTypes: () => adapterRegistry.getAvailableProtocolTypes(),
         getCapabilityRequirements: (sessionId) => options.getCapabilityRequirements?.(sessionId)
       },
       validator: this.validator
@@ -73,12 +73,17 @@ export function initializeDebateSetupApplication(
 ): PersistenceResult<DebateSetupApplication> {
   const persistenceResult = initializePersistence(options)
   if (!persistenceResult.ok) return persistenceResult
+  const adapterRegistry = new AdapterRegistry()
+  const registration = adapterRegistry.register('mock', new MockAdapter())
+  if (!registration.ok) {
+    persistenceResult.value.database.close()
+    throw new Error(`${registration.error.code}: ${registration.error.message}`)
+  }
 
   return {
     ok: true,
     value: new DebateSetupApplication(persistenceResult.value, {
-      availableProtocolTypes: options.availableProtocolTypes,
       getCapabilityRequirements: options.getCapabilityRequirements
-    })
+    }, adapterRegistry)
   }
 }

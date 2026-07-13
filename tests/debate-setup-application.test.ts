@@ -60,11 +60,11 @@ function seedCompleteSetup(appDataDirectory: string): void {
 
   const connection: ProviderConnection = {
     id: 'connection-1',
-    providerId: 'openai',
-    displayName: '测试连接',
-    protocolType: 'openai-chat',
-    baseUrl: 'https://api.openai.com/v1',
-    credentialRef: 'openai:composition-test',
+    providerId: 'mock',
+    displayName: 'Mock 测试连接',
+    protocolType: 'mock',
+    baseUrl: 'https://mock.local',
+    credentialRef: 'mock:composition-test',
     enabled: true,
     createdAt,
     updatedAt: createdAt
@@ -114,7 +114,6 @@ describe('DebateSetupApplication composition', () => {
     seedCompleteSetup(appDataDirectory)
     const initialized = initializeDebateSetupApplication({
       appDataDirectory,
-      availableProtocolTypes: ['openai-chat'],
       getCapabilityRequirements: () => ({ requiredCapabilities: { textInput: true, streaming: true } })
     })
     expect(initialized.ok).toBe(true)
@@ -129,16 +128,14 @@ describe('DebateSetupApplication composition', () => {
     expect(result.setup?.negative?.providerConnection?.id).toBe('connection-1')
     expect(result.setup?.moderator?.participant.role).toBe('moderator')
     expect(result.setup?.judge?.participant.role).toBe('judge')
+    expect(result.setup?.availableProtocolTypes).toEqual(['mock'])
     expect(initialized.value.close()).toEqual({ ok: true, value: undefined })
   })
 
   it('releases the database once and blocks further setup reads', () => {
     const appDataDirectory = temporaryDirectory()
     seedCompleteSetup(appDataDirectory)
-    const initialized = initializeDebateSetupApplication({
-      appDataDirectory,
-      availableProtocolTypes: ['openai-chat']
-    })
+    const initialized = initializeDebateSetupApplication({ appDataDirectory })
     expect(initialized.ok).toBe(true)
     if (!initialized.ok) return
 

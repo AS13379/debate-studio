@@ -18,10 +18,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  const applicationResult = initializeDebateSetupApplication({
-    appDataDirectory: app.getPath('userData'),
-    availableProtocolTypes: []
-  })
+  const applicationResult = initializeDebateSetupApplication({ appDataDirectory: app.getPath('userData') })
   if (!applicationResult.ok) {
     throw new Error(`${applicationResult.error.code}: ${applicationResult.error.message}`)
   }
