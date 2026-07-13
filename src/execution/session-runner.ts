@@ -8,15 +8,18 @@ import {
   type DebateState,
   type DebateTurn
 } from '../domain'
-import { TurnRunner } from './turn-runner'
+import { TurnRunner, type TurnRunObserver } from './turn-runner'
 
 type StateChangedEvent = Extract<DebateEvent, { type: 'stateChanged' }>
 
 export type SessionRunnerEvent =
   | { id: string; type: 'stateChanged'; sessionId: string; createdAt: string; event: StateChangedEvent }
-  | { id: string; type: 'turnStarted'; sessionId: string; createdAt: string; stage: DebateTurn['stage']; participantId: string }
-  | { id: string; type: 'turnUpdated'; sessionId: string; createdAt: string; stage: DebateTurn['stage']; delta: string; content: string }
+  | { id: string; type: 'turnStarted'; sessionId: string; createdAt: string; turn: DebateTurn }
+  | { id: string; type: 'turnUpdated'; sessionId: string; createdAt: string; turnId: string; stage: DebateTurn['stage']; participantId: string; delta: string; content: string }
   | { id: string; type: 'turnCompleted'; sessionId: string; createdAt: string; turn: DebateTurn }
+  | { id: string; type: 'turnFailed'; sessionId: string; createdAt: string; turn: DebateTurn }
+  | { id: string; type: 'sessionPaused'; sessionId: string; createdAt: string }
+  | { id: string; type: 'sessionStopped'; sessionId: string; createdAt: string }
   | { id: string; type: 'sessionCompleted'; sessionId: string; createdAt: string }
   | { id: string; type: 'sessionFailed'; sessionId: string; createdAt: string; error: string; turn?: DebateTurn }
 
@@ -36,6 +39,8 @@ export type SessionStepResult =
   | { outcome: 'started'; state: DebateState }
   | { outcome: 'turnCompleted'; state: DebateState; turn: DebateTurn }
   | { outcome: SessionRunStatus; state: DebateState; turn?: DebateTurn }
+
+type ActiveTurnStepResult = Exclude<SessionStepResult, { outcome: 'started' }>
 
 export interface SessionRunnerDependencies {
   engine?: DebateEngineDependencies
@@ -80,6 +85,7 @@ export class SessionRunner {
     if (!result.ok) return false
     this.recordStateChanges(result.events)
     this.turnRunner.cancelTurn()
+    this.emit({ type: 'sessionPaused' })
     return true
   }
 
@@ -96,7 +102,27 @@ export class SessionRunner {
     if (!result.ok) return false
     this.recordStateChanges(result.events)
     this.turnRunner.cancelTurn()
+    this.emit({ type: 'sessionStopped' })
     return true
+  }
+
+  skip(reason?: string): boolean {
+    const result = this.engine.dispatch({ type: 'skip', reason })
+    if (!result.ok) return false
+    const skippedTurn = result.events.find((event) => event.type === 'stageSkipped')?.turn
+    if (skippedTurn) this.emit({ type: 'turnCompleted', turn: skippedTurn })
+    this.recordStateChanges(result.events)
+    return true
+  }
+
+  async retryFailedTurn(previousTurn: DebateTurn): Promise<SessionRunResult> {
+    if (this.runPromise) return this.runPromise
+    this.runPromise = this.drive(previousTurn)
+    try {
+      return await this.runPromise
+    } finally {
+      this.runPromise = undefined
+    }
   }
 
   async step(): Promise<SessionStepResult> {
@@ -115,41 +141,7 @@ export class SessionRunner {
         return { outcome: this.statusFromState(), state }
       }
 
-      const participant = this.engine.getCurrentParticipant()
-      if (!participant || state.stage === 'draft' || state.stage === 'completed') {
-        return this.failSession(`No runnable participant at stage ${state.stage}.`)
-      }
-
-      const engineEventOffset = this.engine.getEvents().length
-      this.emit({ type: 'turnStarted', stage: state.stage, participantId: participant.id })
-      const result = await this.turnRunner.startTurn(this.engine)
-
-      let content = ''
-      for (const event of result.streamEvents) {
-        if (event.type !== 'textDelta') continue
-        content += event.delta
-        this.emit({ type: 'turnUpdated', stage: state.stage, delta: event.delta, content })
-      }
-      this.emit({ type: 'turnCompleted', turn: result.turn })
-      this.recordStateChanges(this.engine.getEvents().slice(engineEventOffset))
-
-      if (result.turn.status === 'failed') {
-        return this.failSession(result.turn.error ?? 'Turn failed.', result.turn)
-      }
-      if (result.turn.status === 'cancelled') {
-        const current = this.engine.getState()
-        if (current.status === 'paused' || current.status === 'stopped') {
-          return { outcome: current.status, state: current, turn: result.turn }
-        }
-        return this.failSession(result.turn.error ?? 'Turn was cancelled.', result.turn)
-      }
-
-      const current = this.engine.getState()
-      if (current.status === 'completed') {
-        this.emit({ type: 'sessionCompleted' })
-        return { outcome: 'completed', state: current, turn: result.turn }
-      }
-      return { outcome: 'turnCompleted', state: current, turn: result.turn }
+      return this.executeTurn()
     } catch (error) {
       return this.failSession(error instanceof Error ? error.message : 'Unknown session error.')
     } finally {
@@ -157,8 +149,16 @@ export class SessionRunner {
     }
   }
 
-  private async drive(): Promise<SessionRunResult> {
+  private async drive(retryTurn?: DebateTurn): Promise<SessionRunResult> {
     let lastTurn: DebateTurn | undefined
+
+    if (retryTurn) {
+      const retried = await this.executeTurn(retryTurn)
+      if ('turn' in retried) lastTurn = retried.turn
+      if (retried.outcome !== 'turnCompleted') {
+        return { status: retried.outcome, state: retried.state, lastTurn }
+      }
+    }
 
     while (true) {
       const state = this.engine.getState()
@@ -172,6 +172,52 @@ export class SessionRunner {
         return { status: result.outcome, state: result.state, lastTurn }
       }
     }
+  }
+
+  private async executeTurn(previousTurn?: DebateTurn): Promise<ActiveTurnStepResult> {
+    const state = this.engine.getState()
+    const participant = this.engine.getCurrentParticipant()
+    if (state.status !== 'running' || !participant || state.stage === 'draft' || state.stage === 'completed') {
+      return this.failSession(`No runnable participant at stage ${state.stage}.`)
+    }
+
+    const engineEventOffset = this.engine.getEvents().length
+    const observer: TurnRunObserver = {
+      onStarted: (turn) => this.emit({ type: 'turnStarted', turn }),
+      onUpdated: (turn, delta) => this.emit({
+        type: 'turnUpdated',
+        turnId: turn.id,
+        stage: turn.stage,
+        participantId: turn.participantId,
+        delta,
+        content: turn.content ?? ''
+      })
+    }
+    const result = previousTurn
+      ? await this.turnRunner.retryTurn(this.engine, previousTurn, undefined, observer)
+      : await this.turnRunner.startTurn(this.engine, undefined, undefined, observer)
+
+    if (result.turn.status === 'completed') this.emit({ type: 'turnCompleted', turn: result.turn })
+    else this.emit({ type: 'turnFailed', turn: result.turn })
+    this.recordStateChanges(this.engine.getEvents().slice(engineEventOffset))
+
+    if (result.turn.status === 'failed') {
+      return this.failSession(result.turn.error ?? 'Turn failed.', result.turn)
+    }
+    if (result.turn.status === 'cancelled') {
+      const current = this.engine.getState()
+      if (current.status === 'paused' || current.status === 'stopped') {
+        return { outcome: current.status, state: current, turn: result.turn }
+      }
+      return this.failSession(result.turn.error ?? 'Turn was cancelled.', result.turn)
+    }
+
+    const current = this.engine.getState()
+    if (current.status === 'completed') {
+      this.emit({ type: 'sessionCompleted' })
+      return { outcome: 'completed', state: current, turn: result.turn }
+    }
+    return { outcome: 'turnCompleted', state: current, turn: result.turn }
   }
 
   private recordStateChanges(events: DebateEvent[]): void {

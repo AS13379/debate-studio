@@ -1,10 +1,11 @@
-import type { DebateParticipantRole } from '../participant-config'
+import type { DebateParticipantConfig, DebateParticipantRole } from '../participant-config'
 import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { SessionRecord } from '../persistence'
 import type { ModelAdapter, UnifiedError, UnifiedRequest } from '../providers'
 
 export interface RuntimeParticipant {
   role: DebateParticipantRole
+  participant: DebateParticipantConfig
   modelProfile: ModelProfile
   providerConnection: ProviderConnection
   adapter: ModelAdapter

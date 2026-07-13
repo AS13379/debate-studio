@@ -13,7 +13,8 @@ import {
   MockAdapter,
   OpenAIChatAdapter,
   type ConnectionTestResult,
-  type HttpTransport
+  type HttpTransport,
+  type ModelAdapter
 } from '../providers'
 import {
   MacOSKeychainCredentialStore,
@@ -32,6 +33,7 @@ export interface DebateSetupApplicationOptions extends DatabaseOptions {
   getCapabilityRequirements?: (sessionId: string) => DebateCapabilityRequirements | undefined
   credentialStore?: CredentialStore
   openAITransport?: HttpTransport
+  mockAdapter?: ModelAdapter
   fetchTimeoutMs?: number
 }
 
@@ -116,38 +118,44 @@ export function initializeDebateSetupApplication(
 ): PersistenceResult<DebateSetupApplication> {
   const persistenceResult = initializePersistence(options)
   if (!persistenceResult.ok) return persistenceResult
+
+  return { ok: true, value: composeDebateSetupApplication(persistenceResult.value, options) }
+}
+
+export function composeDebateSetupApplication(
+  persistence: PersistenceContext,
+  options: DebateSetupApplicationOptions
+): DebateSetupApplication {
   const credentialStore = options.credentialStore ?? new MacOSKeychainCredentialStore()
   const openAITransport = options.openAITransport ?? new FetchHttpTransport({ timeoutMs: options.fetchTimeoutMs })
   const authenticatedTransport = new AuthenticatedHttpTransport(
     openAITransport,
     credentialStore,
     (connectionId) => {
-      const connectionResult = persistenceResult.value.repositories.providerConnections.findById(connectionId)
+      const connectionResult = persistence.repositories.providerConnections.findById(connectionId)
       if (!connectionResult.ok) throw new Error('ProviderConnection repository lookup failed.')
       return connectionResult.value?.credentialRef
     }
   )
   const adapterRegistry = new AdapterRegistry()
   const registrations = [
-    adapterRegistry.register('mock', new MockAdapter()),
+    adapterRegistry.register('mock', options.mockAdapter ?? new MockAdapter()),
     adapterRegistry.register('openai-chat', new OpenAIChatAdapter(authenticatedTransport))
   ]
   const registrationFailure = registrations.find((registration) => !registration.ok)
   if (registrationFailure && !registrationFailure.ok) {
-    persistenceResult.value.database.close()
+    persistence.database.close()
     throw new Error(`${registrationFailure.error.code}: ${registrationFailure.error.message}`)
   }
 
-  return {
-    ok: true,
-    value: new DebateSetupApplication(persistenceResult.value, {
-      getCapabilityRequirements: options.getCapabilityRequirements,
-      credentialStore,
-      openAITransport,
-      fetchTimeoutMs: options.fetchTimeoutMs
-    }, adapterRegistry, new ConnectionTestService({
-      transport: openAITransport,
-      credentialStore
-    }))
-  }
+  return new DebateSetupApplication(persistence, {
+    getCapabilityRequirements: options.getCapabilityRequirements,
+    credentialStore,
+    openAITransport,
+    mockAdapter: options.mockAdapter,
+    fetchTimeoutMs: options.fetchTimeoutMs
+  }, adapterRegistry, new ConnectionTestService({
+    transport: openAITransport,
+    credentialStore
+  }))
 }

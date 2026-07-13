@@ -1,5 +1,6 @@
 export { Database } from './database'
 export type { DatabaseOptions, DatabaseValue, RunResult } from './database'
+export { persistenceFailure } from './errors'
 export type { PersistenceError, PersistenceErrorCode, PersistenceResult } from './errors'
 export { initializePersistence } from './initialize'
 export type { PersistenceContext } from './initialize'
@@ -27,3 +28,9 @@ export { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-r
 export { SQLiteModelProfileRepository, SQLiteProviderConnectionRepository } from './sqlite-provider-repositories'
 export { SQLiteSessionRepository } from './sqlite-session-repository'
 export { SQLiteSettingsRepository } from './sqlite-settings-repository'
+export {
+  SQLiteDebateRepository,
+  SQLiteEventRepository,
+  SQLiteTurnRepository,
+  SQLiteUsageRepository
+} from './sqlite-run-repositories'

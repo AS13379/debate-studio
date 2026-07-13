@@ -92,6 +92,7 @@ export class DebateRuntimeResolver {
 
     return {
       role,
+      participant: setup.participant,
       modelProfile: setup.modelProfile,
       providerConnection: setup.providerConnection,
       adapter: adapterResult.value

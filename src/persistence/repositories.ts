@@ -64,10 +64,27 @@ export interface DebateRepository extends EntityRepository<DebateRecord> {}
 export interface SessionRepository {
   get(id: string): PersistenceResult<SessionRecord | undefined>
   exists(id: string): PersistenceResult<boolean>
+  updateRuntimeState(id: string, status: string, currentStage: string, updatedAt: string): PersistenceResult<boolean>
+  markInProgressInterrupted(updatedAt: string): PersistenceResult<number>
 }
-export interface TurnRepository extends EntityRepository<TurnRecord> {}
-export interface EventRepository extends EntityRepository<EventRecord> {}
-export interface UsageRepository extends EntityRepository<UsageRecord> {}
+export interface TurnRepository {
+  findById(id: string): PersistenceResult<TurnRecord | undefined>
+  create(record: TurnRecord): PersistenceResult<void>
+  update(record: TurnRecord): PersistenceResult<boolean>
+  listBySession(sessionId: string): PersistenceResult<TurnRecord[]>
+  findLatestRetryable(sessionId: string): PersistenceResult<TurnRecord | undefined>
+  markInProgressInterrupted(completedAt: string): PersistenceResult<number>
+}
+export interface EventRepository {
+  findById(id: string): PersistenceResult<EventRecord | undefined>
+  create(record: EventRecord): PersistenceResult<void>
+  listBySession(sessionId: string): PersistenceResult<EventRecord[]>
+}
+export interface UsageRepository {
+  findById(id: string): PersistenceResult<UsageRecord | undefined>
+  create(record: UsageRecord): PersistenceResult<void>
+  listBySession(sessionId: string): PersistenceResult<UsageRecord[]>
+}
 
 export interface SettingsRepository {
   get<T>(key: string): PersistenceResult<T | undefined>
@@ -105,8 +122,8 @@ export interface RepositoryCollection {
   modelProfiles: ModelProfileRepository
   participants: DebateParticipantRepository
   sessions: SessionRepository
-  debates?: DebateRepository
-  turns?: TurnRepository
-  events?: EventRepository
-  usage?: UsageRepository
+  debates: DebateRepository
+  turns: TurnRepository
+  events: EventRepository
+  usage: UsageRepository
 }

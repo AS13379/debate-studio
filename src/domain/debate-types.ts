@@ -40,7 +40,14 @@ export interface DebateState {
   currentTurnId?: string
 }
 
-export type DebateTurnStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped' | 'forced'
+export type DebateTurnStatus =
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
+  | 'skipped'
+  | 'forced'
 
 export interface DebateTurn {
   id: string

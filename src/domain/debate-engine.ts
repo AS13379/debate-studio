@@ -43,6 +43,7 @@ const STAGE_ROLE: Record<Exclude<DebateStage, 'draft' | 'completed'>, Participan
 export interface DebateEngineDependencies {
   createId?: () => string
   now?: () => Date
+  initialState?: Pick<DebateState, 'stage' | 'status'>
 }
 
 export class DebateEngine {
@@ -58,7 +59,11 @@ export class DebateEngine {
     this.createId = dependencies.createId ?? randomUUID
     this.now = dependencies.now ?? (() => new Date())
     this.session = { ...config, participants: [...config.participants], createdAt: this.timestamp() }
-    this.state = { sessionId: config.id, stage: 'draft', status: 'draft' }
+    this.state = {
+      sessionId: config.id,
+      stage: dependencies.initialState?.stage ?? 'draft',
+      status: dependencies.initialState?.status ?? 'draft'
+    }
   }
 
   getState(): DebateState {

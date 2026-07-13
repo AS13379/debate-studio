@@ -95,7 +95,21 @@ function runtimeParticipant(role: ParticipantRole, adapter: ModelAdapter): Runti
     createdAt: timestamp,
     updatedAt: timestamp
   }
-  return { role, modelProfile, providerConnection, adapter }
+  return {
+    role,
+    participant: {
+      id: `domain-${role}`,
+      sessionId: 'runtime-execution-session',
+      role,
+      modelProfileId: modelProfile.id,
+      displayName: role,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    },
+    modelProfile,
+    providerConnection,
+    adapter
+  }
 }
 
 interface RuntimeAdapters {

@@ -4,6 +4,12 @@ import { MigrationManager } from './migrations'
 import type { RepositoryCollection } from './repositories'
 import { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-repository'
 import { SQLiteModelProfileRepository, SQLiteProviderConnectionRepository } from './sqlite-provider-repositories'
+import {
+  SQLiteDebateRepository,
+  SQLiteEventRepository,
+  SQLiteTurnRepository,
+  SQLiteUsageRepository
+} from './sqlite-run-repositories'
 import { SQLiteSessionRepository } from './sqlite-session-repository'
 import { SQLiteSettingsRepository } from './sqlite-settings-repository'
 
@@ -35,7 +41,11 @@ export function initializePersistence(options: DatabaseOptions): PersistenceResu
         providerConnections: new SQLiteProviderConnectionRepository(database),
         modelProfiles: new SQLiteModelProfileRepository(database),
         participants: new SQLiteDebateParticipantRepository(database),
-        sessions: new SQLiteSessionRepository(database)
+        sessions: new SQLiteSessionRepository(database),
+        debates: new SQLiteDebateRepository(database),
+        turns: new SQLiteTurnRepository(database),
+        events: new SQLiteEventRepository(database),
+        usage: new SQLiteUsageRepository(database)
       }
     }
   }

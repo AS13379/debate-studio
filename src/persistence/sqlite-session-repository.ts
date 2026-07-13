@@ -37,6 +37,31 @@ export class SQLiteSessionRepository implements SessionRepository {
     return result.ok ? { ok: true, value: result.value?.found === 1 } : result
   }
 
+  updateRuntimeState(
+    id: string,
+    status: string,
+    currentStage: string,
+    updatedAt: string
+  ): PersistenceResult<boolean> {
+    const result = this.database.run(
+      'UPDATE sessions SET status = ?, current_stage = ?, updated_at = ? WHERE id = ?',
+      status,
+      currentStage,
+      updatedAt,
+      id
+    )
+    return result.ok ? { ok: true, value: Number(result.value.changes) > 0 } : result
+  }
+
+  markInProgressInterrupted(updatedAt: string): PersistenceResult<number> {
+    const result = this.database.run(
+      `UPDATE sessions SET status = 'interrupted', updated_at = ?
+       WHERE status IN ('running', 'streaming')`,
+      updatedAt
+    )
+    return result.ok ? { ok: true, value: Number(result.value.changes) } : result
+  }
+
   private mapRow(row: SessionRow): SessionRecord {
     return {
       id: row.id,

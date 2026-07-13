@@ -7,4 +7,4 @@ export type {
   SessionStepResult
 } from './session-runner'
 export { TurnRunner } from './turn-runner'
-export type { TurnRunnerDependencies, TurnRunResult } from './turn-runner'
+export type { TurnRunnerDependencies, TurnRunObserver, TurnRunResult } from './turn-runner'

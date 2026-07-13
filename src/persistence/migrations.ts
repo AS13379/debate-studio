@@ -175,6 +175,15 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
         SELECT RAISE(ABORT, 'model profile is assigned to a participant');
       END;
     `
+  },
+  {
+    version: 4,
+    name: 'debate_run_recovery_indexes',
+    sql: `
+      CREATE INDEX idx_sessions_status ON sessions(status);
+      CREATE INDEX idx_turns_session_status ON turns(session_id, status);
+      CREATE INDEX idx_turns_retry_of_turn_id ON turns(retry_of_turn_id);
+    `
   }
 ]
 
