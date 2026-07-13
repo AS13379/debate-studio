@@ -128,7 +128,7 @@ describe('DebateSetupApplication composition', () => {
     expect(result.setup?.negative?.providerConnection?.id).toBe('connection-1')
     expect(result.setup?.moderator?.participant.role).toBe('moderator')
     expect(result.setup?.judge?.participant.role).toBe('judge')
-    expect(result.setup?.availableProtocolTypes).toEqual(['mock'])
+    expect(result.setup?.availableProtocolTypes).toEqual(['mock', 'openai-chat'])
     expect(initialized.value.close()).toEqual({ ok: true, value: undefined })
   })
 

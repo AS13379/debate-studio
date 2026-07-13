@@ -1,5 +1,11 @@
 import type { DebateParticipant, DebateStage } from '../domain'
 
+export interface UnifiedModelRuntime {
+  modelId: string
+  baseUrl: string
+  maxOutputTokens?: number
+}
+
 export interface UnifiedRequest {
   requestId: string
   turnId: string
@@ -9,6 +15,7 @@ export interface UnifiedRequest {
   participant: DebateParticipant
   prompt: string
   signal: AbortSignal
+  modelRuntime?: UnifiedModelRuntime
 }
 
 export interface UnifiedResponse {
@@ -21,6 +28,8 @@ export interface UnifiedError {
   code: 'REQUEST_FAILED' | 'CANCELLED' | 'EMPTY_RESPONSE'
   message: string
   retryable: boolean
+  statusCode?: number
+  providerCode?: string
 }
 
 export type UnifiedStreamEvent =
@@ -40,4 +49,3 @@ export class ModelAdapterError extends Error {
     this.name = 'ModelAdapterError'
   }
 }
-

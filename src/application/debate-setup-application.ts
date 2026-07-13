@@ -4,7 +4,7 @@ import {
   type PersistenceContext,
   type PersistenceResult
 } from '../persistence'
-import { AdapterRegistry, MockAdapter } from '../providers'
+import { AdapterRegistry, MockAdapter, MockHttpTransport, OpenAIChatAdapter } from '../providers'
 import { DebateSetupLoader, type DebateSetupLoadResult } from '../setup-loading'
 import { DebateSetupValidator, type DebateCapabilityRequirements } from '../setup-validation'
 
@@ -74,10 +74,14 @@ export function initializeDebateSetupApplication(
   const persistenceResult = initializePersistence(options)
   if (!persistenceResult.ok) return persistenceResult
   const adapterRegistry = new AdapterRegistry()
-  const registration = adapterRegistry.register('mock', new MockAdapter())
-  if (!registration.ok) {
+  const registrations = [
+    adapterRegistry.register('mock', new MockAdapter()),
+    adapterRegistry.register('openai-chat', new OpenAIChatAdapter(new MockHttpTransport()))
+  ]
+  const registrationFailure = registrations.find((registration) => !registration.ok)
+  if (registrationFailure && !registrationFailure.ok) {
     persistenceResult.value.database.close()
-    throw new Error(`${registration.error.code}: ${registration.error.message}`)
+    throw new Error(`${registrationFailure.error.code}: ${registrationFailure.error.message}`)
   }
 
   return {
