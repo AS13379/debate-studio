@@ -34,7 +34,7 @@ describe('SQLite persistence foundation', () => {
 
     expect(result.value.database.path.startsWith(appDataDirectory)).toBe(true)
     expect(existsSync(result.value.database.path)).toBe(true)
-    expect(result.value.migrations.currentVersion()).toEqual({ ok: true, value: 7 })
+    expect(result.value.migrations.currentVersion()).toEqual({ ok: true, value: 8 })
 
     const tables = result.value.database.all<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
@@ -49,7 +49,11 @@ describe('SQLite persistence foundation', () => {
         'settings',
         'usage_records',
         'provider_connections',
-        'model_profiles'
+        'model_profiles',
+        'research_sessions',
+        'public_resource_pools',
+        'published_evidence',
+        'evidence_status_history'
       ])
     )
     expect(result.value.database.close().ok).toBe(true)
@@ -61,7 +65,7 @@ describe('SQLite persistence foundation', () => {
     if (!databaseResult.ok) return
 
     const migration: Migration = {
-      version: 8,
+      version: 9,
       name: 'test_upgrade',
       sql: 'CREATE TABLE migration_probe (id TEXT PRIMARY KEY);'
     }
@@ -69,11 +73,11 @@ describe('SQLite persistence foundation', () => {
 
     expect(manager.migrate()).toMatchObject({
       ok: true,
-      value: { fromVersion: 0, toVersion: 8, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8] }
+      value: { fromVersion: 0, toVersion: 9, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9] }
     })
     expect(manager.migrate()).toMatchObject({
       ok: true,
-      value: { fromVersion: 8, toVersion: 8, appliedVersions: [] }
+      value: { fromVersion: 9, toVersion: 9, appliedVersions: [] }
     })
     databaseResult.value.close()
   })

@@ -26,8 +26,8 @@ describe('SessionRunner', () => {
 
     expect(result.status).toBe('completed')
     expect(session.engine.getState()).toMatchObject({ stage: 'completed', status: 'completed' })
-    expect(session.engine.getTurns()).toHaveLength(8)
-    expect(session.getEvents().filter((event) => event.type === 'turnStarted')).toHaveLength(8)
+    expect(session.engine.getTurns()).toHaveLength(20)
+    expect(session.getEvents().filter((event) => event.type === 'turnStarted')).toHaveLength(20)
     expect(session.getEvents().filter((event) => event.type === 'sessionCompleted')).toHaveLength(1)
   })
 

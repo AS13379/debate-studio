@@ -106,6 +106,7 @@ function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()
     ipcMain: ipc,
     configuration: application.configuration,
     run: application.run,
+    research: application.research,
     getAppVersion: () => '0.1.0-test',
     broadcastRunEvent: (event) => events.push(event)
   })
@@ -126,6 +127,36 @@ afterEach(async () => {
 })
 
 describe('typed IPC UI flow', () => {
+  it('validates and persists manual research input through the narrow IPC boundary', async () => {
+    const application = createApplication(temporaryDirectory())
+    const { ipc, dispose } = register(application)
+    const demo = await ipc.invoke<Awaited<ReturnType<DebateDesktopApplication['configuration']['createMockDemoDebate']>>>(IPC_CHANNELS.createMockDemoDebate)
+    expect(demo.ok).toBe(true)
+    if (!demo.ok) return
+    const affirmative = demo.value.participants.find((item) => item.role === 'affirmative')!
+    const saved = await ipc.invoke(IPC_CHANNELS.addResearchAsset, {
+      sessionId: demo.value.sessionId,
+      ownerParticipantId: affirmative.id,
+      visibility: 'affirmative-private',
+      kind: 'text',
+      title: 'IPC 人工资料',
+      textContent: '这段文本只属于正方。'
+    }) as { ok: boolean }
+    expect(saved.ok).toBe(true)
+    const invalid = await ipc.invoke(IPC_CHANNELS.addResearchAsset, {
+      sessionId: demo.value.sessionId,
+      ownerParticipantId: affirmative.id,
+      visibility: 'affirmative-private',
+      kind: 'text', title: '越界字段', textContent: '内容', apiKey: 'must-never-pass'
+    }) as { ok: boolean; error?: { code: string } }
+    expect(invalid).toMatchObject({ ok: false, error: { code: 'IPC_VALIDATION_FAILED' } })
+    const workspace = await ipc.invoke(IPC_CHANNELS.loadResearchWorkspace, { sessionId: demo.value.sessionId }) as {
+      ok: boolean; value?: { affirmative: { assets: unknown[] } }
+    }
+    expect(workspace.ok && workspace.value?.affirmative.assets).toHaveLength(1)
+    dispose()
+  })
+
   it('rejects invalid or extra input fields before calling the configuration application', async () => {
     const app = createApplication(temporaryDirectory())
     const { ipc, dispose } = register(app)
@@ -194,9 +225,16 @@ describe('typed IPC UI flow', () => {
       IPC_CHANNELS.listDebateTurns,
       { sessionId: demo.value.sessionId }
     )
+    const research = await first.ipc.invoke<{ ok: true; value: { publicPool?: unknown; affirmative: { goals: unknown[] }; negative: { goals: unknown[] } } }>(
+      IPC_CHANNELS.loadResearchWorkspace,
+      { sessionId: demo.value.sessionId }
+    )
 
     expect(completed).toMatchObject({ ok: true, state: { status: 'completed' } })
-    expect(turns.value).toHaveLength(8)
+    expect(turns.value).toHaveLength(20)
+    expect(research.value.publicPool).toBeDefined()
+    expect(research.value.affirmative.goals).not.toHaveLength(0)
+    expect(research.value.negative.goals).not.toHaveLength(0)
     expect(first.events.some((event) => event.type === 'turnUpdated')).toBe(true)
     expect(first.events.at(-1)?.type).toBe('sessionCompleted')
     first.dispose()
@@ -208,8 +246,14 @@ describe('typed IPC UI flow', () => {
       IPC_CHANNELS.listDebateTurns,
       { sessionId: demo.value.sessionId }
     )
-    expect(restoredTurns.value).toHaveLength(8)
+    expect(restoredTurns.value).toHaveLength(20)
     expect(restoredTurns.value.every((turn) => Boolean(turn.content))).toBe(true)
+    const restoredResearch = await reopened.ipc.invoke<{ ok: true; value: { publicPool?: unknown; affirmative: { goals: unknown[] } } }>(
+      IPC_CHANNELS.loadResearchWorkspace,
+      { sessionId: demo.value.sessionId }
+    )
+    expect(restoredResearch.value.publicPool).toBeDefined()
+    expect(restoredResearch.value.affirmative.goals).not.toHaveLength(0)
     reopened.dispose()
   })
 
@@ -234,7 +278,7 @@ describe('typed IPC UI flow', () => {
     expect(paused).toMatchObject({ ok: true, state: { status: 'paused' } })
     expect(resumed).toMatchObject({ ok: true, state: { status: 'completed' } })
     expect(adapter.aborted).toBe(1)
-    expect(adapter.calls).toBe(9)
+    expect(adapter.calls).toBe(21)
     dispose()
   })
 

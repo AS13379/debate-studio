@@ -11,6 +11,7 @@ import type {
   RunErrorDto
 } from '../../../shared/ipc-contract'
 import { ErrorRecoveryPanel } from '../components/ErrorRecoveryPanel'
+import { ResearchPanel } from '../components/ResearchPanel'
 import { applyRunEvent, type LiveRunSnapshot } from '../run-state'
 import { stageLabel, statusLabel } from './HomePage'
 
@@ -32,6 +33,7 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
   const [commandFailure, setCommandFailure] = useState<RunErrorDto>()
   const [loading, setLoading] = useState(true)
   const [showRoleEditor, setShowRoleEditor] = useState(false)
+  const [researchVersion, setResearchVersion] = useState(0)
 
   const reload = async (): Promise<void> => {
     const detailResult = await window.debateStudio.getDebate({ id: debateId })
@@ -57,7 +59,10 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
 
   useEffect(() => { void reload() }, [debateId])
   useEffect(() => window.debateStudio.onRunEvent((event) => {
-    if (event.sessionId === detail?.sessionId) setSnapshot((current) => applyRunEvent(current, event))
+    if (event.sessionId === detail?.sessionId) {
+      setSnapshot((current) => applyRunEvent(current, event))
+      if (event.type === 'turnCompleted') setResearchVersion((current) => current + 1)
+    }
   }), [detail?.sessionId])
 
   const participantById = useMemo(
@@ -151,6 +156,8 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
           )
         })}
       </div>
+
+      <ResearchPanel detail={detail} refreshKey={researchVersion} onError={setError} />
 
       <div className="turn-list" aria-live="polite">
         {snapshot.turns.length === 0 && <div className="empty-state compact"><h2>尚未开始发言</h2><p>点击“启动”后，模型的 SSE 流式输出会显示在这里。</p></div>}

@@ -9,7 +9,8 @@ export type {
   RuntimeResolveErrorCode,
   RuntimeResolveResult,
   RuntimeTurnExecutionError,
-  RuntimeTurnPreparationResult
+  RuntimeTurnPreparationResult,
+  RuntimePromptBuilder
 } from './types'
 export type { RuntimeTurnRunnerBundle } from './turn-runner-factory'
 export type {

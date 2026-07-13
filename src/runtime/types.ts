@@ -1,7 +1,7 @@
 import type { DebateParticipantConfig, DebateParticipantRole } from '../participant-config'
 import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { SessionRecord } from '../persistence'
-import type { ModelAdapter, UnifiedError, UnifiedRequest } from '../providers'
+import type { ModelAdapter, UnifiedError, UnifiedMessage, UnifiedRequest } from '../providers'
 
 export interface RuntimeParticipant {
   role: DebateParticipantRole
@@ -49,3 +49,7 @@ export interface RuntimeTurnExecutionError extends UnifiedError {
 export type RuntimeTurnPreparationResult =
   | { ok: true; request: UnifiedRequest; participant: RuntimeParticipant }
   | { ok: false; error: RuntimeTurnExecutionError }
+
+export interface RuntimePromptBuilder {
+  build(request: UnifiedRequest, participant: RuntimeParticipant, runtimeConfig: DebateRuntimeConfig): UnifiedMessage[]
+}

@@ -20,11 +20,19 @@ const FLOW: readonly DebateStage[] = [
   'draft',
   'validating',
   'moderating',
+  'public_pool',
+  'affirmative_planning',
+  'negative_planning',
+  'affirmative_research',
+  'negative_research',
+  'argument_drafting',
   'affirmative_opening',
   'negative_opening',
+  'cross_examination',
   'rebuttal',
   'free_debate',
-  'closing',
+  'negative_closing',
+  'affirmative_closing',
   'adjudication',
   'completed'
 ]
@@ -32,10 +40,19 @@ const FLOW: readonly DebateStage[] = [
 const STAGE_ROLE: Record<Exclude<DebateStage, 'draft' | 'completed'>, ParticipantRole[]> = {
   validating: ['moderator'],
   moderating: ['moderator'],
+  public_pool: ['moderator'],
+  affirmative_planning: ['affirmative'],
+  negative_planning: ['negative'],
+  affirmative_research: ['affirmative'],
+  negative_research: ['negative'],
+  argument_drafting: ['affirmative', 'negative'],
   affirmative_opening: ['affirmative'],
   negative_opening: ['negative'],
-  rebuttal: ['negative'],
+  cross_examination: ['affirmative', 'negative'],
+  rebuttal: ['affirmative', 'negative'],
   free_debate: ['affirmative', 'negative'],
+  negative_closing: ['negative'],
+  affirmative_closing: ['affirmative'],
   closing: ['affirmative'],
   adjudication: ['judge', 'moderator']
 }
@@ -44,6 +61,7 @@ export interface DebateEngineDependencies {
   createId?: () => string
   now?: () => Date
   initialState?: Pick<DebateState, 'stage' | 'status'>
+  initialStageTurnCount?: number
 }
 
 export class DebateEngine {
@@ -54,10 +72,12 @@ export class DebateEngine {
   private readonly eventLog: DebateEvent[] = []
   private readonly createId: () => string
   private readonly now: () => Date
+  private stageTurnCount: number
 
   constructor(config: DebateConfig, dependencies: DebateEngineDependencies = {}) {
     this.createId = dependencies.createId ?? randomUUID
     this.now = dependencies.now ?? (() => new Date())
+    this.stageTurnCount = dependencies.initialStageTurnCount ?? 0
     this.session = { ...config, participants: [...config.participants], createdAt: this.timestamp() }
     this.state = {
       sessionId: config.id,
@@ -139,6 +159,14 @@ export class DebateEngine {
     this.turns.push(turn)
     this.eventLog.push(speechEvent)
 
+    this.stageTurnCount += 1
+
+    if (this.stageTurnCount < this.participantsFor(this.state.stage).length) {
+      const sameStage = this.transition({ currentTurnId: undefined }, 'advance')
+      if (!sameStage.ok) return sameStage
+      return { ok: true, state: sameStage.state, events: [speechEvent, ...sameStage.events] }
+    }
+
     const transitionResult = this.transitionToNext('advance')
     if (!transitionResult.ok) return transitionResult
     return { ok: true, state: transitionResult.state, events: [speechEvent, ...transitionResult.events] }
@@ -171,8 +199,10 @@ export class DebateEngine {
 
   private transitionToNext(cause: 'advance' | 'skip' | 'forceNext'): EngineResult {
     const currentIndex = FLOW.indexOf(this.state.stage)
-    const nextStage = FLOW[currentIndex + 1]
+    const nextStage = this.state.stage === 'closing' ? 'adjudication' : FLOW[currentIndex + 1]
     if (!nextStage) return this.reject(cause)
+
+    this.stageTurnCount = 0
 
     return this.transition(
       {
@@ -221,8 +251,25 @@ export class DebateEngine {
   }
 
   private participantFor(stage: Exclude<DebateStage, 'draft' | 'completed'>): DebateParticipant | undefined {
-    const acceptedRoles = STAGE_ROLE[stage]
-    return this.session.participants.find((participant) => acceptedRoles.includes(participant.role))
+    return this.participantsFor(stage)[this.stageTurnCount]
+  }
+
+  private participantsFor(stage: Exclude<DebateStage, 'draft' | 'completed'>): DebateParticipant[] {
+    if (stage === 'adjudication') {
+      const judge = this.session.participants.find((participant) => participant.role === 'judge')
+      const moderator = this.session.participants.find((participant) => participant.role === 'moderator')
+      return judge ? [judge] : moderator ? [moderator] : []
+    }
+
+    const roles = STAGE_ROLE[stage]
+    const participants = roles.flatMap((role) => {
+      const participant = this.session.participants.find((candidate) => candidate.role === role)
+      return participant ? [participant] : []
+    })
+    if (stage !== 'free_debate') return participants
+
+    const rounds = Math.max(1, Math.floor(this.session.freeDebateRounds ?? 1))
+    return Array.from({ length: rounds }, () => participants).flat()
   }
 
   private isActiveStage(stage: DebateStage): stage is Exclude<DebateStage, 'draft' | 'completed'> {

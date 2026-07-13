@@ -14,6 +14,8 @@ import {
   type CredentialStore
 } from '../security'
 import { DebateConfigurationApplication } from './debate-configuration-application'
+import { ResearchRunCoordinator } from '../research'
+import { ResearchApplication } from './research-application'
 import {
   DebateRunApplication,
   type DebateRunApplicationOptions
@@ -29,7 +31,8 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
 export class DebateDesktopApplication {
   constructor(
     readonly configuration: DebateConfigurationApplication,
-    readonly run: DebateRunApplication
+    readonly run: DebateRunApplication,
+    readonly research: ResearchApplication
   ) {}
 
   close(): Promise<PersistenceResult<void>> {
@@ -80,8 +83,18 @@ export function initializeDebateDesktopApplication(
       repositories: persistence.repositories,
       streamWriteThrottleMs: options.streamWriteThrottleMs
     })
-    const run = new DebateRunApplication(persistence, setupApplication, runPersistence)
-    return { ok: true, value: new DebateDesktopApplication(configuration, run) }
+    const researchCoordinator = new ResearchRunCoordinator({
+      research: persistence.repositories.research,
+      participants: persistence.repositories.participants,
+      now: options.now
+    })
+    const run = new DebateRunApplication(persistence, setupApplication, runPersistence, researchCoordinator)
+    const research = new ResearchApplication({
+      persistence,
+      appDataDirectory: options.appDataDirectory,
+      now: options.now
+    })
+    return { ok: true, value: new DebateDesktopApplication(configuration, run, research) }
   } catch (cause) {
     persistence.database.close()
     return persistenceFailure('QUERY_FAILED', 'composeDebateDesktopApplication', cause)

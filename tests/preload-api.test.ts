@@ -27,12 +27,12 @@ describe('preload DebateStudioApi', () => {
     const api = createDebateStudioApi(new RecordingIpcRenderer())
 
     expect(Object.keys(api).sort()).toEqual([
-      'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'deleteCredential',
+      'addResearchAsset', 'challengeEvidence', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'deleteCredential',
       'deleteModelProfile', 'deleteProviderConnection',
       'getAppVersion', 'getDebate', 'getRunState', 'listDebateTurns', 'listDebates',
-      'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'loadDebateSetup', 'onRunEvent',
-      'pauseDebate', 'resumeDebate', 'retryFailedTurn', 'saveCredential', 'saveModelProfile',
-      'saveParticipantBindings', 'saveProviderConnection', 'startDebate', 'stopDebate', 'testConnection'
+      'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
+      'pauseDebate', 'publishResearchEvidence', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
+      'saveParticipantBindings', 'saveProviderConnection', 'startDebate', 'stopDebate', 'testConnection', 'updateEvidenceStatus'
     ].sort())
     expect(api).not.toHaveProperty('invoke')
     expect(api).not.toHaveProperty('getCredential')

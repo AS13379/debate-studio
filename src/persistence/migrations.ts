@@ -213,6 +213,187 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       DROP INDEX idx_model_profiles_connection_model;
       CREATE INDEX idx_model_profiles_connection_model ON model_profiles(connection_id, model_id);
     `
+  },
+  {
+    version: 8,
+    name: 'research_and_evidence_mvp',
+    sql: `
+      CREATE TABLE research_sessions (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        owner_role TEXT NOT NULL CHECK (owner_role IN ('affirmative', 'negative', 'moderator')),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        status TEXT NOT NULL CHECK (status IN ('planning', 'researching', 'drafting', 'completed')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (debate_session_id, owner_role)
+      );
+
+      CREATE TABLE research_goals (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        description TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE search_sessions (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        tool_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        completed_at TEXT
+      );
+
+      CREATE TABLE search_queries (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        search_session_id TEXT REFERENCES search_sessions(id) ON DELETE SET NULL,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        query TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE research_sources (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT REFERENCES research_sessions(id) ON DELETE SET NULL,
+        search_session_id TEXT REFERENCES search_sessions(id) ON DELETE SET NULL,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        title TEXT NOT NULL,
+        url TEXT,
+        domain TEXT,
+        summary TEXT,
+        published_at TEXT,
+        fetched_at TEXT,
+        source_type TEXT NOT NULL,
+        evaluation TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE research_assets (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT REFERENCES research_sessions(id) ON DELETE SET NULL,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        kind TEXT NOT NULL CHECK (kind IN ('text', 'url', 'image')),
+        title TEXT NOT NULL,
+        text_content TEXT,
+        url TEXT,
+        summary TEXT,
+        local_path TEXT,
+        mime_type TEXT,
+        source_name TEXT,
+        source_date TEXT,
+        created_by TEXT NOT NULL,
+        is_original INTEGER NOT NULL CHECK (is_original IN (0, 1)),
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE research_notes (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        source_id TEXT REFERENCES research_sources(id) ON DELETE SET NULL,
+        asset_id TEXT REFERENCES research_assets(id) ON DELETE SET NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE provisional_claims (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        claim TEXT NOT NULL,
+        supporting_source_ids_json TEXT NOT NULL,
+        unresolved INTEGER NOT NULL CHECK (unresolved IN (0, 1)),
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE public_resource_pools (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility = 'public'),
+        topic_definition TEXT NOT NULL,
+        temporal_scope TEXT,
+        geographic_scope TEXT,
+        key_concepts_json TEXT NOT NULL,
+        controversy_directions_json TEXT NOT NULL,
+        user_submitted_source_ids_json TEXT NOT NULL,
+        fact_boundaries_json TEXT NOT NULL,
+        moderator_notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE published_evidence (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        public_code TEXT NOT NULL,
+        submitted_by_participant_id TEXT NOT NULL REFERENCES participants(id),
+        submitter_role TEXT NOT NULL CHECK (submitter_role IN ('affirmative', 'negative', 'moderator')),
+        source_id TEXT REFERENCES research_sources(id) ON DELETE SET NULL,
+        asset_id TEXT REFERENCES research_assets(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        summary TEXT,
+        source_url TEXT,
+        current_status TEXT NOT NULL CHECK (current_status IN ('unverified', 'supported', 'disputed', 'outdated', 'inaccessible', 'misleading', 'rejected')),
+        created_at TEXT NOT NULL,
+        UNIQUE (debate_session_id, public_code)
+      );
+
+      CREATE TABLE evidence_status_history (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        evidence_id TEXT NOT NULL REFERENCES published_evidence(id) ON DELETE CASCADE,
+        from_status TEXT CHECK (from_status IS NULL OR from_status IN ('unverified', 'supported', 'disputed', 'outdated', 'inaccessible', 'misleading', 'rejected')),
+        to_status TEXT NOT NULL CHECK (to_status IN ('unverified', 'supported', 'disputed', 'outdated', 'inaccessible', 'misleading', 'rejected')),
+        changed_by TEXT NOT NULL,
+        note TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE evidence_reference_issues (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+        participant_id TEXT NOT NULL REFERENCES participants(id),
+        reference_code TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (turn_id, reference_code)
+      );
+
+      CREATE INDEX idx_research_sessions_debate ON research_sessions(debate_session_id);
+      CREATE INDEX idx_research_goals_debate ON research_goals(debate_session_id);
+      CREATE INDEX idx_search_sessions_debate ON search_sessions(debate_session_id);
+      CREATE INDEX idx_search_queries_debate ON search_queries(debate_session_id);
+      CREATE INDEX idx_research_sources_debate ON research_sources(debate_session_id);
+      CREATE INDEX idx_research_assets_debate ON research_assets(debate_session_id);
+      CREATE INDEX idx_research_notes_debate ON research_notes(debate_session_id);
+      CREATE INDEX idx_provisional_claims_debate ON provisional_claims(debate_session_id);
+      CREATE INDEX idx_published_evidence_debate ON published_evidence(debate_session_id);
+      CREATE INDEX idx_evidence_history_debate ON evidence_status_history(debate_session_id);
+      CREATE INDEX idx_evidence_reference_issues_debate ON evidence_reference_issues(debate_session_id);
+    `
   }
 ]
 

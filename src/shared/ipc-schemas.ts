@@ -81,3 +81,57 @@ export const connectionTestInputSchema = z.object({
   connectionId: idSchema,
   modelProfileId: idSchema.optional()
 }).strict()
+
+const researchVisibilitySchema = z.enum([
+  'public', 'affirmative-private', 'negative-private', 'moderator-private'
+])
+
+const researchAssetBase = {
+  sessionId: idSchema,
+  ownerParticipantId: idSchema,
+  visibility: researchVisibilitySchema,
+  title: z.string().trim().min(1).max(500),
+  summary: z.string().trim().max(20_000).optional()
+}
+
+export const addResearchAssetSchema = z.discriminatedUnion('kind', [
+  z.object({
+    ...researchAssetBase,
+    kind: z.literal('text'),
+    textContent: z.string().trim().min(1).max(200_000)
+  }).strict(),
+  z.object({
+    ...researchAssetBase,
+    kind: z.literal('url'),
+    url: z.string().trim().url().max(4_000)
+  }).strict(),
+  z.object({
+    ...researchAssetBase,
+    kind: z.literal('image'),
+    fileName: z.string().trim().min(1).max(500),
+    mimeType: z.string().trim().regex(/^image\//).max(100),
+    bytes: z.array(z.number().int().min(0).max(255)).min(1).max(10 * 1024 * 1024)
+  }).strict()
+])
+
+export const publishEvidenceSchema = z.object({
+  sessionId: idSchema, assetId: idSchema, changedBy: idSchema
+}).strict()
+
+export const updateEvidenceStatusSchema = z.object({
+  sessionId: idSchema,
+  evidenceId: idSchema,
+  status: z.enum(['unverified', 'supported', 'disputed', 'outdated', 'inaccessible', 'misleading', 'rejected']),
+  changedBy: idSchema,
+  note: z.string().trim().max(10_000)
+}).strict()
+
+export const challengeEvidenceSchema = z.object({
+  sessionId: idSchema, evidenceId: idSchema, changedBy: idSchema,
+  note: z.string().trim().max(10_000)
+}).strict()
+
+export const runMockSearchSchema = z.object({
+  sessionId: idSchema, ownerParticipantId: idSchema,
+  query: z.string().trim().min(1).max(2_000)
+}).strict()

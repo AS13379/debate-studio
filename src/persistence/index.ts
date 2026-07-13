@@ -15,6 +15,7 @@ export type {
   EventRepository,
   ModelProfileRepository,
   ProviderConnectionRepository,
+  ResearchRepository,
   RepositoryCollection,
   SessionRecord,
   SessionRepository,
@@ -24,6 +25,7 @@ export type {
   UsageRecord,
   UsageRepository
 } from './repositories'
+export { SQLiteResearchRepository } from './sqlite-research-repository'
 export { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-repository'
 export { SQLiteModelProfileRepository, SQLiteProviderConnectionRepository } from './sqlite-provider-repositories'
 export { SQLiteSessionRepository } from './sqlite-session-repository'

@@ -265,7 +265,7 @@ describe('RuntimeTurnExecutor and TurnRunnerFactory', () => {
     const bundle = factoryBundle(config)
 
     await bundle.turnRunner.startTurn(engineAt('affirmative_opening'))
-    await bundle.turnRunner.startTurn(engineAt('closing'))
+    await bundle.turnRunner.startTurn(engineAt('affirmative_closing'))
 
     expect(config.affirmative.adapter).toBe(adapter)
     expect(adapter.requests).toHaveLength(2)

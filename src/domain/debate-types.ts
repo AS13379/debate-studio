@@ -2,10 +2,20 @@ export const DEBATE_STAGES = [
   'draft',
   'validating',
   'moderating',
+  'public_pool',
+  'affirmative_planning',
+  'negative_planning',
+  'affirmative_research',
+  'negative_research',
+  'argument_drafting',
   'affirmative_opening',
   'negative_opening',
+  'cross_examination',
   'rebuttal',
   'free_debate',
+  'negative_closing',
+  'affirmative_closing',
+  // Kept as a legacy-restoration stage for databases created before the split closing stages.
   'closing',
   'adjudication',
   'completed'
@@ -26,6 +36,10 @@ export interface DebateParticipant {
 export interface DebateConfig {
   id: string
   topic: string
+  background?: string
+  affirmativePosition?: string
+  negativePosition?: string
+  freeDebateRounds?: number
   participants: DebateParticipant[]
 }
 

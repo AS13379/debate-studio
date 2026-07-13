@@ -39,18 +39,30 @@ describe('DebateEngine', () => {
       'draft',
       'validating',
       'moderating',
+      'public_pool',
+      'affirmative_planning',
+      'negative_planning',
+      'affirmative_research',
+      'negative_research',
+      'argument_drafting',
+      'argument_drafting',
       'affirmative_opening',
       'negative_opening',
+      'cross_examination',
+      'cross_examination',
+      'rebuttal',
       'rebuttal',
       'free_debate',
-      'closing',
+      'free_debate',
+      'negative_closing',
+      'affirmative_closing',
       'adjudication',
       'completed'
     ])
     expect(engine.getState().status).toBe('completed')
-    expect(engine.getTurns()).toHaveLength(8)
-    expect(new Set(engine.getTurns().map((turn) => turn.id)).size).toBe(8)
-    expect(engine.getEvents().filter((event) => event.type === 'turnCompleted')).toHaveLength(8)
+    expect(engine.getTurns()).toHaveLength(20)
+    expect(new Set(engine.getTurns().map((turn) => turn.id)).size).toBe(20)
+    expect(engine.getEvents().filter((event) => event.type === 'turnCompleted')).toHaveLength(20)
   })
 
   it('pauses and resumes without changing the current stage', () => {

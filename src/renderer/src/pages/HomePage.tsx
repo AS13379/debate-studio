@@ -62,8 +62,11 @@ export function statusLabel(status: string): string {
 
 export function stageLabel(stage: string): string {
   return {
-    draft: '草稿', validating: '配置检查', moderating: '主持开场', affirmative_opening: '正方开篇',
-    negative_opening: '反方开篇', rebuttal: '反驳', free_debate: '自由辩论', closing: '总结陈词',
+    draft: '草稿', validating: '配置检查', moderating: '主持开场', public_pool: '公共资源池',
+    affirmative_planning: '正方研究计划', negative_planning: '反方研究计划',
+    affirmative_research: '正方私有研究', negative_research: '反方私有研究', argument_drafting: '论证草拟',
+    affirmative_opening: '正方开篇', negative_opening: '反方开篇', cross_examination: '交叉质询',
+    rebuttal: '反驳', free_debate: '自由辩论', negative_closing: '反方总结', affirmative_closing: '正方总结', closing: '总结陈词',
     adjudication: '裁决', completed: '完成'
   }[stage] ?? stage
 }

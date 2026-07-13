@@ -14,6 +14,16 @@ import type {
   SaveParticipantBindingsInput,
   SaveProviderConnectionInput
 } from './debate-dtos'
+import type {
+  AddResearchAssetInput,
+  ChallengeEvidenceInput,
+  PublishEvidenceInput,
+  ResearchAssetDto,
+  ResearchResultDto,
+  ResearchWorkspaceDto,
+  RunMockSearchInput,
+  UpdateEvidenceStatusInput
+} from './research-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
@@ -41,6 +51,12 @@ export const IPC_CHANNELS = {
   getDebate: 'query:get-debate',
   listDebateTurns: 'query:list-debate-turns',
   loadDebateSetup: 'query:load-debate-setup',
+  loadResearchWorkspace: 'research:load-workspace',
+  addResearchAsset: 'research:add-asset',
+  publishResearchEvidence: 'research:publish-evidence',
+  challengeEvidence: 'research:challenge-evidence',
+  updateEvidenceStatus: 'research:update-evidence-status',
+  runMockSearch: 'research:run-mock-search',
   runEvent: 'run:event'
 } as const
 
@@ -112,6 +128,12 @@ export interface DebateStudioApi {
   getDebate(input: { id: string }): Promise<ConfigurationResultDto<DebateDetailDto>>
   listDebateTurns(input: { sessionId: string }): Promise<ConfigurationResultDto<DebateTurnDto[]>>
   loadDebateSetup(input: { sessionId: string }): Promise<ConfigurationResultDto<DebateSetupDto>>
+  loadResearchWorkspace(input: { sessionId: string }): Promise<ResearchResultDto<ResearchWorkspaceDto>>
+  addResearchAsset(input: AddResearchAssetInput): Promise<ResearchResultDto<ResearchAssetDto>>
+  publishResearchEvidence(input: PublishEvidenceInput): Promise<ResearchResultDto<{ evidenceId: string; publicCode: string }>>
+  challengeEvidence(input: ChallengeEvidenceInput): Promise<ResearchResultDto<boolean>>
+  updateEvidenceStatus(input: UpdateEvidenceStatusInput): Promise<ResearchResultDto<boolean>>
+  runMockSearch(input: RunMockSearchInput): Promise<ResearchResultDto<number>>
   onRunEvent(listener: (event: RunEventDto) => void): () => void
 }
 
@@ -136,3 +158,15 @@ export type {
   SaveParticipantBindingsInput,
   SaveProviderConnectionInput
 } from './debate-dtos'
+export type {
+  AddResearchAssetInput,
+  ChallengeEvidenceInput,
+  PublishEvidenceInput,
+  ResearchAssetDto,
+  ResearchErrorDto,
+  ResearchResultDto,
+  ResearchWorkspaceDto,
+  RoleResearchWorkspaceDto,
+  RunMockSearchInput,
+  UpdateEvidenceStatusInput
+} from './research-dtos'

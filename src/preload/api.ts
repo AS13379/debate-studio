@@ -35,6 +35,12 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     getDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.getDebate, input),
     listDebateTurns: (input) => invoke(ipcRenderer, IPC_CHANNELS.listDebateTurns, input),
     loadDebateSetup: (input) => invoke(ipcRenderer, IPC_CHANNELS.loadDebateSetup, input),
+    loadResearchWorkspace: (input) => invoke(ipcRenderer, IPC_CHANNELS.loadResearchWorkspace, input),
+    addResearchAsset: (input) => invoke(ipcRenderer, IPC_CHANNELS.addResearchAsset, input),
+    publishResearchEvidence: (input) => invoke(ipcRenderer, IPC_CHANNELS.publishResearchEvidence, input),
+    challengeEvidence: (input) => invoke(ipcRenderer, IPC_CHANNELS.challengeEvidence, input),
+    updateEvidenceStatus: (input) => invoke(ipcRenderer, IPC_CHANNELS.updateEvidenceStatus, input),
+    runMockSearch: (input) => invoke(ipcRenderer, IPC_CHANNELS.runMockSearch, input),
     onRunEvent: (listener) => {
       const wrapped = (_event: IpcRendererEvent, payload: RunEventDto): void => listener(payload)
       ipcRenderer.on(IPC_CHANNELS.runEvent, wrapped)

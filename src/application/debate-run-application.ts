@@ -8,6 +8,7 @@ import {
 import {
   initializePersistence,
   persistenceFailure,
+  type DebateRecord,
   type PersistenceContext,
   type PersistenceError,
   type PersistenceResult,
@@ -15,6 +16,7 @@ import {
   type TurnRecord
 } from '../persistence'
 import type { DebateRuntimePreparationResult, DebateRuntimeConfig } from '../runtime'
+import type { ResearchRunCoordinator } from '../research'
 import {
   composeDebateSetupApplication,
   type DebateSetupApplication,
@@ -104,7 +106,8 @@ export class DebateRunApplication {
   constructor(
     private readonly persistence: PersistenceContext,
     private readonly setupApplication: DebateSetupApplication,
-    private readonly runPersistence: DebateRunPersistence
+    private readonly runPersistence: DebateRunPersistence,
+    private readonly researchCoordinator?: ResearchRunCoordinator
   ) {}
 
   async start(sessionId: string): Promise<DebateRunCommandResult> {
@@ -293,11 +296,16 @@ export class DebateRunApplication {
       }
     }
 
-    const config = this.debateConfig(preparation.runtimeConfig, debate.value.topic)
+    const config = this.debateConfig(preparation.runtimeConfig, debate.value)
     const initialStage = this.activeStage(session.currentStage)
+    const previousTurns = this.persistence.repositories.turns.listBySession(session.id)
+    if (!previousTurns.ok) return { ok: false, error: this.persistenceError(previousTurns.error) }
+    const initialStageTurnCount = initialStage
+      ? previousTurns.value.filter((turn) => turn.stage === initialStage && ['completed', 'skipped', 'forced'].includes(turn.status)).length
+      : 0
     const runner = new SessionRunner(config, preparation.turnRunner, {
       engine: initialStatus && initialStage
-        ? { initialState: { stage: initialStage, status: initialStatus } }
+        ? { initialState: { stage: initialStage, status: initialStatus }, initialStageTurnCount }
         : undefined,
       onEvent: (event) => this.handleRunnerEvent(event)
     })
@@ -353,6 +361,10 @@ export class DebateRunApplication {
   private handleRunnerEvent(event: SessionRunnerEvent): void {
     const persisted = this.runPersistence.handle(event)
     if (!persisted.ok) this.persistenceErrors.set(event.sessionId, persisted.error)
+    if (event.type === 'turnCompleted' && this.researchCoordinator) {
+      const projected = this.researchCoordinator.handleCompletedTurn(event.turn)
+      if (!projected.ok) this.persistenceErrors.set(event.sessionId, projected.error)
+    }
     if (!this.isPublicEvent(event)) return
     for (const listener of this.listeners) {
       try {
@@ -367,7 +379,7 @@ export class DebateRunApplication {
     return event.type !== 'sessionFailed'
   }
 
-  private debateConfig(runtime: DebateRuntimeConfig, topic: string): DebateConfig {
+  private debateConfig(runtime: DebateRuntimeConfig, debate: DebateRecord): DebateConfig {
     const participants = [runtime.affirmative, runtime.negative, runtime.moderator, runtime.judge]
       .filter((participant): participant is NonNullable<typeof participant> => Boolean(participant))
       .map((participant) => ({
@@ -375,7 +387,15 @@ export class DebateRunApplication {
         role: participant.role,
         name: participant.participant.displayName
       }))
-    return { id: runtime.session.id, topic, participants }
+    return {
+      id: runtime.session.id,
+      topic: debate.topic,
+      background: debate.background,
+      affirmativePosition: debate.affirmativePosition,
+      negativePosition: debate.negativePosition,
+      freeDebateRounds: debate.freeDebateRounds,
+      participants
+    }
   }
 
   private toDebateTurn(record: TurnRecord): DebateTurn | undefined {

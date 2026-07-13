@@ -270,7 +270,7 @@ describe('DebateRunApplication headless integration', () => {
     const result = await app.start('session-headless')
 
     expect(result).toMatchObject({ ok: true, state: { status: 'completed', currentStage: 'completed', active: false } })
-    expect(adapter.requests).toHaveLength(8)
+    expect(adapter.requests).toHaveLength(20)
     expect(adapter.requests.every((request) => !('apiKey' in request) && !('credentialRef' in request))).toBe(true)
     await app.close()
 
@@ -278,7 +278,7 @@ describe('DebateRunApplication headless integration', () => {
     const turns = inspected.repositories.turns.listBySession('session-headless')
     const events = inspected.repositories.events.listBySession('session-headless')
     const usage = inspected.repositories.usage.listBySession('session-headless')
-    expect(turns.ok && turns.value).toHaveLength(8)
+    expect(turns.ok && turns.value).toHaveLength(20)
     expect(turns.ok && turns.value.every((turn) => turn.status === 'completed' && Boolean(turn.content))).toBe(true)
     expect(events.ok && events.value.map((event) => event.id)).toEqual(receivedEvents.map((event) => event.id))
     expect(events.ok && events.value.map((event) => event.type)).toEqual(expect.arrayContaining([
@@ -291,7 +291,7 @@ describe('DebateRunApplication headless integration', () => {
     expect(JSON.stringify(turns)).not.toContain('mock:no-key-read')
     expect(JSON.stringify(events)).not.toContain('mock:no-key-read')
     expect(JSON.stringify(usage)).not.toContain('mock:no-key-read')
-    expect(usage.ok && usage.value).toHaveLength(8)
+    expect(usage.ok && usage.value).toHaveLength(20)
     inspected.database.close()
   })
 
@@ -328,7 +328,7 @@ describe('DebateRunApplication headless integration', () => {
     const resumed = await app.resume('session-headless')
 
     expect(resumed).toMatchObject({ ok: true, state: { status: 'completed', currentStage: 'completed' } })
-    expect(adapter.requests).toHaveLength(9)
+    expect(adapter.requests).toHaveLength(21)
   })
 
   it('throttles streaming text writes and force-saves the partial text when cancelled', async () => {
@@ -415,7 +415,7 @@ describe('DebateRunApplication headless integration', () => {
     const turns = inspected.repositories.turns.listBySession('session-headless')
     expect(turns.ok).toBe(true)
     if (turns.ok) {
-      expect(turns.value).toHaveLength(9)
+      expect(turns.value).toHaveLength(21)
       const original = turns.value[0]
       const replacement = turns.value[1]
       expect(original).toMatchObject({ status: 'failed', error: '模拟运行失败' })

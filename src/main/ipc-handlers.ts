@@ -1,6 +1,6 @@
 import type { ZodType } from 'zod'
 
-import type { DebateConfigurationApplication, DebateRunApplication, DebateRunEvent } from '../application'
+import type { DebateConfigurationApplication, DebateRunApplication, DebateRunEvent, ResearchApplication } from '../application'
 import type { DebateTurn } from '../domain'
 import { redactForExport, redactSensitiveText } from '../security'
 import {
@@ -11,16 +11,21 @@ import {
   type RunEventDto
 } from '../shared/ipc-contract'
 import {
+  addResearchAssetSchema,
+  challengeEvidenceSchema,
   connectionInputSchema,
   connectionTestInputSchema,
   createDebateSchema,
   credentialInputSchema,
   deleteProviderConnectionSchema,
   idInputSchema,
+  publishEvidenceSchema,
+  runMockSearchSchema,
   saveModelProfileSchema,
   saveParticipantBindingsSchema,
   saveProviderConnectionSchema,
-  sessionInputSchema
+  sessionInputSchema,
+  updateEvidenceStatusSchema
 } from '../shared/ipc-schemas'
 
 export interface IpcMainLike {
@@ -32,6 +37,7 @@ export interface DebateIpcDependencies {
   ipcMain: IpcMainLike
   configuration: DebateConfigurationApplication
   run: DebateRunApplication
+  research?: ResearchApplication
   getAppVersion(): string
   broadcastRunEvent(event: RunEventDto): void
 }
@@ -39,7 +45,7 @@ export interface DebateIpcDependencies {
 const registeredChannels = Object.values(IPC_CHANNELS).filter((channel) => channel !== IPC_CHANNELS.runEvent)
 
 export function registerDebateIpc(dependencies: DebateIpcDependencies): () => void {
-  const { ipcMain, configuration, run } = dependencies
+  const { ipcMain, configuration, run, research } = dependencies
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => dependencies.getAppVersion())
   ipcMain.handle(IPC_CHANNELS.listProviderConnections, () => configuration.listProviderConnections())
   ipcMain.handle(IPC_CHANNELS.listProviderPresets, () => configuration.listProviderPresets())
@@ -65,6 +71,12 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.getDebate, validated(idInputSchema, (input) => configuration.getDebate(input.id)))
   ipcMain.handle(IPC_CHANNELS.listDebateTurns, validated(sessionInputSchema, (input) => configuration.listDebateTurns(input.sessionId)))
   ipcMain.handle(IPC_CHANNELS.loadDebateSetup, validated(sessionInputSchema, (input) => configuration.loadDebateSetup(input.sessionId)))
+  ipcMain.handle(IPC_CHANNELS.loadResearchWorkspace, validated(sessionInputSchema, (input) => research?.loadWorkspace(input.sessionId) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.addResearchAsset, validated(addResearchAssetSchema, (input) => research?.addAsset(input) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.publishResearchEvidence, validated(publishEvidenceSchema, (input) => research?.publishEvidence(input) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.challengeEvidence, validated(challengeEvidenceSchema, (input) => research?.challengeEvidence(input) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.updateEvidenceStatus, validated(updateEvidenceStatusSchema, (input) => research?.updateEvidenceStatus(input) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.runMockSearch, validated(runMockSearchSchema, (input) => research?.runMockSearch(input) ?? researchUnavailable()))
 
   const unsubscribe = run.subscribe((event) => dependencies.broadcastRunEvent(mapRunEvent(event)))
   return () => {
@@ -88,6 +100,18 @@ function validationFailure(): ConfigurationResultDto<never> {
       code: 'IPC_VALIDATION_FAILED',
       titleZh: '输入校验失败',
       descriptionZh: '请求参数格式无效，操作未执行。',
+      retryable: false
+    }
+  }
+}
+
+function researchUnavailable(): ConfigurationResultDto<never> {
+  return {
+    ok: false,
+    error: {
+      code: 'RESEARCH_APPLICATION_UNAVAILABLE',
+      titleZh: '研究服务不可用',
+      descriptionZh: '研究应用层尚未完成组合，操作未执行。',
       retryable: false
     }
   }

@@ -28,6 +28,7 @@ import {
   TurnRunnerFactory,
   type DebateRuntimePreparationResult
 } from '../runtime'
+import { DebatePromptBuilder, ResearchContextReader } from '../research'
 
 export interface DebateSetupApplicationOptions extends DatabaseOptions {
   getCapabilityRequirements?: (sessionId: string) => DebateCapabilityRequirements | undefined
@@ -67,7 +68,10 @@ export class DebateSetupApplication {
     this.preparationService = new DebateRuntimePreparationService({
       loader: { load: (sessionId) => this.loadDebateSetup(sessionId) },
       resolver: new DebateRuntimeResolver(),
-      turnRunnerFactory: new TurnRunnerFactory(),
+      turnRunnerFactory: new TurnRunnerFactory(new DebatePromptBuilder(new ResearchContextReader(
+        persistence.repositories.debates,
+        persistence.repositories.research
+      ))),
       adapterRegistry
     })
   }

@@ -2,6 +2,22 @@ import type { PersistenceResult } from './errors'
 import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { DebateParticipantConfig } from '../participant-config'
 import type { DebateTurnFailure } from '../domain'
+import type {
+  EvidenceReferenceIssue,
+  EvidenceStatus,
+  EvidenceStatusHistory,
+  ProvisionalClaim,
+  PublicResourcePool,
+  PublishedEvidence,
+  ResearchAsset,
+  ResearchGoal,
+  ResearchNote,
+  ResearchOwnerRole,
+  ResearchSession,
+  ResearchSource,
+  SearchQuery,
+  SearchSession
+} from '../research'
 
 export interface DebateRecord {
   id: string
@@ -127,6 +143,38 @@ export interface DebateParticipantRepository {
   delete(id: string): PersistenceResult<boolean>
 }
 
+export interface ResearchRepository {
+  saveSession(session: ResearchSession): PersistenceResult<void>
+  findSessionByOwner(debateSessionId: string, ownerRole: ResearchOwnerRole): PersistenceResult<ResearchSession | undefined>
+  listSessions(debateSessionId: string): PersistenceResult<ResearchSession[]>
+  saveGoal(goal: ResearchGoal): PersistenceResult<void>
+  listGoals(debateSessionId: string): PersistenceResult<ResearchGoal[]>
+  saveSearchSession(session: SearchSession): PersistenceResult<void>
+  listSearchSessions(debateSessionId: string): PersistenceResult<SearchSession[]>
+  saveQuery(query: SearchQuery): PersistenceResult<void>
+  listQueries(debateSessionId: string): PersistenceResult<SearchQuery[]>
+  saveSource(source: ResearchSource): PersistenceResult<void>
+  findSourceById(id: string): PersistenceResult<ResearchSource | undefined>
+  listSources(debateSessionId: string): PersistenceResult<ResearchSource[]>
+  saveAsset(asset: ResearchAsset): PersistenceResult<void>
+  findAssetById(id: string): PersistenceResult<ResearchAsset | undefined>
+  listAssets(debateSessionId: string): PersistenceResult<ResearchAsset[]>
+  saveNote(note: ResearchNote): PersistenceResult<void>
+  listNotes(debateSessionId: string): PersistenceResult<ResearchNote[]>
+  saveClaim(claim: ProvisionalClaim): PersistenceResult<void>
+  listClaims(debateSessionId: string): PersistenceResult<ProvisionalClaim[]>
+  savePublicPool(pool: PublicResourcePool): PersistenceResult<void>
+  getPublicPool(debateSessionId: string): PersistenceResult<PublicResourcePool | undefined>
+  createEvidence(evidence: PublishedEvidence, initialHistory: EvidenceStatusHistory): PersistenceResult<void>
+  findEvidenceById(id: string): PersistenceResult<PublishedEvidence | undefined>
+  listEvidence(debateSessionId: string): PersistenceResult<PublishedEvidence[]>
+  countEvidenceByRole(debateSessionId: string, role: ResearchOwnerRole): PersistenceResult<number>
+  changeEvidenceStatus(evidenceId: string, status: EvidenceStatus, history: EvidenceStatusHistory): PersistenceResult<boolean>
+  listEvidenceHistory(debateSessionId: string): PersistenceResult<EvidenceStatusHistory[]>
+  createReferenceIssue(issue: EvidenceReferenceIssue): PersistenceResult<void>
+  listReferenceIssues(debateSessionId: string): PersistenceResult<EvidenceReferenceIssue[]>
+}
+
 export interface RepositoryCollection {
   settings: SettingsRepository
   providerConnections: ProviderConnectionRepository
@@ -137,4 +185,5 @@ export interface RepositoryCollection {
   turns: TurnRepository
   events: EventRepository
   usage: UsageRepository
+  research: ResearchRepository
 }

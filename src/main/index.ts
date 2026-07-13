@@ -46,6 +46,7 @@ app.whenReady().then(() => {
     ipcMain,
     configuration: desktopApplication.configuration,
     run: desktopApplication.run,
+    research: desktopApplication.research,
     getAppVersion: () => app.getVersion(),
     broadcastRunEvent: (event) => {
       for (const window of BrowserWindow.getAllWindows()) {

@@ -140,6 +140,46 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .failure-panel summary, .connection-test summary { cursor: pointer; font-size: 12px; font-weight: 700; }
 .participant-chip small { color: #9699a2; }
 .role-model-editor { border-color: #cfc9f7; }
+.research-panel { padding: 0; overflow: hidden; }
+.research-panel > summary { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 20px 22px; cursor: pointer; list-style: none; }
+.research-panel > summary::-webkit-details-marker { display: none; }
+.research-panel > summary > div { display: flex; flex-direction: column; gap: 4px; }
+.research-panel > summary span { color: #7a7e88; font-size: 12px; }
+.research-panel[open] > summary { border-bottom: 1px solid #e4e5e9; }
+.research-content { display: flex; flex-direction: column; gap: 18px; padding: 20px; }
+.research-section { display: flex; flex-direction: column; gap: 14px; padding: 18px; background: #f8f8fa; border: 1px solid #e3e4e8; border-radius: 11px; }
+.research-copy p { margin: 7px 0; color: #565a65; line-height: 1.55; }
+.private-research-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.private-workspace { border-left-width: 4px; }
+.research-list { display: flex; flex-direction: column; gap: 5px; }
+.research-list b { font-size: 13px; }
+.research-list span { color: #999ca4; font-size: 12px; }
+.research-list ul { margin: 2px 0 0; padding-left: 20px; color: #5f636d; font-size: 13px; line-height: 1.55; }
+.research-list li { overflow-wrap: anywhere; }
+.mock-search-row, .asset-composer { display: grid; gap: 8px; }
+.mock-search-row { grid-template-columns: 1fr auto; }
+.mock-search-row input, .asset-composer input, .asset-composer textarea, .asset-composer select, .status-editor select { min-width: 0; padding: 9px 10px; color: inherit; background: #fff; border: 1px solid #d8dae1; border-radius: 8px; }
+.asset-composer { grid-template-columns: 130px 1fr auto; align-items: end; padding: 13px; background: #fff; border: 1px dashed #d6d8df; border-radius: 9px; }
+.asset-composer > strong { grid-column: 1 / -1; font-size: 13px; }
+.asset-composer textarea, .asset-composer input[type="file"] { grid-column: 1 / 3; }
+.asset-list { display: flex; flex-direction: column; gap: 8px; }
+.asset-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 11px 12px; background: #fff; border: 1px solid #e1e2e7; border-radius: 8px; }
+.asset-row > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.asset-row span, .asset-row small { color: #777b85; font-size: 12px; overflow-wrap: anywhere; }
+.asset-row small { color: #8a5b0a; }
+.evidence-desk { background: #f5f3ff; border-color: #dcd7fa; }
+.evidence-card { padding: 14px; background: #fff; border: 1px solid #dedce9; border-radius: 9px; }
+.evidence-card > header { display: flex; justify-content: space-between; gap: 12px; }
+.evidence-card > p { margin: 9px 0; line-height: 1.55; }
+.evidence-card > small { color: #777b85; overflow-wrap: anywhere; }
+.evidence-card .compact-actions { margin-top: 12px; }
+.evidence-status { display: inline-flex; padding: 3px 8px; border-radius: 999px; color: #72500f; background: #fff1cf; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.evidence-supported { color: #1b6b54; background: #dff7ed; }
+.evidence-disputed, .evidence-misleading, .evidence-rejected { color: #9d2034; background: #ffe6ea; }
+.status-editor { display: flex; gap: 7px; }
+.history-list { margin-top: 12px; color: #686c76; font-size: 12px; }
+.history-list summary { cursor: pointer; font-weight: 700; }
+.history-list p { margin: 7px 0; }
 
 @media (prefers-color-scheme: dark) {
   :root { color: #f0f1f4; background: #15161a; }
@@ -161,4 +201,14 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .failure-panel .suggestion { color: #e3b6bd; }
   .validation-issue.error { color: #f2b7c0; background: #3a2025; }
   .validation-issue.warning { color: #ead29c; background: #382e1c; }
+  .research-panel[open] > summary { border-color: #343740; }
+  .research-section { background: #1b1d22; border-color: #383b44; }
+  .research-copy p, .research-list ul { color: #c0c2c9; }
+  .mock-search-row input, .asset-composer input, .asset-composer textarea, .asset-composer select, .status-editor select { color: #f0f1f4; background: #22242a; border-color: #41444d; }
+  .asset-composer, .asset-row, .evidence-card { background: #24262c; border-color: #3b3e47; }
+  .evidence-desk { background: #211f31; border-color: #46405f; }
+}
+
+@media (max-width: 1100px) {
+  .private-research-grid { grid-template-columns: 1fr; }
 }
