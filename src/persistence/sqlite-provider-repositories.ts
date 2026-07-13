@@ -127,6 +127,18 @@ export class SQLiteModelProfileRepository implements ModelProfileRepository {
     return this.mapRow(result.value)
   }
 
+  list(): PersistenceResult<ModelProfile[]> {
+    const result = this.database.all<ModelProfileRow>('SELECT * FROM model_profiles ORDER BY created_at, id')
+    if (!result.ok) return result
+    const profiles: ModelProfile[] = []
+    for (const row of result.value) {
+      const mapped = this.mapRow(row)
+      if (!mapped.ok) return mapped
+      profiles.push(mapped.value)
+    }
+    return { ok: true, value: profiles }
+  }
+
   listByConnection(connectionId: string): PersistenceResult<ModelProfile[]> {
     const result = this.database.all<ModelProfileRow>(
       'SELECT * FROM model_profiles WHERE connection_id = ? ORDER BY created_at, id',
@@ -197,4 +209,3 @@ export class SQLiteModelProfileRepository implements ModelProfileRepository {
     }
   }
 }
-

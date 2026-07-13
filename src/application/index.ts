@@ -16,3 +16,7 @@ export type {
   DebateRunStateResult,
   DebateRunStatus
 } from './debate-run-application'
+export { DebateConfigurationApplication } from './debate-configuration-application'
+export type { DebateConfigurationApplicationDependencies } from './debate-configuration-application'
+export { DebateDesktopApplication, initializeDebateDesktopApplication } from './debate-desktop-application'
+export type { DebateDesktopApplicationOptions } from './debate-desktop-application'

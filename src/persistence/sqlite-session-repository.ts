@@ -18,6 +18,20 @@ interface SessionExistsRow {
 export class SQLiteSessionRepository implements SessionRepository {
   constructor(private readonly database: Database) {}
 
+  create(record: SessionRecord): PersistenceResult<void> {
+    const result = this.database.run(
+      `INSERT INTO sessions (id, debate_id, status, current_stage, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      record.id,
+      record.debateId,
+      record.status,
+      record.currentStage,
+      record.createdAt,
+      record.updatedAt
+    )
+    return result.ok ? { ok: true, value: undefined } : result
+  }
+
   get(id: string): PersistenceResult<SessionRecord | undefined> {
     const result = this.database.get<SessionRow>(
       `SELECT id, debate_id, status, current_stage, created_at, updated_at
@@ -35,6 +49,15 @@ export class SQLiteSessionRepository implements SessionRepository {
       id
     )
     return result.ok ? { ok: true, value: result.value?.found === 1 } : result
+  }
+
+  listByDebate(debateId: string): PersistenceResult<SessionRecord[]> {
+    const result = this.database.all<SessionRow>(
+      `SELECT id, debate_id, status, current_stage, created_at, updated_at
+       FROM sessions WHERE debate_id = ? ORDER BY created_at DESC, id DESC`,
+      debateId
+    )
+    return result.ok ? { ok: true, value: result.value.map((row) => this.mapRow(row)) } : result
   }
 
   updateRuntimeState(

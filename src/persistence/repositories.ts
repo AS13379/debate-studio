@@ -6,6 +6,9 @@ export interface DebateRecord {
   id: string
   topic: string
   background?: string
+  affirmativePosition?: string
+  negativePosition?: string
+  freeDebateRounds?: number
   status: string
   createdAt: string
   updatedAt: string
@@ -60,10 +63,15 @@ export interface EntityRepository<T extends { id: string }> {
   save(record: T): PersistenceResult<void>
 }
 
-export interface DebateRepository extends EntityRepository<DebateRecord> {}
+export interface DebateRepository extends EntityRepository<DebateRecord> {
+  list(): PersistenceResult<DebateRecord[]>
+  delete(id: string): PersistenceResult<boolean>
+}
 export interface SessionRepository {
+  create(record: SessionRecord): PersistenceResult<void>
   get(id: string): PersistenceResult<SessionRecord | undefined>
   exists(id: string): PersistenceResult<boolean>
+  listByDebate(debateId: string): PersistenceResult<SessionRecord[]>
   updateRuntimeState(id: string, status: string, currentStage: string, updatedAt: string): PersistenceResult<boolean>
   markInProgressInterrupted(updatedAt: string): PersistenceResult<number>
 }
@@ -103,6 +111,7 @@ export interface ProviderConnectionRepository {
 export interface ModelProfileRepository {
   create(profile: ModelProfile): PersistenceResult<void>
   findById(id: string): PersistenceResult<ModelProfile | undefined>
+  list(): PersistenceResult<ModelProfile[]>
   listByConnection(connectionId: string): PersistenceResult<ModelProfile[]>
   update(profile: ModelProfile): PersistenceResult<boolean>
   delete(id: string): PersistenceResult<boolean>

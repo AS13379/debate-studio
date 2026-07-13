@@ -1,8 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { createDebateStudioApi } from './api'
 
-const debateStudioApi = {
-  getAppVersion: (): Promise<string> => ipcRenderer.invoke('app:get-version')
-}
+const debateStudioApi = createDebateStudioApi(ipcRenderer)
 
 contextBridge.exposeInMainWorld('debateStudio', debateStudioApi)
-

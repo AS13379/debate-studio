@@ -1,9 +1,17 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { initializeDebateSetupApplication, type DebateSetupApplication } from '../application'
+import {
+  initializeDebateDesktopApplication,
+  type DebateDesktopApplication
+} from '../application'
+import { IPC_CHANNELS } from '../shared/ipc-contract'
+import { registerDebateIpc } from './ipc-handlers'
 import { createWindowOptions } from './window-options'
 
-let debateSetupApplication: DebateSetupApplication | undefined
+let desktopApplication: DebateDesktopApplication | undefined
+let disposeIpc: (() => void) | undefined
+let shutdownStarted = false
+let readyToQuit = false
 
 function createWindow(): void {
   const window = new BrowserWindow(createWindowOptions(join(__dirname, '../preload/index.js')))
@@ -18,13 +26,23 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  const applicationResult = initializeDebateSetupApplication({ appDataDirectory: app.getPath('userData') })
+  const applicationResult = initializeDebateDesktopApplication({ appDataDirectory: app.getPath('userData') })
   if (!applicationResult.ok) {
     throw new Error(`${applicationResult.error.code}: ${applicationResult.error.message}`)
   }
-  debateSetupApplication = applicationResult.value
+  desktopApplication = applicationResult.value
 
-  ipcMain.handle('app:get-version', () => app.getVersion())
+  disposeIpc = registerDebateIpc({
+    ipcMain,
+    configuration: desktopApplication.configuration,
+    run: desktopApplication.run,
+    getAppVersion: () => app.getVersion(),
+    broadcastRunEvent: (event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.runEvent, event)
+      }
+    }
+  })
   createWindow()
 
   app.on('activate', () => {
@@ -32,9 +50,19 @@ app.whenReady().then(() => {
   })
 })
 
-app.on('before-quit', () => {
-  debateSetupApplication?.close()
-  debateSetupApplication = undefined
+app.on('before-quit', (event) => {
+  if (readyToQuit) return
+  event.preventDefault()
+  if (shutdownStarted) return
+  shutdownStarted = true
+  disposeIpc?.()
+  disposeIpc = undefined
+  const closing = desktopApplication?.close() ?? Promise.resolve({ ok: true as const, value: undefined })
+  void closing.finally(() => {
+    desktopApplication = undefined
+    readyToQuit = true
+    app.quit()
+  })
 })
 
 app.on('window-all-closed', () => {

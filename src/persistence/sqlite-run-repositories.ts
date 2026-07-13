@@ -15,6 +15,9 @@ interface DebateRow {
   id: string
   topic: string
   background: string | null
+  affirmative_position: string | null
+  negative_position: string | null
+  free_debate_rounds: number
   status: string
   created_at: string
   updated_at: string
@@ -60,7 +63,8 @@ export class SQLiteDebateRepository implements DebateRepository {
 
   findById(id: string): PersistenceResult<DebateRecord | undefined> {
     const result = this.database.get<DebateRow>(
-      `SELECT id, topic, background, status, created_at, updated_at
+      `SELECT id, topic, background, affirmative_position, negative_position,
+        free_debate_rounds, status, created_at, updated_at
        FROM debates WHERE id = ?`,
       id
     )
@@ -71,16 +75,24 @@ export class SQLiteDebateRepository implements DebateRepository {
 
   save(record: DebateRecord): PersistenceResult<void> {
     const result = this.database.run(
-      `INSERT INTO debates (id, topic, background, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO debates
+       (id, topic, background, affirmative_position, negative_position, free_debate_rounds,
+        status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          topic = excluded.topic,
          background = excluded.background,
+         affirmative_position = excluded.affirmative_position,
+         negative_position = excluded.negative_position,
+         free_debate_rounds = excluded.free_debate_rounds,
          status = excluded.status,
          updated_at = excluded.updated_at`,
       record.id,
       record.topic,
       record.background ?? null,
+      record.affirmativePosition ?? null,
+      record.negativePosition ?? null,
+      record.freeDebateRounds ?? 1,
       record.status,
       record.createdAt,
       record.updatedAt
@@ -88,11 +100,28 @@ export class SQLiteDebateRepository implements DebateRepository {
     return result.ok ? { ok: true, value: undefined } : result
   }
 
+  list(): PersistenceResult<DebateRecord[]> {
+    const result = this.database.all<DebateRow>(
+      `SELECT id, topic, background, affirmative_position, negative_position,
+        free_debate_rounds, status, created_at, updated_at
+       FROM debates ORDER BY created_at DESC, id DESC`
+    )
+    return result.ok ? { ok: true, value: result.value.map((row) => this.mapRow(row)) } : result
+  }
+
+  delete(id: string): PersistenceResult<boolean> {
+    const result = this.database.run('DELETE FROM debates WHERE id = ?', id)
+    return result.ok ? { ok: true, value: Number(result.value.changes) > 0 } : result
+  }
+
   private mapRow(row: DebateRow): DebateRecord {
     return {
       id: row.id,
       topic: row.topic,
       background: row.background ?? undefined,
+      affirmativePosition: row.affirmative_position ?? undefined,
+      negativePosition: row.negative_position ?? undefined,
+      freeDebateRounds: row.free_debate_rounds,
       status: row.status,
       createdAt: row.created_at,
       updatedAt: row.updated_at

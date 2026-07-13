@@ -184,6 +184,15 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_turns_session_status ON turns(session_id, status);
       CREATE INDEX idx_turns_retry_of_turn_id ON turns(retry_of_turn_id);
     `
+  },
+  {
+    version: 5,
+    name: 'debate_configuration_fields',
+    sql: `
+      ALTER TABLE debates ADD COLUMN affirmative_position TEXT;
+      ALTER TABLE debates ADD COLUMN negative_position TEXT;
+      ALTER TABLE debates ADD COLUMN free_debate_rounds INTEGER NOT NULL DEFAULT 1;
+    `
   }
 ]
 

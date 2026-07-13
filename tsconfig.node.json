@@ -7,7 +7,9 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
-  "include": ["electron.vite.config.ts", "src/main/**/*.ts", "src/preload/**/*.ts", "src/application/**/*.ts", "src/domain/**/*.ts", "src/provider-config/**/*.ts", "src/participant-config/**/*.ts", "src/setup-validation/**/*.ts", "src/setup-loading/**/*.ts", "src/runtime/**/*.ts", "src/providers/**/*.ts", "src/execution/**/*.ts", "src/persistence/**/*.ts", "src/security/**/*.ts", "tests/**/*.ts"]
+  "include": ["electron.vite.config.ts", "src/main/**/*.ts", "src/preload/**/*.ts", "src/application/**/*.ts", "src/domain/**/*.ts", "src/provider-config/**/*.ts", "src/participant-config/**/*.ts", "src/setup-validation/**/*.ts", "src/setup-loading/**/*.ts", "src/runtime/**/*.ts", "src/providers/**/*.ts", "src/execution/**/*.ts", "src/persistence/**/*.ts", "src/security/**/*.ts", "src/shared/**/*.ts", "src/renderer/**/*.ts", "src/renderer/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx"]
 }
