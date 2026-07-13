@@ -33,6 +33,14 @@ export interface ProviderConnectionDto {
   updatedAt: string
 }
 
+export interface ProviderPresetDto {
+  providerId: string
+  displayName: string
+  defaultBaseUrl: string
+  supportedProtocols: ProtocolTypeDto[]
+  capabilityHints: Partial<ModelCapabilitiesDto>
+}
+
 export interface SaveProviderConnectionInput {
   id?: string
   providerId: string
@@ -121,16 +129,35 @@ export interface DebateTurnDto {
   content?: string
   retryOfTurnId?: string
   error?: string
+  failure?: DebateTurnFailureDto
   createdAt: string
   completedAt?: string
+}
+
+export interface DebateTurnFailureDto {
+  code: string
+  titleZh: string
+  descriptionZh: string
+  retryable: boolean
+  suggestedActionZh: string
+  technicalDetails?: string
+}
+
+export interface DebateSetupIssueDto {
+  code: string
+  titleZh: string
+  descriptionZh: string
+  role?: DebateParticipantRoleDto
+  configId?: string
+  suggestedActionZh: string
 }
 
 export interface DebateSetupDto {
   sessionId: string
   validation: {
     valid: boolean
-    errors: Array<{ code: string; titleZh: string; descriptionZh: string }>
-    warnings: Array<{ code: string; titleZh: string; descriptionZh: string }>
+    errors: DebateSetupIssueDto[]
+    warnings: DebateSetupIssueDto[]
   }
   participants: ParticipantBindingDto[]
   modelProfiles: ModelProfileDto[]
@@ -141,11 +168,14 @@ export interface ConnectionTestDto {
   success: boolean
   latencyMs: number
   providerStatus?: number
+  responsePreview?: string
   error?: {
     code: string
     titleZh: string
     descriptionZh: string
     retryable: boolean
+    suggestedActionZh: string
+    technicalDetails: string
   }
 }
 

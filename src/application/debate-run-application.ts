@@ -390,6 +390,7 @@ export class DebateRunApplication {
       content: record.content,
       retryOfTurnId: record.retryOfTurnId,
       error: record.error,
+      failure: record.failure,
       createdAt: record.createdAt
     }
   }

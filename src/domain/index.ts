@@ -12,6 +12,7 @@ export type {
   DebateState,
   DebateStatus,
   DebateTurn,
+  DebateTurnFailure,
   DebateTurnStatus,
   EngineResult,
   ParticipantRole,

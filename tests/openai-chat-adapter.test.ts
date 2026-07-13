@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AdapterRegistry,
+  FetchHttpTransport,
   MockHttpTransport,
   ModelAdapterError,
   OpenAIChatAdapter,
@@ -105,6 +106,34 @@ describe('OpenAIChatAdapter', () => {
       response: { requestId: 'request-openai', content: '第一段，第二段', finishReason: 'stop' }
     })
     expect((transport.requests[0].body as OpenAIChatRequestBody).stream).toBe(true)
+  })
+
+  it('keeps emitted deltas and converts an interrupted SSE stream into a recoverable error', async () => {
+    const encoder = new TextEncoder()
+    const transport = new FetchHttpTransport({
+      fetchImplementation: async () => new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"已收到部分文本"}}]}\n\n'))
+          controller.close()
+        }
+      }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+    })
+    const events: UnifiedStreamEvent[] = []
+
+    for await (const event of new OpenAIChatAdapter(transport).stream(request())) events.push(event)
+
+    expect(events).toEqual([
+      { type: 'started', requestId: 'request-openai' },
+      { type: 'textDelta', requestId: 'request-openai', delta: '已收到部分文本' },
+      expect.objectContaining({
+        type: 'error',
+        error: expect.objectContaining({
+          failureCode: 'STREAM_INTERRUPTED',
+          titleZh: 'SSE 流中断',
+          retryable: true
+        })
+      })
+    ])
   })
 
   it('converts an HTTP error into a structured ModelAdapterError', async () => {

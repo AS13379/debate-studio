@@ -3,10 +3,12 @@ import type {
   ConnectionTestDto,
   CreateDebateInput,
   DebateDetailDto,
+  DebateParticipantRoleDto,
   DebateSetupDto,
   DebateSummaryDto,
   DebateTurnDto,
   ModelProfileDto,
+  ProviderPresetDto,
   ProviderConnectionDto,
   SaveModelProfileInput,
   SaveParticipantBindingsInput,
@@ -16,10 +18,13 @@ import type {
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
   listProviderConnections: 'configuration:list-provider-connections',
+  listProviderPresets: 'configuration:list-provider-presets',
   saveProviderConnection: 'configuration:save-provider-connection',
   deleteProviderConnection: 'configuration:delete-provider-connection',
   listModelProfiles: 'configuration:list-model-profiles',
   saveModelProfile: 'configuration:save-model-profile',
+  deleteModelProfile: 'configuration:delete-model-profile',
+  copyModelProfile: 'configuration:copy-model-profile',
   saveCredential: 'configuration:save-credential',
   deleteCredential: 'configuration:delete-credential',
   testConnection: 'configuration:test-connection',
@@ -52,6 +57,8 @@ export interface RunErrorDto {
   titleZh: string
   descriptionZh: string
   retryable: boolean
+  suggestedActionZh?: string
+  technicalDetails?: string
 }
 
 export type RunCommandResultDto =
@@ -82,10 +89,13 @@ export type RunEventDto =
 export interface DebateStudioApi {
   getAppVersion(): Promise<string>
   listProviderConnections(): Promise<ConfigurationResultDto<ProviderConnectionDto[]>>
+  listProviderPresets(): Promise<ConfigurationResultDto<ProviderPresetDto[]>>
   saveProviderConnection(input: SaveProviderConnectionInput): Promise<ConfigurationResultDto<ProviderConnectionDto>>
-  deleteProviderConnection(input: { id: string }): Promise<ConfigurationResultDto<boolean>>
+  deleteProviderConnection(input: { id: string; deleteCredential: boolean }): Promise<ConfigurationResultDto<boolean>>
   listModelProfiles(): Promise<ConfigurationResultDto<ModelProfileDto[]>>
   saveModelProfile(input: SaveModelProfileInput): Promise<ConfigurationResultDto<ModelProfileDto>>
+  deleteModelProfile(input: { id: string }): Promise<ConfigurationResultDto<boolean>>
+  copyModelProfile(input: { id: string }): Promise<ConfigurationResultDto<ModelProfileDto>>
   saveCredential(input: { connectionId: string; credential: string }): Promise<ConfigurationResultDto<boolean>>
   deleteCredential(input: { connectionId: string }): Promise<ConfigurationResultDto<boolean>>
   testConnection(input: { connectionId: string; modelProfileId?: string }): Promise<ConfigurationResultDto<ConnectionTestDto>>
@@ -110,11 +120,15 @@ export type {
   ConnectionTestDto,
   CreateDebateInput,
   DebateDetailDto,
+  DebateParticipantRoleDto,
   DebateSetupDto,
   DebateSummaryDto,
   DebateTurnDto,
+  DebateTurnFailureDto,
+  DebateSetupIssueDto,
   ModelCapabilitiesDto,
   ModelProfileDto,
+  ProviderPresetDto,
   ParticipantBindingDto,
   ProtocolTypeDto,
   ProviderConnectionDto,

@@ -1,38 +1,32 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
 import type {
   DebateDetailDto,
-  ModelCapabilitiesDto,
   ModelProfileDto,
-  ProviderConnectionDto,
-  ProtocolTypeDto
+  ProviderConnectionDto
 } from '../../../shared/ipc-contract'
-
-const defaultCapabilities: ModelCapabilitiesDto = {
-  textInput: true,
-  imageInput: false,
-  documentInput: false,
-  audioInput: false,
-  videoInput: false,
-  streaming: true,
-  reasoning: true,
-  toolCalling: false,
-  webSearch: false,
-  structuredOutput: false
-}
 
 export interface NewDebatePageProps {
   onBack(): void
   onCreated(debate: DebateDetailDto): void
+  onOpenModels(): void
 }
 
-export function NewDebatePage({ onBack, onCreated }: NewDebatePageProps) {
+interface RoleModels {
+  affirmative: string
+  negative: string
+  moderator: string
+  judge: string
+}
+
+const EMPTY_ROLE_MODELS: RoleModels = { affirmative: '', negative: '', moderator: '', judge: '' }
+
+export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePageProps) {
   const [connections, setConnections] = useState<ProviderConnectionDto[]>([])
   const [profiles, setProfiles] = useState<ModelProfileDto[]>([])
+  const [roleModels, setRoleModels] = useState<RoleModels>(EMPTY_ROLE_MODELS)
   const [error, setError] = useState<string>()
   const [saving, setSaving] = useState(false)
-  const [showProviderForm, setShowProviderForm] = useState(false)
-  const [showModelForm, setShowModelForm] = useState(false)
 
   const refreshConfiguration = async (): Promise<void> => {
     const [connectionResult, profileResult] = await Promise.all([
@@ -64,21 +58,30 @@ export function NewDebatePage({ onBack, onCreated }: NewDebatePageProps) {
       setSaving(false)
       return
     }
-    const binding = (name: string, displayName: string) => ({
-      modelProfileId: String(form.get(name) ?? ''),
-      displayName
-    })
-    const judgeProfileId = String(form.get('judgeModel') ?? '')
     const bound = await window.debateStudio.saveParticipantBindings({
       sessionId: created.value.sessionId,
-      affirmative: binding('affirmativeModel', '正方'),
-      negative: binding('negativeModel', '反方'),
-      moderator: binding('moderatorModel', '主持人'),
-      judge: judgeProfileId ? { modelProfileId: judgeProfileId, displayName: '裁判' } : undefined
+      affirmative: { modelProfileId: roleModels.affirmative, displayName: '正方' },
+      negative: { modelProfileId: roleModels.negative, displayName: '反方' },
+      moderator: { modelProfileId: roleModels.moderator, displayName: '主持人' },
+      judge: roleModels.judge ? { modelProfileId: roleModels.judge, displayName: '裁判' } : undefined
     })
     setSaving(false)
     if (!bound.ok) setError(bound.error.descriptionZh)
     else onCreated(bound.value)
+  }
+
+  const useAffirmativeForCoreRoles = (): void => {
+    if (!roleModels.affirmative) return
+    setRoleModels((current) => ({
+      ...current,
+      negative: current.affirmative,
+      moderator: current.affirmative
+    }))
+  }
+
+  const profileLabel = (profile: ModelProfileDto): string => {
+    const connection = connections.find((candidate) => candidate.id === profile.connectionId)
+    return `${profile.displayName} · ${profile.modelId}${connection ? ` · ${connection.displayName}` : ''}`
   }
 
   return (
@@ -87,7 +90,7 @@ export function NewDebatePage({ onBack, onCreated }: NewDebatePageProps) {
         <div>
           <p className="eyebrow">配置</p>
           <h1 id="new-debate-title">新建辩论</h1>
-          <p className="page-description">第一版只配置文本模型和基础角色。</p>
+          <p className="page-description">选择已保存的 Mock 或 OpenAI Compatible ModelProfile。</p>
         </div>
         <button className="button ghost" onClick={onBack}>返回列表</button>
       </header>
@@ -95,14 +98,8 @@ export function NewDebatePage({ onBack, onCreated }: NewDebatePageProps) {
       {error && <div className="notice error" role="alert">{error}</div>}
       <div className="configuration-toolbar panel">
         <div><strong>模型配置</strong><span>{connections.length} 个连接 · {profiles.length} 个模型</span></div>
-        <div className="header-actions">
-          <button className="button secondary" onClick={() => setShowProviderForm((value) => !value)}>新建连接</button>
-          <button className="button secondary" disabled={connections.length === 0} onClick={() => setShowModelForm((value) => !value)}>新建模型</button>
-        </div>
+        <button className="button secondary" onClick={onOpenModels}>打开模型与平台</button>
       </div>
-
-      {showProviderForm && <ProviderForm onSaved={() => { setShowProviderForm(false); void refreshConfiguration() }} />}
-      {showModelForm && <ModelForm connections={connections} onSaved={() => { setShowModelForm(false); void refreshConfiguration() }} />}
 
       <form className="panel form-grid" onSubmit={(event) => void submitDebate(event)}>
         <label className="field span-2">辩题<input name="topic" required placeholder="例如：人工智能是否会提升人类创造力？" /></label>
@@ -111,97 +108,83 @@ export function NewDebatePage({ onBack, onCreated }: NewDebatePageProps) {
         <label className="field">反方立场<textarea name="negativePosition" required rows={3} /></label>
         <label className="field">自由辩论轮数<input name="freeDebateRounds" type="number" min="1" max="20" defaultValue="1" required /></label>
         <div />
-        <ModelSelect name="affirmativeModel" label="正方模型" profiles={profiles} required />
-        <ModelSelect name="negativeModel" label="反方模型" profiles={profiles} required />
-        <ModelSelect name="moderatorModel" label="主持人模型" profiles={profiles} required />
-        <ModelSelect name="judgeModel" label="裁判模型（可选）" profiles={profiles} />
-        {profiles.length === 0 && <div className="notice span-2">请先创建 ProviderConnection 和 ModelProfile，或返回首页创建 Mock 示例。</div>}
+        <ModelSelect
+          label="正方模型"
+          value={roleModels.affirmative}
+          profiles={profiles}
+          profileLabel={profileLabel}
+          required
+          onChange={(value) => setRoleModels((current) => ({ ...current, affirmative: value }))}
+        />
+        <div className="quick-binding">
+          <button type="button" className="button secondary" disabled={!roleModels.affirmative} onClick={useAffirmativeForCoreRoles}>同一模型用于正方、反方和主持人</button>
+        </div>
+        <ModelSelect
+          label="反方模型"
+          value={roleModels.negative}
+          profiles={profiles}
+          profileLabel={profileLabel}
+          required
+          onChange={(value) => setRoleModels((current) => ({ ...current, negative: value }))}
+        />
+        <ModelSelect
+          label="主持人模型"
+          value={roleModels.moderator}
+          profiles={profiles}
+          profileLabel={profileLabel}
+          required
+          onChange={(value) => setRoleModels((current) => ({ ...current, moderator: value }))}
+        />
+        <ModelSelect
+          label="裁判模型（可选）"
+          value={roleModels.judge}
+          profiles={profiles}
+          profileLabel={profileLabel}
+          onChange={(value) => setRoleModels((current) => ({ ...current, judge: value }))}
+        />
+        {profiles.length === 0 && (
+          <div className="notice span-2">
+            尚无 ModelProfile。请先打开“模型与平台”创建连接和模型，或返回首页创建 Mock 示例。
+          </div>
+        )}
+        <div className="notice span-2">
+          创建后会在实时辩论页显示 DebateSetupValidator 的错误和警告；存在阻断错误时无法启动。
+        </div>
         <div className="form-actions span-2">
           <button type="button" className="button ghost" onClick={onBack}>取消</button>
-          <button className="button primary" disabled={saving || profiles.length === 0}>{saving ? '正在创建…' : '创建并查看辩论'}</button>
+          <button
+            className="button primary"
+            disabled={saving || !roleModels.affirmative || !roleModels.negative || !roleModels.moderator}
+          >
+            {saving ? '正在创建…' : '创建并检查配置'}
+          </button>
         </div>
       </form>
     </section>
   )
 }
 
-function ModelSelect({ name, label, profiles, required = false }: { name: string; label: string; profiles: ModelProfileDto[]; required?: boolean }) {
+function ModelSelect({
+  label,
+  value,
+  profiles,
+  profileLabel,
+  required = false,
+  onChange
+}: {
+  label: string
+  value: string
+  profiles: ModelProfileDto[]
+  profileLabel(profile: ModelProfileDto): string
+  required?: boolean
+  onChange(value: string): void
+}) {
   return (
     <label className="field">{label}
-      <select name={name} required={required} defaultValue="">
+      <select value={value} required={required} onChange={(event) => onChange(event.target.value)}>
         <option value="">{required ? '请选择模型' : '不配置独立裁判'}</option>
-        {profiles.map((profile) => <option value={profile.id} key={profile.id}>{profile.displayName} · {profile.modelId}</option>)}
+        {profiles.map((profile) => <option value={profile.id} key={profile.id}>{profileLabel(profile)}</option>)}
       </select>
     </label>
   )
-}
-
-function ProviderForm({ onSaved }: { onSaved(): void }) {
-  const [error, setError] = useState<string>()
-  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const saved = await window.debateStudio.saveProviderConnection({
-      providerId: String(form.get('providerId') ?? ''),
-      displayName: String(form.get('displayName') ?? ''),
-      protocolType: String(form.get('protocolType') ?? 'openai-chat') as ProtocolTypeDto,
-      baseUrl: String(form.get('baseUrl') ?? ''),
-      enabled: true
-    })
-    if (!saved.ok) return setError(saved.error.descriptionZh)
-    const credential = String(form.get('credential') ?? '')
-    if (credential) {
-      const credentialSaved = await window.debateStudio.saveCredential({ connectionId: saved.value.id, credential })
-      if (!credentialSaved.ok) return setError(credentialSaved.error.descriptionZh)
-    }
-    onSaved()
-  }
-  return (
-    <form className="panel form-grid inline-editor" onSubmit={(event) => void submit(event)}>
-      <h2 className="span-2">新建 ProviderConnection</h2>
-      {error && <div className="notice error span-2">{error}</div>}
-      <label className="field">Provider ID<input name="providerId" required placeholder="例如 deepseek" /></label>
-      <label className="field">显示名称<input name="displayName" required /></label>
-      <label className="field">协议<select name="protocolType" defaultValue="openai-chat"><option value="openai-chat">OpenAI Chat 兼容</option><option value="mock">Mock</option></select></label>
-      <label className="field">Base URL<input name="baseUrl" type="url" required placeholder="https://api.example.com/v1" /></label>
-      <label className="field span-2">API Key（可选，仅写入 Keychain）<input name="credential" type="password" autoComplete="off" /></label>
-      <div className="form-actions span-2"><button className="button primary">保存连接</button></div>
-    </form>
-  )
-}
-
-function ModelForm({ connections, onSaved }: { connections: ProviderConnectionDto[]; onSaved(): void }) {
-  const [error, setError] = useState<string>()
-  const availableConnections = useMemo(() => connections.filter((connection) => connection.enabled), [connections])
-  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const saved = await window.debateStudio.saveModelProfile({
-      connectionId: String(form.get('connectionId') ?? ''),
-      modelId: String(form.get('modelId') ?? ''),
-      displayName: String(form.get('displayName') ?? ''),
-      capabilities: defaultCapabilities,
-      contextWindow: optionalNumber(form.get('contextWindow')),
-      maxOutputTokens: optionalNumber(form.get('maxOutputTokens'))
-    })
-    if (!saved.ok) setError(saved.error.descriptionZh)
-    else onSaved()
-  }
-  return (
-    <form className="panel form-grid inline-editor" onSubmit={(event) => void submit(event)}>
-      <h2 className="span-2">新建 ModelProfile</h2>
-      {error && <div className="notice error span-2">{error}</div>}
-      <label className="field">平台连接<select name="connectionId" required>{availableConnections.map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName}</option>)}</select></label>
-      <label className="field">Model ID<input name="modelId" required /></label>
-      <label className="field">显示名称<input name="displayName" required /></label>
-      <label className="field">上下文长度<input name="contextWindow" type="number" min="1" /></label>
-      <label className="field">最大输出 Token<input name="maxOutputTokens" type="number" min="1" /></label>
-      <div className="form-actions span-2"><button className="button primary">保存模型</button></div>
-    </form>
-  )
-}
-
-function optionalNumber(value: FormDataEntryValue | null): number | undefined {
-  const number = Number(value)
-  return value && Number.isFinite(number) && number > 0 ? number : undefined
 }

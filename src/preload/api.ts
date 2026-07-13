@@ -12,10 +12,13 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
   return {
     getAppVersion: () => invoke(ipcRenderer, IPC_CHANNELS.getAppVersion),
     listProviderConnections: () => invoke(ipcRenderer, IPC_CHANNELS.listProviderConnections),
+    listProviderPresets: () => invoke(ipcRenderer, IPC_CHANNELS.listProviderPresets),
     saveProviderConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveProviderConnection, input),
     deleteProviderConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteProviderConnection, input),
     listModelProfiles: () => invoke(ipcRenderer, IPC_CHANNELS.listModelProfiles),
     saveModelProfile: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveModelProfile, input),
+    deleteModelProfile: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteModelProfile, input),
+    copyModelProfile: (input) => invoke(ipcRenderer, IPC_CHANNELS.copyModelProfile, input),
     saveCredential: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveCredential, input),
     deleteCredential: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteCredential, input),
     testConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.testConnection, input),

@@ -40,3 +40,9 @@ export type {
 } from './model-adapter'
 export { OpenAIChatAdapter } from './openai-chat-adapter'
 export type { OpenAIChatMessage, OpenAIChatRequestBody } from './openai-chat-adapter'
+export { presentProviderFailure } from './provider-error-presentation'
+export type {
+  ProviderFailureCode,
+  ProviderFailureInput,
+  ProviderFailurePresentation
+} from './provider-error-presentation'

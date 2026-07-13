@@ -45,8 +45,11 @@ export class FetchHttpTransport implements HttpTransport {
   async *stream(request: HttpTransportRequest): AsyncIterable<HttpTransportStreamEvent> {
     const scope = this.createAbortScope(request.signal)
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+    let responseStarted = false
+    let receivedData = false
     try {
       const response = await this.fetchImplementation(request.url, this.requestInit(request, scope.signal, true))
+      responseStarted = true
       if (!response.ok) {
         const body = await this.readJsonResponse(response, false)
         yield { type: 'error', status: response.status, body }
@@ -62,8 +65,6 @@ export class FetchHttpTransport implements HttpTransport {
       reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-      let receivedData = false
-
       while (true) {
         const result = await reader.read()
         if (result.done) {
@@ -111,7 +112,7 @@ export class FetchHttpTransport implements HttpTransport {
         }
       )
     } catch (cause) {
-      throw this.normalizeError(cause, scope, true)
+      throw this.normalizeError(cause, scope, responseStarted && receivedData)
     } finally {
       reader?.releaseLock()
       scope.cleanup()
@@ -198,7 +199,7 @@ export class FetchHttpTransport implements HttpTransport {
     }
   }
 
-  private normalizeError(cause: unknown, scope: AbortScope, streaming: boolean): HttpTransportError {
+  private normalizeError(cause: unknown, scope: AbortScope, streamWasReceivingData: boolean): HttpTransportError {
     if (cause instanceof HttpTransportError) return cause
     if (scope.timedOut()) {
       return new HttpTransportError('HTTP request timed out.', { code: 'TIMEOUT', retryable: true })
@@ -207,8 +208,12 @@ export class FetchHttpTransport implements HttpTransport {
       return new HttpTransportError('HTTP request was cancelled.', { code: 'CANCELLED', retryable: true })
     }
     return new HttpTransportError(
-      cause instanceof Error ? cause.message : streaming ? 'HTTP stream was interrupted.' : 'HTTP request failed.',
-      { code: streaming ? 'STREAM_INTERRUPTED' : 'TRANSPORT_FAILED', retryable: true }
+      cause instanceof Error
+        ? cause.message
+        : streamWasReceivingData
+          ? 'HTTP stream was interrupted.'
+          : 'HTTP request failed.',
+      { code: streamWasReceivingData ? 'STREAM_INTERRUPTED' : 'TRANSPORT_FAILED', retryable: true }
     )
   }
 }

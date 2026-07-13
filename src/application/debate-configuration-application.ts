@@ -9,9 +9,14 @@ import {
   type SessionRecord,
   type TurnRecord
 } from '../persistence'
-import type { ModelCapabilities, ModelProfile, ProviderConnection } from '../provider-config'
+import {
+  getProviderPresets,
+  type ModelCapabilities,
+  type ModelProfile,
+  type ProviderConnection
+} from '../provider-config'
 import type { ConnectionTestService } from '../providers'
-import type { CredentialError, CredentialStore } from '../security'
+import { redactForExport, type CredentialError, type CredentialStore } from '../security'
 import type {
   ConfigurationErrorDto,
   ConfigurationResultDto,
@@ -25,6 +30,7 @@ import type {
   ParticipantBindingDto,
   ParticipantBindingInput,
   ProviderConnectionDto,
+  ProviderPresetDto,
   SaveModelProfileInput,
   SaveParticipantBindingsInput,
   SaveProviderConnectionInput
@@ -81,6 +87,17 @@ export class DebateConfigurationApplication {
     return { ok: true, value: views }
   }
 
+  listProviderPresets(): ConfigurationResultDto<ProviderPresetDto[]> {
+    return {
+      ok: true,
+      value: getProviderPresets().map((preset) => ({
+        ...preset,
+        supportedProtocols: [...preset.supportedProtocols],
+        capabilityHints: { ...preset.capabilityHints }
+      }))
+    }
+  }
+
   async saveProviderConnection(
     input: SaveProviderConnectionInput
   ): Promise<ConfigurationResultDto<ProviderConnectionDto>> {
@@ -112,7 +129,10 @@ export class DebateConfigurationApplication {
     return this.connectionDto(connection)
   }
 
-  async deleteProviderConnection(id: string): Promise<ConfigurationResultDto<boolean>> {
+  async deleteProviderConnection(
+    id: string,
+    deleteCredential: boolean
+  ): Promise<ConfigurationResultDto<boolean>> {
     const repository = this.dependencies.persistence.repositories.providerConnections
     const existing = repository.findById(id)
     if (!existing.ok) return this.persistenceError(existing.error)
@@ -120,8 +140,10 @@ export class DebateConfigurationApplication {
     const deleted = repository.delete(id)
     if (!deleted.ok) return this.persistenceError(deleted.error)
     if (!deleted.value) return this.notFound('ProviderConnection', id)
-    const credentialDeleted = await this.dependencies.credentialStore.deleteCredential(existing.value.credentialRef)
-    if (!credentialDeleted.ok) return this.credentialError(credentialDeleted.error)
+    if (deleteCredential) {
+      const credentialDeleted = await this.dependencies.credentialStore.deleteCredential(existing.value.credentialRef)
+      if (!credentialDeleted.ok) return this.credentialError(credentialDeleted.error)
+    }
     return { ok: true, value: true }
   }
 
@@ -169,6 +191,25 @@ export class DebateConfigurationApplication {
     const result = this.dependencies.persistence.repositories.modelProfiles.delete(id)
     if (!result.ok) return this.persistenceError(result.error)
     return result.value ? { ok: true, value: true } : this.notFound('ModelProfile', id)
+  }
+
+  copyModelProfile(id: string): ConfigurationResultDto<ModelProfileDto> {
+    const repository = this.dependencies.persistence.repositories.modelProfiles
+    const existing = repository.findById(id)
+    if (!existing.ok) return this.persistenceError(existing.error)
+    if (!existing.value) return this.notFound('ModelProfile', id)
+    const timestamp = this.timestamp()
+    const copy: ModelProfile = {
+      ...existing.value,
+      id: this.createId(),
+      displayName: `${existing.value.displayName} 副本`,
+      alias: existing.value.alias ? `${existing.value.alias} 副本` : undefined,
+      capabilities: { ...existing.value.capabilities },
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+    const saved = repository.create(copy)
+    return saved.ok ? { ok: true, value: this.modelProfileDto(copy) } : this.persistenceError(saved.error)
   }
 
   async saveCredential(connectionId: string, credential: string): Promise<ConfigurationResultDto<boolean>> {
@@ -434,12 +475,18 @@ export class DebateConfigurationApplication {
           errors: loaded.validation.errors.map((issue) => ({
             code: issue.code,
             titleZh: issue.titleZh,
-            descriptionZh: issue.descriptionZh
+            descriptionZh: issue.descriptionZh,
+            role: issue.role,
+            configId: issue.configId,
+            suggestedActionZh: issue.suggestedActionZh
           })),
           warnings: loaded.validation.warnings.map((issue) => ({
             code: issue.code,
             titleZh: issue.titleZh,
-            descriptionZh: issue.descriptionZh
+            descriptionZh: issue.descriptionZh,
+            role: issue.role,
+            configId: issue.configId,
+            suggestedActionZh: issue.suggestedActionZh
           }))
         },
         participants,
@@ -513,7 +560,7 @@ export class DebateConfigurationApplication {
   }
 
   private turnDto(turn: TurnRecord): DebateTurnDto {
-    return { ...turn }
+    return redactForExport({ ...turn })
   }
 
   private validateConnectionInput(

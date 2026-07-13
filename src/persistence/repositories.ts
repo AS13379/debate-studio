@@ -1,6 +1,7 @@
 import type { PersistenceResult } from './errors'
 import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { DebateParticipantConfig } from '../participant-config'
+import type { DebateTurnFailure } from '../domain'
 
 export interface DebateRecord {
   id: string
@@ -32,6 +33,7 @@ export interface TurnRecord {
   content?: string
   retryOfTurnId?: string
   error?: string
+  failure?: DebateTurnFailure
   createdAt: string
   completedAt?: string
 }

@@ -67,7 +67,12 @@ describe('ConnectionTestService', () => {
 
     const result = await service.test(connection())
 
-    expect(result).toEqual({ success: true, latencyMs: 28, providerStatus: 200 })
+    expect(result).toEqual({
+      success: true,
+      latencyMs: 28,
+      providerStatus: 200,
+      responsePreview: '服务商已返回有效连接响应。'
+    })
     expect(transport.requests[0]).toMatchObject({
       method: 'GET',
       url: 'https://provider.test/v1/models',
@@ -111,9 +116,9 @@ describe('ConnectionTestService', () => {
       success: false,
       providerStatus: 500,
       error: {
-        code: 'PROVIDER_ERROR',
-        titleZh: '平台服务异常',
-        descriptionZh: '平台内部错误',
+        code: 'UNKNOWN_PROVIDER_ERROR',
+        titleZh: '服务商暂时不可用',
+        descriptionZh: '服务商返回了服务器错误，当前请求未能完成。',
         retryable: true
       }
     })

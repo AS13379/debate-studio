@@ -32,6 +32,12 @@ interface TurnRow {
   content: string | null
   retry_of_turn_id: string | null
   error: string | null
+  error_code: string | null
+  error_title_zh: string | null
+  error_description_zh: string | null
+  error_retryable: number | null
+  error_suggested_action_zh: string | null
+  error_technical_details: string | null
   created_at: string
   completed_at: string | null
 }
@@ -142,8 +148,10 @@ export class SQLiteTurnRepository implements TurnRepository {
   create(record: TurnRecord): PersistenceResult<void> {
     const result = this.database.run(
       `INSERT INTO turns
-       (id, session_id, participant_id, stage, status, content, retry_of_turn_id, error, created_at, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, session_id, participant_id, stage, status, content, retry_of_turn_id, error,
+        error_code, error_title_zh, error_description_zh, error_retryable,
+        error_suggested_action_zh, error_technical_details, created_at, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       record.id,
       record.sessionId,
       record.participantId,
@@ -152,6 +160,12 @@ export class SQLiteTurnRepository implements TurnRepository {
       record.content ?? null,
       record.retryOfTurnId ?? null,
       record.error ?? null,
+      record.failure?.code ?? null,
+      record.failure?.titleZh ?? null,
+      record.failure?.descriptionZh ?? null,
+      record.failure ? (record.failure.retryable ? 1 : 0) : null,
+      record.failure?.suggestedActionZh ?? null,
+      record.failure?.technicalDetails ?? null,
       record.createdAt,
       record.completedAt ?? null
     )
@@ -160,11 +174,19 @@ export class SQLiteTurnRepository implements TurnRepository {
 
   update(record: TurnRecord): PersistenceResult<boolean> {
     const result = this.database.run(
-      `UPDATE turns SET status = ?, content = ?, error = ?, completed_at = ?
+      `UPDATE turns SET status = ?, content = ?, error = ?, error_code = ?, error_title_zh = ?,
+       error_description_zh = ?, error_retryable = ?, error_suggested_action_zh = ?,
+       error_technical_details = ?, completed_at = ?
        WHERE id = ? AND session_id = ?`,
       record.status,
       record.content ?? null,
       record.error ?? null,
+      record.failure?.code ?? null,
+      record.failure?.titleZh ?? null,
+      record.failure?.descriptionZh ?? null,
+      record.failure ? (record.failure.retryable ? 1 : 0) : null,
+      record.failure?.suggestedActionZh ?? null,
+      record.failure?.technicalDetails ?? null,
       record.completedAt ?? null,
       record.id,
       record.sessionId
@@ -203,7 +225,9 @@ export class SQLiteTurnRepository implements TurnRepository {
 
   private selectSql(): string {
     return `SELECT id, session_id, participant_id, stage, status, content,
-      retry_of_turn_id, error, created_at, completed_at FROM turns`
+      retry_of_turn_id, error, error_code, error_title_zh, error_description_zh,
+      error_retryable, error_suggested_action_zh, error_technical_details,
+      created_at, completed_at FROM turns`
   }
 
   private mapRow(row: TurnRow): TurnRecord {
@@ -216,6 +240,16 @@ export class SQLiteTurnRepository implements TurnRepository {
       content: row.content ?? undefined,
       retryOfTurnId: row.retry_of_turn_id ?? undefined,
       error: row.error ?? undefined,
+      failure: row.error_code && row.error_title_zh && row.error_description_zh && row.error_suggested_action_zh
+        ? {
+            code: row.error_code,
+            titleZh: row.error_title_zh,
+            descriptionZh: row.error_description_zh,
+            retryable: row.error_retryable === 1,
+            suggestedActionZh: row.error_suggested_action_zh,
+            technicalDetails: row.error_technical_details ?? undefined
+          }
+        : undefined,
       createdAt: row.created_at,
       completedAt: row.completed_at ?? undefined
     }

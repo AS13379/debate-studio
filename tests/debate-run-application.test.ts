@@ -40,7 +40,7 @@ const capabilities: ModelCapabilities = {
   structuredOutput: true
 }
 
-type AdapterBehavior = 'success' | 'fail' | 'waitForAbort' | 'streamThenWaitForAbort'
+type AdapterBehavior = 'success' | 'fail' | 'interrupt' | 'waitForAbort' | 'streamThenWaitForAbort'
 
 class ScriptedAdapter implements ModelAdapter {
   readonly requests: UnifiedRequest[] = []
@@ -85,6 +85,25 @@ class ScriptedAdapter implements ModelAdapter {
         type: 'error',
         requestId: request.requestId,
         error: { code: 'REQUEST_FAILED', message: '模拟运行失败', retryable: true }
+      }
+      return
+    }
+
+    if (behavior === 'interrupt') {
+      yield { type: 'textDelta', requestId: request.requestId, delta: '流中断前收到的部分文本' }
+      yield {
+        type: 'error',
+        requestId: request.requestId,
+        error: {
+          code: 'REQUEST_FAILED',
+          failureCode: 'STREAM_INTERRUPTED',
+          message: 'SSE stream ended before [DONE].',
+          titleZh: 'SSE 流中断',
+          descriptionZh: '服务商在完成标记到达前关闭了流式连接，已收到的部分文本已保留。',
+          retryable: true,
+          suggestedActionZh: '重试当前 Turn。',
+          technicalDetails: 'transportCode=STREAM_INTERRUPTED'
+        }
       }
       return
     }
@@ -332,6 +351,31 @@ describe('DebateRunApplication headless integration', () => {
       state: {
         status: 'paused',
         lastTurn: { status: 'cancelled', content: '节流保存的部分文本' }
+      }
+    })
+  })
+
+  it('keeps partial text and structured recovery details after an SSE interruption', async () => {
+    const appDataDirectory = temporaryDirectory()
+    seedSetup(appDataDirectory)
+    const app = createApplication(appDataDirectory, new ScriptedAdapter(['interrupt']))
+
+    const result = await app.start('session-headless')
+
+    expect(result).toMatchObject({
+      ok: true,
+      state: {
+        status: 'failed',
+        currentStage: 'validating',
+        lastTurn: {
+          status: 'failed',
+          content: '流中断前收到的部分文本',
+          failure: {
+            code: 'STREAM_INTERRUPTED',
+            titleZh: 'SSE 流中断',
+            retryable: true
+          }
+        }
       }
     })
   })

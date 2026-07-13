@@ -1,4 +1,5 @@
 import type { DebateParticipant, DebateStage, ParticipantRole } from '../domain'
+import type { ProviderFailureCode } from './provider-error-presentation'
 
 export interface UnifiedMessage {
   role: 'system' | 'user' | 'assistant'
@@ -45,6 +46,9 @@ export interface UnifiedError {
   providerCode?: string
   titleZh?: string
   descriptionZh?: string
+  failureCode?: ProviderFailureCode
+  suggestedActionZh?: string
+  technicalDetails?: string
   role?: ParticipantRole
 }
 

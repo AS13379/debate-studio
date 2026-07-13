@@ -3,6 +3,11 @@ import type { CredentialStore } from '../security'
 import { redactSensitiveText } from '../security'
 import { AuthenticatedHttpTransport } from './authenticated-http-transport'
 import { HttpTransportError, type HttpTransport, type HttpTransportRequest } from './http-transport'
+import {
+  presentProviderFailure,
+  type ProviderFailureCode,
+  type ProviderFailurePresentation
+} from './provider-error-presentation'
 
 export type ConnectionTestErrorCode =
   | 'INVALID_BASE_URL'
@@ -13,12 +18,18 @@ export type ConnectionTestErrorCode =
   | 'MODEL_PROFILE_INVALID'
   | 'AUTHENTICATION_FAILED'
   | 'RATE_LIMITED'
+  | 'QUOTA_EXCEEDED'
+  | 'MODEL_NOT_FOUND'
   | 'PROVIDER_ERROR'
   | 'REQUEST_REJECTED'
   | 'TIMEOUT'
   | 'CANCELLED'
+  | 'STREAM_INTERRUPTED'
+  | 'CONTEXT_TOO_LONG'
+  | 'IMAGE_UNSUPPORTED'
   | 'INVALID_RESPONSE'
   | 'NETWORK_ERROR'
+  | 'UNKNOWN_PROVIDER_ERROR'
 
 export interface ConnectionTestError {
   code: ConnectionTestErrorCode
@@ -26,10 +37,12 @@ export interface ConnectionTestError {
   descriptionZh: string
   retryable: boolean
   providerStatus?: number
+  suggestedActionZh: string
+  technicalDetails: string
 }
 
 export type ConnectionTestResult =
-  | { success: true; latencyMs: number; providerStatus: number }
+  | { success: true; latencyMs: number; providerStatus: number; responsePreview: string }
   | { success: false; latencyMs: number; providerStatus?: number; error: ConnectionTestError }
 
 export interface ConnectionTestServiceOptions {
@@ -64,7 +77,12 @@ export class ConnectionTestService {
     try {
       const response = await transport.send(request)
       if (response.status >= 200 && response.status < 300) {
-        return { success: true, latencyMs: this.elapsed(startedAt), providerStatus: response.status }
+        return {
+          success: true,
+          latencyMs: this.elapsed(startedAt),
+          providerStatus: response.status,
+          responsePreview: this.responsePreview(response.body, Boolean(modelProfile))
+        }
       }
       return this.failure(startedAt, this.statusError(response.status, response.body), response.status)
     } catch (cause) {
@@ -122,39 +140,28 @@ export class ConnectionTestService {
 
   private statusError(status: number, body: unknown): ConnectionTestError {
     const providerMessage = this.providerMessage(body)
-    if (status === 401 || status === 403) {
-      return this.error('AUTHENTICATION_FAILED', '认证失败', providerMessage ?? '平台拒绝了当前 API Key。', false, status)
-    }
-    if (status === 429) {
-      return this.error('RATE_LIMITED', '请求频率受限', providerMessage ?? '平台暂时限制了请求频率。', true, status)
-    }
-    if (status >= 500) {
-      return this.error('PROVIDER_ERROR', '平台服务异常', providerMessage ?? '平台服务暂时不可用。', true, status)
-    }
-    return this.error('REQUEST_REJECTED', '连接测试请求被拒绝', providerMessage ?? '平台未接受最小连接测试请求。', false, status)
+    const providerCode = this.providerCode(body)
+    return this.fromPresentation(
+      presentProviderFailure({ statusCode: status, providerCode, message: providerMessage }),
+      status
+    )
   }
 
   private transportError(cause: unknown): ConnectionTestError {
-    if (!(cause instanceof HttpTransportError)) {
-      return this.error('NETWORK_ERROR', '网络请求失败', '连接测试发生未知网络错误。', true)
-    }
-    const description = cause.descriptionZh ?? redactSensitiveText(cause.message)
-    switch (cause.code) {
-      case 'CREDENTIAL_MISSING':
-        return this.error('CREDENTIAL_MISSING', cause.titleZh ?? 'API 凭据缺失', description, false)
-      case 'CREDENTIAL_STORE_FAILED':
-        return this.error('CREDENTIAL_STORE_FAILED', cause.titleZh ?? '读取安全凭据失败', description, cause.retryable)
-      case 'TIMEOUT':
-        return this.error('TIMEOUT', '连接测试超时', '平台未在规定时间内响应。', true)
-      case 'CANCELLED':
-        return this.error('CANCELLED', '连接测试已取消', '连接测试请求已取消。', true)
-      case 'INVALID_JSON':
-      case 'EMPTY_RESPONSE':
-      case 'STREAM_INTERRUPTED':
-        return this.error('INVALID_RESPONSE', '平台响应无效', description, cause.retryable)
-      default:
-        return this.error('NETWORK_ERROR', '网络请求失败', description, cause.retryable)
-    }
+    const presentation = cause instanceof HttpTransportError
+      ? presentProviderFailure({
+          message: cause.message,
+          transportCode: cause.code,
+          statusCode: cause.statusCode,
+          titleZh: cause.titleZh,
+          descriptionZh: cause.descriptionZh,
+          retryable: cause.retryable
+        })
+      : presentProviderFailure({
+          message: cause instanceof Error ? cause.message : 'Unknown connection test failure.',
+          transportCode: 'TRANSPORT_FAILED'
+        })
+    return this.fromPresentation(presentation, cause instanceof HttpTransportError ? cause.statusCode : undefined)
   }
 
   private providerMessage(body: unknown): string | undefined {
@@ -165,14 +172,82 @@ export class ConnectionTestService {
     return typeof message === 'string' ? redactSensitiveText(message) : undefined
   }
 
+  private providerCode(body: unknown): string | undefined {
+    if (!body || typeof body !== 'object') return undefined
+    const error = 'error' in body ? (body as { error?: unknown }).error : undefined
+    if (!error || typeof error !== 'object') return undefined
+    const code = 'code' in error ? (error as { code?: unknown }).code : undefined
+    const type = 'type' in error ? (error as { type?: unknown }).type : undefined
+    return typeof code === 'string' ? code : typeof type === 'string' ? type : undefined
+  }
+
+  private responsePreview(body: unknown, usedModelProfile: boolean): string {
+    if (usedModelProfile && body && typeof body === 'object' && 'choices' in body) {
+      const choices = (body as { choices?: unknown }).choices
+      const first = Array.isArray(choices) ? choices[0] : undefined
+      if (first && typeof first === 'object' && 'message' in first) {
+        const message = (first as { message?: unknown }).message
+        if (message && typeof message === 'object' && 'content' in message) {
+          const content = (message as { content?: unknown }).content
+          if (typeof content === 'string' && content.trim()) return redactSensitiveText(content).slice(0, 200)
+        }
+      }
+    }
+    return usedModelProfile ? '服务商已接受最小模型请求。' : '服务商已返回有效连接响应。'
+  }
+
+  private fromPresentation(
+    presentation: ProviderFailurePresentation,
+    providerStatus?: number
+  ): ConnectionTestError {
+    return {
+      code: this.connectionErrorCode(presentation.failureCode),
+      titleZh: presentation.titleZh,
+      descriptionZh: presentation.descriptionZh,
+      retryable: presentation.retryable,
+      providerStatus,
+      suggestedActionZh: presentation.suggestedActionZh,
+      technicalDetails: presentation.technicalDetails
+    }
+  }
+
+  private connectionErrorCode(code: ProviderFailureCode): ConnectionTestErrorCode {
+    return {
+      API_KEY_MISSING: 'CREDENTIAL_MISSING',
+      API_KEY_INVALID: 'AUTHENTICATION_FAILED',
+      CREDENTIAL_STORE_FAILED: 'CREDENTIAL_STORE_FAILED',
+      QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
+      RATE_LIMITED: 'RATE_LIMITED',
+      MODEL_NOT_FOUND: 'MODEL_NOT_FOUND',
+      BASE_URL_INVALID: 'INVALID_BASE_URL',
+      NETWORK_ERROR: 'NETWORK_ERROR',
+      TIMEOUT: 'TIMEOUT',
+      STREAM_INTERRUPTED: 'STREAM_INTERRUPTED',
+      CONTEXT_TOO_LONG: 'CONTEXT_TOO_LONG',
+      IMAGE_UNSUPPORTED: 'IMAGE_UNSUPPORTED',
+      REQUEST_CANCELLED: 'CANCELLED',
+      UNKNOWN_PROVIDER_ERROR: 'UNKNOWN_PROVIDER_ERROR'
+    }[code] as ConnectionTestErrorCode
+  }
+
   private error(
     code: ConnectionTestErrorCode,
     titleZh: string,
     descriptionZh: string,
     retryable: boolean,
-    providerStatus?: number
+    providerStatus?: number,
+    suggestedActionZh = '检查连接配置后重试。',
+    technicalDetails = descriptionZh
   ): ConnectionTestError {
-    return { code, titleZh, descriptionZh, retryable, providerStatus }
+    return {
+      code,
+      titleZh,
+      descriptionZh,
+      retryable,
+      providerStatus,
+      suggestedActionZh,
+      technicalDetails: redactSensitiveText(technicalDetails)
+    }
   }
 
   private failure(

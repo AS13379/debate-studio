@@ -151,6 +151,35 @@ describe('typed IPC UI flow', () => {
     expect(ipc.handlers.size).toBe(0)
   })
 
+  it('returns only credential status over IPC when saving an API Key', async () => {
+    const app = createApplication(temporaryDirectory())
+    const { ipc, dispose } = register(app)
+    const secret = 'sk-ipc-never-returned-123456'
+    const savedConnection = await ipc.invoke<{ ok: true; value: { id: string } }>(
+      IPC_CHANNELS.saveProviderConnection,
+      {
+        id: 'ipc-safe-connection',
+        providerId: 'openai',
+        displayName: 'IPC OpenAI',
+        protocolType: 'openai-chat',
+        baseUrl: 'https://api.openai.com/v1',
+        enabled: true
+      }
+    )
+    const savedCredential = await ipc.invoke(
+      IPC_CHANNELS.saveCredential,
+      { connectionId: savedConnection.value.id, credential: secret }
+    )
+    const listed = await ipc.invoke<{ ok: true; value: unknown[] }>(IPC_CHANNELS.listProviderConnections)
+    const serialized = JSON.stringify({ savedConnection, savedCredential, listed })
+
+    expect(savedCredential).toEqual({ ok: true, value: true })
+    expect(listed).toMatchObject({ ok: true, value: [{ credentialConfigured: true }] })
+    expect(serialized).not.toContain(secret)
+    expect(serialized).not.toContain('credentialRef')
+    dispose()
+  })
+
   it('creates and completes the Mock demo through UI commands, broadcasts deltas, and reloads Turns from SQLite', async () => {
     const path = temporaryDirectory()
     const firstApplication = createApplication(path)

@@ -2,6 +2,7 @@ import type { ZodType } from 'zod'
 
 import type { DebateConfigurationApplication, DebateRunApplication, DebateRunEvent } from '../application'
 import type { DebateTurn } from '../domain'
+import { redactForExport, redactSensitiveText } from '../security'
 import {
   IPC_CHANNELS,
   type ConfigurationResultDto,
@@ -14,6 +15,7 @@ import {
   connectionTestInputSchema,
   createDebateSchema,
   credentialInputSchema,
+  deleteProviderConnectionSchema,
   idInputSchema,
   saveModelProfileSchema,
   saveParticipantBindingsSchema,
@@ -40,10 +42,13 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   const { ipcMain, configuration, run } = dependencies
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => dependencies.getAppVersion())
   ipcMain.handle(IPC_CHANNELS.listProviderConnections, () => configuration.listProviderConnections())
+  ipcMain.handle(IPC_CHANNELS.listProviderPresets, () => configuration.listProviderPresets())
   ipcMain.handle(IPC_CHANNELS.saveProviderConnection, validated(saveProviderConnectionSchema, (input) => configuration.saveProviderConnection(input)))
-  ipcMain.handle(IPC_CHANNELS.deleteProviderConnection, validated(idInputSchema, (input) => configuration.deleteProviderConnection(input.id)))
+  ipcMain.handle(IPC_CHANNELS.deleteProviderConnection, validated(deleteProviderConnectionSchema, (input) => configuration.deleteProviderConnection(input.id, input.deleteCredential)))
   ipcMain.handle(IPC_CHANNELS.listModelProfiles, () => configuration.listModelProfiles())
   ipcMain.handle(IPC_CHANNELS.saveModelProfile, validated(saveModelProfileSchema, (input) => configuration.saveModelProfile(input)))
+  ipcMain.handle(IPC_CHANNELS.deleteModelProfile, validated(idInputSchema, (input) => configuration.deleteModelProfile(input.id)))
+  ipcMain.handle(IPC_CHANNELS.copyModelProfile, validated(idInputSchema, (input) => configuration.copyModelProfile(input.id)))
   ipcMain.handle(IPC_CHANNELS.saveCredential, validated(credentialInputSchema, (input) => configuration.saveCredential(input.connectionId, input.credential)))
   ipcMain.handle(IPC_CHANNELS.deleteCredential, validated(connectionInputSchema, (input) => configuration.deleteCredential(input.connectionId)))
   ipcMain.handle(IPC_CHANNELS.testConnection, validated(connectionTestInputSchema, (input) => configuration.testConnection(input.connectionId, input.modelProfileId)))
@@ -96,7 +101,11 @@ function mapRunResult(result: ReturnType<DebateRunApplication['getRunState']>): 
         code: result.error.code,
         titleZh: result.error.titleZh,
         descriptionZh: result.error.descriptionZh,
-        retryable: result.error.retryable
+        retryable: result.error.retryable,
+        suggestedActionZh: result.error.code === 'RUNTIME_PREPARATION_FAILED'
+          ? '根据启动前检查修正模型与连接配置。'
+          : result.error.retryable ? '稍后重试当前操作。' : '检查当前 Session 状态和配置。',
+        technicalDetails: redactSensitiveText(result.error.persistence?.message ?? result.error.code)
       }
     }
   }
@@ -104,7 +113,7 @@ function mapRunResult(result: ReturnType<DebateRunApplication['getRunState']>): 
     ok: true,
     state: {
       ...result.state,
-      lastTurn: result.state.lastTurn ? { ...result.state.lastTurn } : undefined
+      lastTurn: result.state.lastTurn ? redactForExport({ ...result.state.lastTurn }) : undefined
     }
   }
 }
@@ -140,5 +149,5 @@ function mapRunEvent(event: DebateRunEvent): RunEventDto {
 }
 
 function turnDto(turn: DebateTurn): DebateTurnDto {
-  return { ...turn }
+  return redactForExport({ ...turn })
 }

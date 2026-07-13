@@ -12,6 +12,7 @@ import {
   type UnifiedResponse,
   type UnifiedStreamEvent
 } from './model-adapter'
+import { presentProviderFailure } from './provider-error-presentation'
 
 export interface OpenAIChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -109,7 +110,12 @@ export class OpenAIChatAdapter implements ModelAdapter {
       throw new ModelAdapterError({
         code: 'REQUEST_FAILED',
         message: 'OpenAI Chat requires a non-empty modelId and runtimeMetadata.baseUrl.',
-        retryable: false
+        ...presentProviderFailure({
+          message: 'OpenAI Chat requires a non-empty modelId and runtimeMetadata.baseUrl.',
+          titleZh: '模型或 Base URL 缺失',
+          descriptionZh: '运行时没有可用的 Model ID 或 Base URL。',
+          retryable: false
+        })
       })
     }
 
@@ -155,35 +161,53 @@ export class OpenAIChatAdapter implements ModelAdapter {
     const message = providerError && typeof providerError.message === 'string'
       ? providerError.message
       : fallbackMessage ?? `OpenAI Chat request failed with HTTP ${statusCode}.`
-    const providerCode = providerError && typeof providerError.code === 'string' ? providerError.code : undefined
+    const providerCode = providerError && typeof providerError.code === 'string'
+      ? providerError.code
+      : providerError && typeof providerError.type === 'string'
+        ? providerError.type
+        : undefined
+    const presentation = presentProviderFailure({ statusCode, providerCode, message })
 
     return {
       code: 'REQUEST_FAILED',
       message,
-      retryable: statusCode === 408 || statusCode === 409 || statusCode === 429 || statusCode >= 500,
       statusCode,
-      providerCode
+      providerCode,
+      ...presentation
     }
   }
 
   private transportError(request: UnifiedRequest, cause: unknown): UnifiedError {
     if (request.signal.aborted || (cause instanceof HttpTransportError && cause.code === 'CANCELLED')) {
-      return { code: 'CANCELLED', message: 'OpenAI Chat request was cancelled.', retryable: true }
+      const message = 'OpenAI Chat request was cancelled.'
+      return {
+        code: 'CANCELLED',
+        message,
+        ...presentProviderFailure({ message, transportCode: 'CANCELLED' })
+      }
     }
     if (cause instanceof HttpTransportError) {
+      const presentation = presentProviderFailure({
+        message: cause.message,
+        transportCode: cause.code,
+        statusCode: cause.statusCode,
+        titleZh: cause.titleZh,
+        descriptionZh: cause.descriptionZh,
+        retryable: cause.retryable
+      })
       return {
         code: 'REQUEST_FAILED',
         message: cause.message,
-        retryable: cause.retryable,
         statusCode: cause.statusCode,
-        titleZh: cause.titleZh,
-        descriptionZh: cause.descriptionZh
+        ...presentation
       }
     }
+    const message = cause instanceof Error ? cause.message : 'OpenAI Chat transport failed.'
+    const presentation = presentProviderFailure({ message, transportCode: 'TRANSPORT_FAILED' })
     return {
       code: 'REQUEST_FAILED',
-      message: cause instanceof Error ? cause.message : 'OpenAI Chat transport failed.',
-      retryable: true
+      message,
+      ...presentation
     }
   }
 

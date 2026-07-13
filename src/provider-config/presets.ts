@@ -45,9 +45,9 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
   },
   {
     providerId: 'gemini',
-    displayName: 'Google Gemini',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    supportedProtocols: ['gemini-native'],
+    displayName: 'Gemini OpenAI Compatible',
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    supportedProtocols: ['openai-chat'],
     capabilityHints: {
       textInput: true,
       imageInput: true,
@@ -75,4 +75,3 @@ export function getProviderPreset(providerId: string): ProviderPreset | undefine
     ? { ...preset, supportedProtocols: [...preset.supportedProtocols], capabilityHints: { ...preset.capabilityHints } }
     : undefined
 }
-

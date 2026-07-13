@@ -12,7 +12,7 @@ import {
   type TurnRepository,
   type UsageRepository
 } from '../persistence'
-import { redactForExport } from '../security'
+import { redactForExport, redactSensitiveText } from '../security'
 
 export interface DebateRunPersistenceRepositories {
   sessions: SessionRepository
@@ -218,7 +218,8 @@ export class DebateRunPersistence {
       status,
       content: turn.content,
       retryOfTurnId: turn.retryOfTurnId,
-      error: turn.error,
+      error: turn.error ? redactSensitiveText(turn.error) : undefined,
+      failure: turn.failure ? redactForExport(turn.failure) : undefined,
       createdAt: turn.createdAt,
       completedAt
     }

@@ -49,6 +49,15 @@ export type DebateTurnStatus =
   | 'skipped'
   | 'forced'
 
+export interface DebateTurnFailure {
+  code: string
+  titleZh: string
+  descriptionZh: string
+  retryable: boolean
+  suggestedActionZh: string
+  technicalDetails?: string
+}
+
 export interface DebateTurn {
   id: string
   sessionId: string
@@ -58,6 +67,7 @@ export interface DebateTurn {
   content?: string
   retryOfTurnId?: string
   error?: string
+  failure?: DebateTurnFailure
   createdAt: string
 }
 

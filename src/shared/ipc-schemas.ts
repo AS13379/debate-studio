@@ -67,6 +67,10 @@ export const saveParticipantBindingsSchema = z.object({
 }).strict()
 
 export const idInputSchema = z.object({ id: idSchema }).strict()
+export const deleteProviderConnectionSchema = z.object({
+  id: idSchema,
+  deleteCredential: z.boolean()
+}).strict()
 export const sessionInputSchema = z.object({ sessionId: idSchema }).strict()
 export const credentialInputSchema = z.object({
   connectionId: idSchema,

@@ -193,6 +193,26 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       ALTER TABLE debates ADD COLUMN negative_position TEXT;
       ALTER TABLE debates ADD COLUMN free_debate_rounds INTEGER NOT NULL DEFAULT 1;
     `
+  },
+  {
+    version: 6,
+    name: 'turn_failure_details',
+    sql: `
+      ALTER TABLE turns ADD COLUMN error_code TEXT;
+      ALTER TABLE turns ADD COLUMN error_title_zh TEXT;
+      ALTER TABLE turns ADD COLUMN error_description_zh TEXT;
+      ALTER TABLE turns ADD COLUMN error_retryable INTEGER;
+      ALTER TABLE turns ADD COLUMN error_suggested_action_zh TEXT;
+      ALTER TABLE turns ADD COLUMN error_technical_details TEXT;
+    `
+  },
+  {
+    version: 7,
+    name: 'allow_model_profile_variants',
+    sql: `
+      DROP INDEX idx_model_profiles_connection_model;
+      CREATE INDEX idx_model_profiles_connection_model ON model_profiles(connection_id, model_id);
+    `
   }
 ]
 

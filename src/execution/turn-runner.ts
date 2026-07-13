@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
-import { DebateEngine, type DebateTurn } from '../domain'
-import type { ModelAdapter, UnifiedRequest, UnifiedStreamEvent } from '../providers'
+import { DebateEngine, type DebateTurn, type DebateTurnFailure } from '../domain'
+import type { ModelAdapter, UnifiedError, UnifiedRequest, UnifiedStreamEvent } from '../providers'
 
 export interface TurnRunnerDependencies {
   createId?: () => string
@@ -116,6 +116,7 @@ export class TurnRunner {
               content,
               retryOfTurnId,
               error: event.error.message,
+              failure: this.turnFailure(event.error),
               createdAt: startedAt
             },
             streamEvents
@@ -179,7 +180,45 @@ export class TurnRunner {
     retryOfTurnId: string | undefined,
     error: string
   ): DebateTurn {
-    return { id, sessionId: engine.session.id, stage, participantId, status: 'failed', content, retryOfTurnId, error, createdAt }
+    return {
+      id,
+      sessionId: engine.session.id,
+      stage,
+      participantId,
+      status: 'failed',
+      content,
+      retryOfTurnId,
+      error,
+      failure: this.genericFailure(error, true),
+      createdAt
+    }
+  }
+
+  private turnFailure(error: UnifiedError): DebateTurnFailure {
+    const cancelled = error.code === 'CANCELLED'
+    return {
+      code: error.failureCode ?? error.code,
+      titleZh: error.titleZh ?? (cancelled ? '请求已取消' : '模型请求失败'),
+      descriptionZh: error.descriptionZh ?? (cancelled
+        ? '当前模型请求已取消，未继续推进辩论阶段。'
+        : '模型服务未能完成当前发言，已收到的部分文本会保留。'),
+      retryable: error.retryable,
+      suggestedActionZh: error.suggestedActionZh ?? (error.retryable
+        ? '检查连接状态后重试当前 Turn。'
+        : '打开模型与平台设置，修正连接或更换模型。'),
+      technicalDetails: error.technicalDetails ?? error.message
+    }
+  }
+
+  private genericFailure(message: string, retryable: boolean): DebateTurnFailure {
+    return {
+      code: 'TURN_EXECUTION_FAILED',
+      titleZh: '发言执行失败',
+      descriptionZh: '当前发言未能完成，辩论已停留在原阶段。',
+      retryable,
+      suggestedActionZh: retryable ? '重试当前 Turn，或打开模型设置检查配置。' : '检查辩论配置后再继续。',
+      technicalDetails: message
+    }
   }
 
   private timestamp(): string {
