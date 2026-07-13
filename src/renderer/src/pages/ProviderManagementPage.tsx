@@ -97,8 +97,8 @@ export function ProviderManagementPage() {
 
   const deleteConnection = async (connection: ProviderConnectionDto, deleteCredential: boolean): Promise<void> => {
     const message = deleteCredential
-      ? `确认删除“${connection.displayName}”以及对应的 Keychain 凭据？`
-      : `确认仅删除“${connection.displayName}”的本地连接配置？Keychain 凭据会保留。`
+      ? `确认删除“${connection.displayName}”以及对应的系统加密凭据？`
+      : `确认仅删除“${connection.displayName}”的本地连接配置？系统加密凭据会保留。`
     if (!window.confirm(message)) return
     const result = await window.debateStudio.deleteProviderConnection({ id: connection.id, deleteCredential })
     if (!result.ok) setError(result.error.descriptionZh)
@@ -140,7 +140,7 @@ export function ProviderManagementPage() {
         <div>
           <p className="eyebrow">本地配置</p>
           <h1 id="providers-title">模型与平台</h1>
-          <p className="page-description">连接配置保存在 SQLite；API Key 只保存到 macOS Keychain。</p>
+          <p className="page-description">连接配置保存在 SQLite；API Key 只保存到系统加密存储。</p>
         </div>
         <button className="button primary" onClick={() => setConnectionDraft({ ...EMPTY_CONNECTION })}>新建连接</button>
       </header>
@@ -227,7 +227,7 @@ export function ProviderManagementPage() {
 
               <div className="danger-zone">
                 <button className="button ghost danger-text" onClick={() => void deleteConnection(connection, false)}>仅删除连接配置</button>
-                <button className="button danger" onClick={() => void deleteConnection(connection, true)}>删除连接和 Keychain 凭据</button>
+                <button className="button danger" onClick={() => void deleteConnection(connection, true)}>删除连接和系统加密凭据</button>
               </div>
             </article>
           )
@@ -350,7 +350,7 @@ function ConnectionEditor({
       </label>
       <label className="field checkbox-field"><input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} />启用连接</label>
       <label className="field span-2">Base URL<input type="url" required value={draft.baseUrl} onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })} /></label>
-      <label className="field span-2">API Key（可选，保存或替换到 Keychain）<input type="password" autoComplete="off" value={credential} onChange={(event) => setCredential(event.target.value)} /></label>
+      <label className="field span-2">API Key（可选，保存或替换到系统加密存储）<input type="password" autoComplete="off" value={credential} onChange={(event) => setCredential(event.target.value)} /></label>
       <div className="form-actions span-2"><button type="button" className="button ghost" onClick={onCancel}>取消</button><button className="button primary" disabled={saving}>{saving ? '正在保存…' : '保存连接'}</button></div>
     </form>
   )
@@ -372,7 +372,7 @@ function CredentialEditor({ connection, onChanged, onError }: { connection: Prov
   return (
     <div className="credential-editor">
       <label className="field">{connection.credentialConfigured ? '替换 API Key' : '保存 API Key'}<input type="password" autoComplete="off" value={credential} onChange={(event) => setCredential(event.target.value)} /></label>
-      <button className="button secondary" disabled={!credential} onClick={() => void save()}>{connection.credentialConfigured ? '替换凭据' : '保存到 Keychain'}</button>
+      <button className="button secondary" disabled={!credential} onClick={() => void save()}>{connection.credentialConfigured ? '替换凭据' : '保存到系统加密存储'}</button>
       {connection.credentialConfigured && <button className="button ghost danger-text" onClick={() => void remove()}>删除凭据</button>}
     </div>
   )

@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
 import { join } from 'node:path'
 import {
   initializeDebateDesktopApplication,
   type DebateDesktopApplication
 } from '../application'
 import { IPC_CHANNELS } from '../shared/ipc-contract'
+import { EncryptedFileCredentialStore } from '../security'
 import { registerDebateIpc } from './ipc-handlers'
 import { createWindowOptions } from './window-options'
 
@@ -26,7 +27,16 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  const applicationResult = initializeDebateDesktopApplication({ appDataDirectory: app.getPath('userData') })
+  const appDataDirectory = app.getPath('userData')
+  const credentialStore = new EncryptedFileCredentialStore({
+    filePath: join(appDataDirectory, 'security', 'credentials.bin'),
+    cipher: {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (value) => safeStorage.encryptString(value),
+      decryptString: (value) => safeStorage.decryptString(value)
+    }
+  })
+  const applicationResult = initializeDebateDesktopApplication({ appDataDirectory, credentialStore })
   if (!applicationResult.ok) {
     throw new Error(`${applicationResult.error.code}: ${applicationResult.error.message}`)
   }

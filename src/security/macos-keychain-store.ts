@@ -24,15 +24,29 @@ export class MacOSKeychainCredentialStore implements CredentialStore {
     if (invalid) return { ok: false, error: invalid }
 
     try {
-      // Keeping -w last makes the security tool read the password from stdin instead of process arguments.
+      // Keeping -w last makes the security tool read the password from its prompt instead of process arguments.
+      // The prompt consumes a line, so the stdin value must include a line terminator.
       const result = await this.commandRunner.run(
         this.securityCommandPath,
         ['add-generic-password', '-a', reference, '-s', this.serviceName, '-U', '-w'],
-        credential
+        `${credential}\n`
       )
-      return result.exitCode === 0
-        ? { ok: true, value: undefined }
-        : { ok: false, error: this.commandError('set', result, credential) }
+      if (result.exitCode !== 0) return { ok: false, error: this.commandError('set', result, credential) }
+
+      // Some non-interactive macOS environments return success but persist an empty password.
+      // Verify without logging the value so callers never receive a false-positive save result.
+      const verification = await this.getCredential(reference)
+      if (verification.ok && verification.value === credential) return { ok: true, value: undefined }
+      if (verification.ok) await this.deleteCredential(reference)
+      return {
+        ok: false,
+        error: {
+          code: verification.ok ? 'OPERATION_FAILED' : verification.error.code,
+          message: 'macOS Keychain did not persist the credential.',
+          operation: 'set',
+          retryable: true
+        }
+      }
     } catch {
       return { ok: false, error: this.unavailable('set') }
     }
@@ -76,7 +90,7 @@ export class MacOSKeychainCredentialStore implements CredentialStore {
   async hasCredential(reference: string): Promise<CredentialResult<boolean>> {
     const result = await this.getCredential(reference)
     if (!result.ok) return { ok: false, error: { ...result.error, operation: 'has' } }
-    return { ok: true, value: result.value !== undefined }
+    return { ok: true, value: Boolean(result.value) }
   }
 
   private validate(
@@ -122,4 +136,3 @@ export class MacOSKeychainCredentialStore implements CredentialStore {
     }
   }
 }
-

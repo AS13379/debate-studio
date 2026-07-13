@@ -83,7 +83,7 @@ export class AuthenticatedHttpTransport implements HttpTransport {
         code: 'CREDENTIAL_STORE_FAILED',
         retryable: true,
         titleZh: '读取安全凭据失败',
-        descriptionZh: '系统安全存储暂时不可用，请检查 Keychain 权限或稍后重试。'
+        descriptionZh: '系统加密存储暂时不可用，请确认当前用户会话未锁定或稍后重试。'
       })
     }
     if (!credentialResult.ok) {
@@ -91,7 +91,7 @@ export class AuthenticatedHttpTransport implements HttpTransport {
         code: 'CREDENTIAL_STORE_FAILED',
         retryable: credentialResult.error.retryable,
         titleZh: '读取安全凭据失败',
-        descriptionZh: '无法从系统安全存储读取 API Key，请检查 Keychain 权限或稍后重试。'
+        descriptionZh: '无法从系统加密存储读取 API Key，请确认当前用户会话未锁定或稍后重试。'
       })
     }
     if (!credentialResult.value) throw this.missingCredential('系统安全存储中没有找到该连接的 API Key。')

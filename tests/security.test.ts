@@ -23,7 +23,7 @@ class FakeKeychainCommandRunner implements CommandRunner {
     const account = args[accountIndex + 1]
 
     if (action === 'add-generic-password') {
-      this.credentials.set(account, stdin ?? '')
+      this.credentials.set(account, (stdin ?? '').replace(/\r?\n$/, ''))
       return { exitCode: 0, stdout: '', stderr: '' }
     }
     if (action === 'find-generic-password') {
@@ -84,7 +84,34 @@ describe('CredentialStore', () => {
     expect(await store.getCredential('openai:primary')).toEqual({ ok: true, value: secret })
     expect(runner.invocations[0]?.args).not.toContain(secret)
     expect(runner.invocations[0]?.args.at(-1)).toBe('-w')
-    expect(runner.invocations[0]?.stdin).toBe(secret)
+    expect(runner.invocations[0]?.stdin).toBe(`${secret}\n`)
+  })
+
+  it('does not report an empty legacy Keychain item as configured', async () => {
+    const runner = new FakeKeychainCommandRunner()
+    runner.credentials.set('openai:empty', '')
+    const store = new MacOSKeychainCredentialStore({ commandRunner: runner })
+
+    expect(await store.hasCredential('openai:empty')).toEqual({ ok: true, value: false })
+  })
+
+  it('rejects a false-positive Keychain write that persisted an empty password', async () => {
+    const actions: string[] = []
+    const emptyPasswordRunner: CommandRunner = {
+      run: async (_command, args) => {
+        actions.push(args[0] ?? '')
+        if (args[0] === 'add-generic-password') return { exitCode: 0, stdout: '', stderr: '' }
+        if (args[0] === 'find-generic-password') return { exitCode: 0, stdout: '\n', stderr: '' }
+        return { exitCode: 0, stdout: '', stderr: '' }
+      }
+    }
+    const store = new MacOSKeychainCredentialStore({ commandRunner: emptyPasswordRunner })
+
+    expect(await store.setCredential('deepseek:primary', 'sk-never-log-this')).toMatchObject({
+      ok: false,
+      error: { code: 'OPERATION_FAILED', operation: 'set', retryable: true }
+    })
+    expect(actions).toEqual(['add-generic-password', 'find-generic-password', 'delete-generic-password'])
   })
 
   it('redacts secrets from text and exported structures', () => {

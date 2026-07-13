@@ -18,6 +18,16 @@ describe('Provider error presentation', () => {
       '模型不存在或无权限',
       false
     ],
+    [
+      {
+        statusCode: 400,
+        providerCode: 'invalid_request_error',
+        message: 'The supported API model names are deepseek-v4-pro or deepseek-v4-flash, but you passed deepseek-invalid-model-acceptance.'
+      },
+      'MODEL_NOT_FOUND',
+      '模型不存在或无权限',
+      false
+    ],
     [{ transportCode: 'TIMEOUT' as const, message: 'request timed out' }, 'TIMEOUT', '请求超时', true]
   ])('maps provider failures to actionable Chinese UI copy', (input, code, titleZh, retryable) => {
     expect(presentProviderFailure(input)).toMatchObject({

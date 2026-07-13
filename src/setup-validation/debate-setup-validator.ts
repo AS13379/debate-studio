@@ -202,7 +202,7 @@ export class DebateSetupValidator {
         'CREDENTIAL_REFERENCE_MISSING',
         '凭据引用为空',
         `平台连接“${connection.displayName}”没有 credentialRef。`,
-        '请为连接选择一个 Keychain 凭据引用。',
+        '请为连接选择一个系统加密凭据引用。',
         role,
         connection.id
       ))

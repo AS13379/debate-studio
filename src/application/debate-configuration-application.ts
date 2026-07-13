@@ -607,7 +607,7 @@ export class DebateConfigurationApplication {
   }
 
   private credentialError(error: CredentialError): ConfigurationResultDto<never> {
-    return this.failure('CREDENTIAL_STORE_FAILED', '安全凭据操作失败', '无法完成 Keychain 凭据操作，请检查系统权限。', error.retryable)
+    return this.failure('CREDENTIAL_STORE_FAILED', '安全凭据操作失败', '无法完成系统加密凭据操作，请检查系统权限。', error.retryable)
   }
 
   private failure(

@@ -53,10 +53,10 @@ export function presentProviderFailure(input: ProviderFailureInput): ProviderFai
   if (input.transportCode === 'CREDENTIAL_STORE_FAILED') {
     return presentation(
       'CREDENTIAL_STORE_FAILED',
-      input.titleZh ?? 'Keychain 读取失败',
-      input.descriptionZh ?? '应用无法从 macOS Keychain 读取该连接的凭据。',
+      input.titleZh ?? '系统加密凭据读取失败',
+      input.descriptionZh ?? '应用无法从系统加密存储读取该连接的凭据。',
       input.retryable ?? true,
-      '检查 Keychain 权限，确认系统未锁定后重试。',
+      '确认系统加密服务可用且当前用户会话未锁定，然后重试。',
       technicalDetails
     )
   }
@@ -120,7 +120,7 @@ export function presentProviderFailure(input: ProviderFailureInput): ProviderFai
       technicalDetails
     )
   }
-  if (/(model).{0,24}(not found|does not exist|unavailable|permission|access denied)|模型.{0,16}(不存在|无权限|不可用)/i.test(source)) {
+  if (/(model).{0,24}(not found|does not exist|unavailable|permission|access denied)|supported (?:api )?model names? are .{0,160}but you passed|模型.{0,16}(不存在|无权限|不可用)/i.test(source)) {
     return presentation(
       'MODEL_NOT_FOUND',
       '模型不存在或无权限',

@@ -25,7 +25,7 @@ export interface CredentialStore {
 /**
  * Design-only boundary for a possible local development fallback.
  * A future implementation must require explicit opt-in and must never store its file in the repository.
- * macOS Keychain remains the recommended and default store.
+ * System-encrypted credential storage remains the recommended and default desktop store.
  */
 export interface InsecureLocalCredentialStoreOptions {
   filePathOutsideRepository: string
@@ -36,4 +36,3 @@ export function createCredentialReference(providerId: string, keyId: string): st
   if (!providerId.trim() || !keyId.trim()) throw new Error('Provider id and key id are required.')
   return `${providerId.trim()}:${keyId.trim()}`
 }
-
