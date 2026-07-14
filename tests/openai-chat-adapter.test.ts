@@ -104,6 +104,54 @@ describe('OpenAIChatAdapter', () => {
     expect(response).toEqual({ requestId: 'request-openai', content: '', finishReason: 'tool_calls', toolCalls: [{ id: 'call-1', name: 'searchWeb', arguments: { query: '测试' } }] })
   })
 
+  it('disables DeepSeek thinking when the ModelProfile does not enable reasoning', async () => {
+    const transport = new MockHttpTransport()
+    await new OpenAIChatAdapter(transport).complete({
+      ...request(),
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'deepseek',
+        reasoningEnabled: false
+      }
+    })
+
+    expect(transport.requests[0].body).toMatchObject({ thinking: { type: 'disabled' } })
+  })
+
+  it('classifies an empty length-limited response as a retryable output-limit error', async () => {
+    const transport = new MockHttpTransport({ response: { status: 200, body: {
+      choices: [{ message: { role: 'assistant', content: null }, finish_reason: 'length' }]
+    } } })
+
+    await expect(new OpenAIChatAdapter(transport).complete(request())).rejects.toMatchObject({
+      detail: {
+        code: 'REQUEST_FAILED',
+        titleZh: '模型输出上限不足',
+        retryable: true
+      }
+    })
+  })
+
+  it('reports safe shape diagnostics without copying invalid tool arguments into the error', async () => {
+    const invalidArguments = '{"query":'
+    const transport = new MockHttpTransport({ response: { status: 200, body: {
+      choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
+        id: 'call-invalid', type: 'function', function: { name: 'searchWeb', arguments: invalidArguments }
+      }] }, finish_reason: 'tool_calls' }]
+    } } })
+    const completion = new OpenAIChatAdapter(transport).complete(request())
+
+    await expect(completion).rejects.toMatchObject({
+      detail: {
+        titleZh: '工具参数无法解析',
+        message: expect.stringContaining('arguments_length=9, object_envelope=false')
+      }
+    })
+    await expect(completion).rejects.not.toMatchObject({
+      detail: { message: expect.stringContaining(invalidArguments) }
+    })
+  })
+
   it('converts OpenAI stream chunks into UnifiedStreamEvent values', async () => {
     const transport = new MockHttpTransport({
       streamEvents: [

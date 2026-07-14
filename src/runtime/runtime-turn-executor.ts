@@ -40,7 +40,9 @@ export class RuntimeTurnExecutor implements ModelAdapter {
         stage: request.stage,
         modelProfileId: participant.modelProfile.id,
         providerConnectionId: participant.providerConnection.id,
-        baseUrl: participant.providerConnection.baseUrl
+        providerId: participant.providerConnection.providerId,
+        baseUrl: participant.providerConnection.baseUrl,
+        reasoningEnabled: participant.modelProfile.capabilities.reasoning
       }
     }
     runtimeRequest.messages = this.promptBuilder?.build(runtimeRequest, participant, this.runtimeConfig) ?? [

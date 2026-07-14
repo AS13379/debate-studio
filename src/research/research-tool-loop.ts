@@ -432,11 +432,15 @@ export class ResearchToolLoop {
   }
 
   private loopInstructions(context: ResearchToolLoopContext, limits: ResearchToolLimits): string {
+    const completionPriority = context.role === 'moderator'
+      ? '主持人只整理公共方向和事实边界，不要代替任一方形成完整论证。'
+      : '在总工具次数用完前预留至少 2 次：有可靠来源时必须先用 publishEvidence 发布至少一条本方证据，再用 finishResearch 结束；不要把所有次数用在重复搜索或重复读页上。'
     return [
       '你正在执行受控的自主研究。只输出下一个工具调用，不要输出隐藏思维链。',
       `当前角色：${context.role}；研究目标：${context.goal ?? context.topic}。`,
       `上限：总工具 ${limits.maxToolCalls}，搜索 ${limits.maxSearches}，读页 ${limits.maxPageReads}，正文总字符 ${limits.maxBodyCharacters}。`,
       '搜索摘要不等于已核验正文。发布前应先 readWebPage；如未读取仍发布，系统会明确标记“仅基于摘要”。',
+      completionPriority,
       context.supportsToolCalling ? '使用提供的结构化工具。' : `模型不支持原生工具调用。每次必须只返回 JSON：{"tool":"searchWeb","arguments":{"query":"..."}}。最后返回 {"tool":"finishResearch","arguments":{"summary":"..."}}。`
     ].join('\n')
   }

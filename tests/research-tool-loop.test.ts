@@ -103,6 +103,21 @@ describe('ResearchToolLoop', () => {
     seeded.persistence.database.close()
   })
 
+  it('instructs debate sides to reserve calls for publishing evidence and finishing', async () => {
+    const seeded = seed()
+    let observedInstruction: string | undefined
+    const adapter = new ScriptedAdapter((_index, currentRequest) => {
+      observedInstruction = currentRequest.messages.at(-1)?.content
+      return tool('finishResearch', { summary: '已按限制结束。' })
+    })
+
+    await loop(seeded, adapter, new RecordingSearchTool()).run(request(), context(seeded.researchSession, 'automatic'))
+
+    expect(observedInstruction).toContain('预留至少 2 次')
+    expect(observedInstruction).toContain('publishEvidence')
+    seeded.persistence.database.close()
+  })
+
   it('cancels a pending approval and restores active tool state as interrupted', async () => {
     const seeded = seed()
     const approval = new ResearchApprovalController()

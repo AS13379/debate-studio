@@ -67,6 +67,11 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
             <button className="button danger" onClick={() => void window.debateStudio.stopDebate({ sessionId: detail.sessionId }).then((result) => { if (!result.ok) onError(result.error.descriptionZh) })}>停止研究 / 辩论</button>
           </div>
         </section>
+        <ModeratorResearchToolSection workspace={workspace.moderator} onDecision={async (callId, approved) => {
+          const result = await window.debateStudio.decideResearchToolCall({ callId, approved })
+          if (!result.ok) onError(result.error.descriptionZh)
+          await reload()
+        }} />
         <section className="research-section public-pool">
           <div className="section-heading"><div><strong>公共资源池</strong><span>所有角色可见；主持人不会在此替双方完成论证</span></div></div>
           {workspace.publicPool ? (
@@ -147,6 +152,18 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
       </div>
     </details>
   )
+}
+
+export function ModeratorResearchToolSection({ workspace, onDecision }: {
+  workspace: RoleResearchWorkspaceDto
+  onDecision(callId: string, approved: boolean): Promise<void>
+}) {
+  if (!workspace.toolCalls.length && !workspace.fetchedPages.length && !workspace.sourceEvaluations.length) return null
+  return <section className="research-section moderator-tool-activity">
+    <div className="section-heading"><div><strong>主持人研究工具</strong><span>公共资源方向的搜索、读页与审批记录</span></div></div>
+    <ToolCallList calls={workspace.toolCalls} onDecision={onDecision} />
+    <FetchedPageList workspace={workspace} />
+  </section>
 }
 
 function RoleWorkspace({ title, role, workspace, sessionId, participantId, disabled, onError, onSaved, onPublish }: {

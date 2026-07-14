@@ -177,7 +177,9 @@ describe('RuntimeTurnExecutor and TurnRunnerFactory', () => {
       stage,
       modelProfileId: `profile-${role}`,
       providerConnectionId: `connection-${role}`,
-      baseUrl: `https://${role}.runtime.test/v1`
+      providerId: role,
+      baseUrl: `https://${role}.runtime.test/v1`,
+      reasoningEnabled: false
     })
   })
 

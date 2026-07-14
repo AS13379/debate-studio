@@ -28,7 +28,9 @@ export interface UnifiedRuntimeMetadata {
   stage: Exclude<DebateStage, 'draft' | 'completed'>
   modelProfileId?: string
   providerConnectionId?: string
+  providerId?: string
   baseUrl?: string
+  reasoningEnabled?: boolean
 }
 
 export interface UnifiedRequest {

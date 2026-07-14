@@ -37,6 +37,7 @@ export interface OpenAIChatRequestBody {
     function: { name: string; description: string; parameters: Record<string, unknown> }
   }>
   tool_choice?: 'auto' | 'none'
+  thinking?: { type: 'enabled' | 'disabled' }
 }
 
 export class OpenAIChatAdapter implements ModelAdapter {
@@ -52,9 +53,20 @@ export class OpenAIChatAdapter implements ModelAdapter {
       const content = this.responseContent(response.body) ?? ''
       const toolCalls = this.responseToolCalls(response.body)
       if (!content && !toolCalls.length) {
+        const finishReason = this.responseFinishReason(response.body)
+        if (finishReason === 'length') {
+          throw new ModelAdapterError({
+            code: 'REQUEST_FAILED',
+            message: 'OpenAI Chat reached max_tokens before producing assistant content.',
+            titleZh: '模型输出上限不足',
+            descriptionZh: '模型在生成可用回复前已用完最大输出 Token。',
+            retryable: true,
+            suggestedActionZh: '提高该 ModelProfile 的最大输出 Token 后重试。'
+          })
+        }
         throw new ModelAdapterError({
           code: 'EMPTY_RESPONSE',
-          message: 'OpenAI Chat response did not contain assistant content.',
+          message: `OpenAI Chat response did not contain assistant content (finish_reason=${finishReason ?? 'missing'}, reasoning_content=${this.hasReasoningContent(response.body) ? 'present' : 'absent'}).`,
           retryable: false
         })
       }
@@ -161,6 +173,9 @@ export class OpenAIChatAdapter implements ModelAdapter {
       }))
       body.tool_choice = request.toolChoice ?? 'auto'
     }
+    if (request.runtimeMetadata.providerId === 'deepseek' && request.runtimeMetadata.reasoningEnabled === false) {
+      body.thinking = { type: 'disabled' }
+    }
 
     return {
       method: 'POST',
@@ -190,16 +205,29 @@ export class OpenAIChatAdapter implements ModelAdapter {
         const parsed: unknown = JSON.parse(rawArguments)
         if (!this.isRecord(parsed)) return []
         return [{ id: item.id, name: item.function.name, arguments: parsed }]
-      } catch {
+      } catch (cause) {
+        const trimmedArguments = rawArguments.trim()
+        const parseError = cause instanceof Error ? cause.message.replace(/\s+/g, ' ').slice(0, 160) : 'unknown'
+        const hasObjectEnvelope = trimmedArguments.startsWith('{') && trimmedArguments.endsWith('}')
         throw new ModelAdapterError({
           code: 'REQUEST_FAILED',
-          message: `Tool call ${item.function.name} returned invalid JSON arguments.`,
+          message: `Tool call ${item.function.name} returned invalid JSON arguments (arguments_length=${rawArguments.length}, object_envelope=${hasObjectEnvelope}, parse_error=${parseError}).`,
           titleZh: '工具参数无法解析',
           descriptionZh: '模型返回的结构化工具参数不是有效 JSON。',
           retryable: true
         })
       }
     })
+  }
+
+  private responseFinishReason(body: unknown): string | undefined {
+    const choice = this.firstChoice(body)
+    return choice && typeof choice.finish_reason === 'string' ? choice.finish_reason : undefined
+  }
+
+  private hasReasoningContent(body: unknown): boolean {
+    const choice = this.firstChoice(body)
+    return Boolean(choice && this.isRecord(choice.message) && typeof choice.message.reasoning_content === 'string' && choice.message.reasoning_content.length)
   }
 
   private streamDelta(event: Extract<HttpTransportStreamEvent, { type: 'data' }>): string | undefined {
