@@ -163,3 +163,10 @@ export const researchToolDecisionSchema = z.object({
   callId: idSchema,
   approved: z.boolean()
 }).strict()
+
+export const rendererErrorSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  userMessage: z.string().trim().min(1).max(500),
+  technicalMessage: z.string().trim().max(1_000).optional(),
+  source: z.string().trim().min(1).max(100)
+}).strict()

@@ -1,4 +1,5 @@
 import { redactSensitiveText } from '../security'
+import type { LoggerLike } from '../observability'
 import type { SearchCredentialStore } from './search-credential-store'
 import type { SearchProviderConnection, SearchRequest, SearchResult, SearchTool } from './types'
 
@@ -9,6 +10,7 @@ export interface TavilySearchToolOptions {
   credentialStore: SearchCredentialStore
   fetchImplementation?: SearchFetch
   timeoutMs?: number
+  logger?: LoggerLike
 }
 
 export type SearchToolErrorCode =
@@ -59,6 +61,10 @@ export class TavilySearchTool implements SearchTool {
     const timeout = new AbortController()
     const timer = setTimeout(() => timeout.abort(), this.timeoutMs)
     const signal = AbortSignal.any([request.signal, timeout.signal])
+    this.options.logger?.info('Tavily 搜索开始', {
+      source: 'search', sessionId: request.debateSessionId,
+      metadata: { tool: this.name, searchDepth: request.searchDepth ?? 'basic', maxResults: request.maxResults ?? 5 }
+    })
     try {
       const response = await this.fetchImplementation(
         `${this.options.connection.baseUrl.replace(/\/+$/, '')}/search`,
@@ -85,7 +91,7 @@ export class TavilySearchTool implements SearchTool {
         throw new SearchToolError('SEARCH_INVALID_RESPONSE', '搜索响应无法解析', 'Tavily 未返回预期的 results 数组。', true)
       }
       const fetchedAt = new Date().toISOString()
-      return data.results.flatMap((item): SearchResult[] => {
+      const results = data.results.flatMap((item): SearchResult[] => {
         if (!this.isRecord(item) || typeof item.title !== 'string' || typeof item.url !== 'string' || typeof item.content !== 'string') return []
         let domain: string
         try { domain = new URL(item.url).hostname } catch { return [] }
@@ -99,12 +105,24 @@ export class TavilySearchTool implements SearchTool {
           score: typeof item.score === 'number' ? item.score : undefined
         }]
       })
+      this.options.logger?.info('Tavily 搜索完成', {
+        source: 'search', sessionId: request.debateSessionId,
+        metadata: { tool: this.name, resultCount: results.length }
+      })
+      return results
     } catch (cause) {
-      if (cause instanceof SearchToolError) throw cause
-      if (request.signal.aborted) throw new SearchToolError('SEARCH_CANCELLED', '搜索已取消', '当前搜索请求已被用户取消。', true)
-      if (timeout.signal.aborted) throw new SearchToolError('SEARCH_TIMEOUT', '搜索请求超时', 'Tavily 在限定时间内没有返回结果。', true)
-      const description = cause instanceof Error ? cause.message : '未知网络错误。'
-      throw new SearchToolError('SEARCH_HTTP_ERROR', '搜索网络请求失败', description, true)
+      const normalized = cause instanceof SearchToolError
+        ? cause
+        : request.signal.aborted
+          ? new SearchToolError('SEARCH_CANCELLED', '搜索已取消', '当前搜索请求已被用户取消。', true)
+          : timeout.signal.aborted
+            ? new SearchToolError('SEARCH_TIMEOUT', '搜索请求超时', 'Tavily 在限定时间内没有返回结果。', true)
+            : new SearchToolError('SEARCH_HTTP_ERROR', '搜索网络请求失败', cause instanceof Error ? cause.message : '未知网络错误。', true)
+      this.options.logger?.error('Tavily 搜索失败', {
+        source: 'search', sessionId: request.debateSessionId,
+        metadata: { tool: this.name, code: normalized.code, statusCode: normalized.statusCode }
+      })
+      throw normalized
     } finally {
       clearTimeout(timer)
     }

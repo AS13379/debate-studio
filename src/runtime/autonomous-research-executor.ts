@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import type { PersistenceContext } from '../persistence'
+import type { LoggerLike } from '../observability'
 import type { UnifiedRequest, UnifiedResponse, UnifiedStreamEvent } from '../providers'
 import {
   ResearchApprovalController,
@@ -27,6 +28,7 @@ export interface AutonomousResearchExecutorOptions {
   webPageFetcher?: WebPageFetcher
   createId?: () => string
   now?: () => Date
+  logger?: LoggerLike
 }
 
 export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
@@ -88,7 +90,11 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
     const loop = new ResearchToolLoop({
       adapter: participant.adapter,
       repository: this.options.persistence.repositories.research,
-      searchTool: new TavilySearchTool({ connection: searchConnection, credentialStore: this.options.credentialStore }),
+      searchTool: new TavilySearchTool({
+        connection: searchConnection,
+        credentialStore: this.options.credentialStore,
+        logger: this.options.logger
+      }),
       webPageFetcher: this.webPageFetcher,
       approvalController: this.options.approvalController,
       createId: this.createId,

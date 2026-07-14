@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 
 import type { DebateParticipantRole } from '../participant-config'
 import type { PersistenceContext, PersistenceError } from '../persistence'
+import type { LoggerLike } from '../observability'
 import {
   EVIDENCE_STATUSES,
   MockSearchTool,
@@ -45,6 +46,7 @@ export interface ResearchApplicationDependencies {
   searchFetch?: SearchFetch
   createId?: () => string
   now?: () => Date
+  logger?: LoggerLike
 }
 
 export class ResearchApplication {
@@ -197,7 +199,12 @@ export class ResearchApplication {
     if (!connection.ok) return this.persistenceError(connection.error)
     if (!connection.value) return this.notFound('搜索连接不存在')
     const result = await new SearchConnectionTestService().test(
-      new TavilySearchTool({ connection: connection.value, credentialStore: this.dependencies.credentialStore, fetchImplementation: this.dependencies.searchFetch }), signal
+      new TavilySearchTool({
+        connection: connection.value,
+        credentialStore: this.dependencies.credentialStore,
+        fetchImplementation: this.dependencies.searchFetch,
+        logger: this.dependencies.logger
+      }), signal
     )
     return { ok: true, value: result }
   }

@@ -5,12 +5,14 @@ import {
   type HttpTransportResponse,
   type HttpTransportStreamEvent
 } from './http-transport'
+import type { LoggerLike } from '../observability'
 
 export type FetchImplementation = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 export interface FetchHttpTransportOptions {
   fetchImplementation?: FetchImplementation
   timeoutMs?: number
+  logger?: LoggerLike
 }
 
 interface AbortScope {
@@ -23,20 +25,26 @@ interface AbortScope {
 export class FetchHttpTransport implements HttpTransport {
   private readonly fetchImplementation: FetchImplementation
   private readonly timeoutMs: number
+  private readonly logger?: LoggerLike
 
   constructor(options: FetchHttpTransportOptions = {}) {
     this.fetchImplementation = options.fetchImplementation ?? globalThis.fetch.bind(globalThis)
     this.timeoutMs = options.timeoutMs ?? 30_000
+    this.logger = options.logger
   }
 
   async send(request: HttpTransportRequest): Promise<HttpTransportResponse> {
     const scope = this.createAbortScope(request.signal)
+    this.logger?.info('Provider HTTP 请求开始', { source: 'provider-http', metadata: this.requestMetadata(request, false) })
     try {
       const response = await this.fetchImplementation(request.url, this.requestInit(request, scope.signal))
       const body = await this.readJsonResponse(response, response.ok)
+      this.logger?.info('Provider HTTP 请求完成', { source: 'provider-http', metadata: { ...this.requestMetadata(request, false), statusCode: response.status } })
       return { status: response.status, body }
     } catch (cause) {
-      throw this.normalizeError(cause, scope, false)
+      const normalized = this.normalizeError(cause, scope, false)
+      this.logger?.error('Provider HTTP 请求失败', { source: 'provider-http', metadata: { ...this.requestMetadata(request, false), code: normalized.code, statusCode: normalized.statusCode } })
+      throw normalized
     } finally {
       scope.cleanup()
     }
@@ -47,6 +55,7 @@ export class FetchHttpTransport implements HttpTransport {
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
     let responseStarted = false
     let receivedData = false
+    this.logger?.info('Provider SSE 请求开始', { source: 'provider-http', metadata: this.requestMetadata(request, true) })
     try {
       const response = await this.fetchImplementation(request.url, this.requestInit(request, scope.signal, true))
       responseStarted = true
@@ -80,6 +89,7 @@ export class FetchHttpTransport implements HttpTransport {
           buffer = buffer.slice(boundary + 2)
           const event = this.parseSseBlock(block)
           if (event?.type === 'done') {
+            this.logger?.info('Provider SSE 请求完成', { source: 'provider-http', metadata: this.requestMetadata(request, true) })
             yield event
             return
           }
@@ -95,6 +105,7 @@ export class FetchHttpTransport implements HttpTransport {
       if (buffer) {
         const event = this.parseSseBlock(buffer)
         if (event?.type === 'done') {
+          this.logger?.info('Provider SSE 请求完成', { source: 'provider-http', metadata: this.requestMetadata(request, true) })
           yield event
           return
         }
@@ -112,7 +123,9 @@ export class FetchHttpTransport implements HttpTransport {
         }
       )
     } catch (cause) {
-      throw this.normalizeError(cause, scope, responseStarted && receivedData)
+      const normalized = this.normalizeError(cause, scope, responseStarted && receivedData)
+      this.logger?.error('Provider SSE 请求失败', { source: 'provider-http', metadata: { ...this.requestMetadata(request, true), code: normalized.code, statusCode: normalized.statusCode } })
+      throw normalized
     } finally {
       reader?.releaseLock()
       scope.cleanup()
@@ -129,6 +142,12 @@ export class FetchHttpTransport implements HttpTransport {
       body: request.method === 'POST' && request.body !== undefined ? JSON.stringify(request.body) : undefined,
       signal
     }
+  }
+
+  private requestMetadata(request: HttpTransportRequest, streaming: boolean): Record<string, unknown> {
+    let host = 'invalid-url'
+    try { host = new URL(request.url).host } catch { /* URL validation is handled by the request path. */ }
+    return { method: request.method, host, streaming }
   }
 
   private async readJsonResponse(response: Response, requireBody: boolean): Promise<unknown> {

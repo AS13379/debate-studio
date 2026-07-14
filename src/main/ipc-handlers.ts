@@ -1,7 +1,10 @@
 import type { ZodType } from 'zod'
 
-import type { DebateConfigurationApplication, DebateRunApplication, DebateRunEvent, ResearchApplication } from '../application'
+import type {
+  DebateConfigurationApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ResearchApplication
+} from '../application'
 import type { DebateTurn } from '../domain'
+import type { ErrorCenter, LoggerLike } from '../observability'
 import { redactForExport, redactSensitiveText } from '../security'
 import {
   IPC_CHANNELS,
@@ -21,6 +24,7 @@ import {
   idInputSchema,
   publishEvidenceSchema,
   researchRuntimeSettingsSchema,
+  rendererErrorSchema,
   researchToolDecisionSchema,
   runMockSearchSchema,
   saveSearchProviderConnectionSchema,
@@ -42,6 +46,9 @@ export interface DebateIpcDependencies {
   configuration: DebateConfigurationApplication
   run: DebateRunApplication
   research?: ResearchApplication
+  diagnostics: DiagnosticsApplication
+  logger: LoggerLike
+  errorCenter: ErrorCenter
   getAppVersion(): string
   broadcastRunEvent(event: RunEventDto): void
 }
@@ -49,7 +56,9 @@ export interface DebateIpcDependencies {
 const registeredChannels = Object.values(IPC_CHANNELS).filter((channel) => channel !== IPC_CHANNELS.runEvent)
 
 export function registerDebateIpc(dependencies: DebateIpcDependencies): () => void {
-  const { ipcMain, configuration, run, research } = dependencies
+  const { configuration, run, research } = dependencies
+  const rawIpcMain = dependencies.ipcMain
+  const ipcMain = observedIpcMain(dependencies)
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => dependencies.getAppVersion())
   ipcMain.handle(IPC_CHANNELS.listProviderConnections, () => configuration.listProviderConnections())
   ipcMain.handle(IPC_CHANNELS.listProviderPresets, () => configuration.listProviderPresets())
@@ -89,11 +98,66 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.testSearchConnection, validated(connectionInputSchema, (input) => research?.testSearchConnection(input.connectionId) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.saveResearchRuntimeSettings, validated(researchRuntimeSettingsSchema, (input) => research?.saveRuntimeSettings(input) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.decideResearchToolCall, validated(researchToolDecisionSchema, (input) => research?.decideToolCall(input.callId, input.approved) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.listRecentErrors, () => dependencies.diagnostics.listRecentErrors())
+  ipcMain.handle(IPC_CHANNELS.getErrorDetail, validated(idInputSchema, (input) => dependencies.diagnostics.getErrorDetail(input.id)))
+  ipcMain.handle(IPC_CHANNELS.clearErrors, () => dependencies.diagnostics.clearErrors())
+  ipcMain.handle(IPC_CHANNELS.exportDiagnosticReport, () => dependencies.diagnostics.exportDiagnosticReport())
+  ipcMain.handle(IPC_CHANNELS.getRecentLogs, () => dependencies.diagnostics.getRecentLogs())
+  ipcMain.handle(IPC_CHANNELS.clearLogs, () => dependencies.diagnostics.clearLogs())
+  ipcMain.handle(IPC_CHANNELS.reportRendererError, validated(rendererErrorSchema, (input) => dependencies.diagnostics.reportRendererError(input)))
 
-  const unsubscribe = run.subscribe((event) => dependencies.broadcastRunEvent(mapRunEvent(event)))
+  const unsubscribe = run.subscribe((event) => {
+    dependencies.diagnostics.observeRunEvent(event)
+    dependencies.broadcastRunEvent(mapRunEvent(event))
+  })
   return () => {
     unsubscribe()
-    for (const channel of registeredChannels) ipcMain.removeHandler(channel)
+    for (const channel of registeredChannels) rawIpcMain.removeHandler(channel)
+  }
+}
+
+function observedIpcMain(dependencies: DebateIpcDependencies): IpcMainLike {
+  return {
+    handle(channel, listener) {
+      dependencies.ipcMain.handle(channel, async (event, input) => {
+        dependencies.logger.debug('IPC 调用开始', { source: 'ipc', metadata: { channel } })
+        try {
+          const result = await listener(event, input)
+          if (isFailureResult(result)) {
+            dependencies.logger.warn('IPC 调用返回错误', {
+              source: 'ipc', metadata: { channel, code: result.error.code }
+            })
+            dependencies.errorCenter.capture(result.error, {
+              source: `ipc:${channel}`,
+              metadata: { channel }
+            })
+          }
+          return result
+        } catch (cause) {
+          dependencies.logger.error('IPC 调用异常', { source: 'ipc', metadata: { channel } })
+          dependencies.errorCenter.capture(cause, { source: `ipc:${channel}`, metadata: { channel } })
+          return ipcUnexpectedFailure()
+        }
+      })
+    },
+    removeHandler(channel) { dependencies.ipcMain.removeHandler(channel) }
+  }
+}
+
+function isFailureResult(value: unknown): value is { ok: false; error: Record<string, unknown> & { code?: string } } {
+  return typeof value === 'object' && value !== null && 'ok' in value && value.ok === false &&
+    'error' in value && typeof value.error === 'object' && value.error !== null
+}
+
+function ipcUnexpectedFailure(): ConfigurationResultDto<never> {
+  return {
+    ok: false,
+    error: {
+      code: 'IPC_UNEXPECTED_ERROR',
+      titleZh: '应用操作失败',
+      descriptionZh: '主进程处理请求时发生异常，请在“诊断与日志”中查看详情。',
+      retryable: true
+    }
   }
 }
 

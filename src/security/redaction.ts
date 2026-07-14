@@ -1,7 +1,7 @@
 const SENSITIVE_FIELD = /api[-_]?key|token|secret|password|authorization|credential/i
 const KEY_LIKE_VALUE = /\b(?:sk|pk|key|token)-[A-Za-z0-9._-]{8,}\b/g
 const BEARER_VALUE = /\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi
-const ASSIGNMENT_VALUE = /\b(api[-_]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi
+const ASSIGNMENT_VALUE = /\b(api[-_]?key|token|secret|password|authorization|credential(?:Ref)?)\s*[:=]\s*[^\s,;]+/gi
 
 export const REDACTED = '[REDACTED]'
 
@@ -36,4 +36,3 @@ export function redactForExport<T>(value: T, knownSecrets: readonly string[] = [
 
   return visit(value) as T
 }
-

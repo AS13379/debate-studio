@@ -27,11 +27,11 @@ describe('preload DebateStudioApi', () => {
     const api = createDebateStudioApi(new RecordingIpcRenderer())
 
     expect(Object.keys(api).sort()).toEqual([
-      'addResearchAsset', 'challengeEvidence', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
+      'addResearchAsset', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
       'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
-      'getAppVersion', 'getDebate', 'getRunState', 'listDebateTurns', 'listDebates',
-      'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
-      'pauseDebate', 'publishResearchEvidence', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
+      'exportDiagnosticReport', 'getAppVersion', 'getDebate', 'getErrorDetail', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebates',
+      'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
+      'pauseDebate', 'publishResearchEvidence', 'reportRendererError', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
       'saveParticipantBindings', 'saveProviderConnection', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection',
       'startDebate', 'stopDebate', 'testConnection', 'testSearchConnection', 'updateEvidenceStatus'
     ].sort())

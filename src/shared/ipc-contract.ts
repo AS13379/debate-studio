@@ -27,6 +27,13 @@ import type {
   SearchProviderConnectionDto,
   UpdateEvidenceStatusInput
 } from './research-dtos'
+import type {
+  DiagnosticExportDto,
+  DiagnosticsResultDto,
+  ErrorRecordDto,
+  LogEntryDto,
+  RendererErrorInputDto
+} from './diagnostics-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
@@ -68,6 +75,13 @@ export const IPC_CHANNELS = {
   testSearchConnection: 'research:test-search-connection',
   saveResearchRuntimeSettings: 'research:save-runtime-settings',
   decideResearchToolCall: 'research:decide-tool-call',
+  listRecentErrors: 'diagnostics:list-recent-errors',
+  getErrorDetail: 'diagnostics:get-error-detail',
+  clearErrors: 'diagnostics:clear-errors',
+  exportDiagnosticReport: 'diagnostics:export-report',
+  getRecentLogs: 'diagnostics:get-recent-logs',
+  clearLogs: 'diagnostics:clear-logs',
+  reportRendererError: 'diagnostics:report-renderer-error',
   runEvent: 'run:event'
 } as const
 
@@ -153,6 +167,13 @@ export interface DebateStudioApi {
   testSearchConnection(input: { connectionId: string }): Promise<ResearchResultDto<{ success: boolean; latencyMs: number; titleZh: string; descriptionZh: string; retryable: boolean }>>
   saveResearchRuntimeSettings(input: ResearchRuntimeSettingsInput): Promise<ResearchResultDto<boolean>>
   decideResearchToolCall(input: { callId: string; approved: boolean }): Promise<ResearchResultDto<boolean>>
+  listRecentErrors(): Promise<DiagnosticsResultDto<ErrorRecordDto[]>>
+  getErrorDetail(input: { id: string }): Promise<DiagnosticsResultDto<ErrorRecordDto | undefined>>
+  clearErrors(): Promise<DiagnosticsResultDto<boolean>>
+  exportDiagnosticReport(): Promise<DiagnosticsResultDto<DiagnosticExportDto>>
+  getRecentLogs(): Promise<DiagnosticsResultDto<LogEntryDto[]>>
+  clearLogs(): Promise<DiagnosticsResultDto<boolean>>
+  reportRendererError(input: RendererErrorInputDto): Promise<DiagnosticsResultDto<boolean>>
   onRunEvent(listener: (event: RunEventDto) => void): () => void
 }
 
@@ -192,3 +213,13 @@ export type {
   SearchProviderConnectionDto,
   UpdateEvidenceStatusInput
 } from './research-dtos'
+export type {
+  DiagnosticExportDto,
+  DiagnosticsResultDto,
+  ErrorCategoryDto,
+  ErrorRecordDto,
+  ErrorSeverityDto,
+  LogEntryDto,
+  LogLevelDto,
+  RendererErrorInputDto
+} from './diagnostics-dtos'

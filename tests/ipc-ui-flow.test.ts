@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { initializeDebateDesktopApplication, type DebateDesktopApplication } from '../src/application'
 import { registerDebateIpc, type IpcMainLike } from '../src/main/ipc-handlers'
 import {
+  MockAdapter,
   MockHttpTransport,
   ModelAdapterError,
   type ModelAdapter,
@@ -107,6 +108,9 @@ function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()
     configuration: application.configuration,
     run: application.run,
     research: application.research,
+    diagnostics: application.diagnostics,
+    logger: application.logger,
+    errorCenter: application.errorCenter,
     getAppVersion: () => '0.1.0-test',
     broadcastRunEvent: (event) => events.push(event)
   })
@@ -300,6 +304,50 @@ describe('typed IPC UI flow', () => {
     expect(stopped).toMatchObject({ ok: true, state: { status: 'stopped' } })
     expect(adapter.calls).toBe(callsAtStop)
     expect(adapter.aborted).toBe(1)
+    dispose()
+  })
+
+  it('captures IPC validation failures in the global ErrorCenter', async () => {
+    const app = createApplication(temporaryDirectory())
+    const { ipc, dispose } = register(app)
+
+    const invalid = await ipc.invoke<{ ok: false; error: { code: string } }>(IPC_CHANNELS.saveProviderConnection, {
+      displayName: '', protocolType: 'unknown'
+    })
+    const listed = await ipc.invoke<{ ok: true; value: Array<{ metadata: { code?: string }; category: string }> }>(IPC_CHANNELS.listRecentErrors)
+
+    expect(invalid.error.code).toBe('IPC_VALIDATION_FAILED')
+    expect(listed.value[0]).toMatchObject({ category: 'validation', metadata: { code: 'IPC_VALIDATION_FAILED' } })
+    dispose()
+  })
+
+  it('captures provider turn failures without leaking the provider credential echo', async () => {
+    const secret = 'sk-provider-error-secret-123456'
+    const app = createApplication(temporaryDirectory(), new MockAdapter({
+      error: { message: `Authorization: Bearer ${secret}` }
+    }))
+    const { ipc, dispose } = register(app)
+    const demo = await ipc.invoke<{ ok: true; value: { sessionId: string } }>(IPC_CHANNELS.createMockDemoDebate)
+
+    await ipc.invoke(IPC_CHANNELS.startDebate, { sessionId: demo.value.sessionId })
+    const listed = await ipc.invoke<{ ok: true; value: Array<{ category: string; technicalMessage: string }> }>(IPC_CHANNELS.listRecentErrors)
+
+    expect(listed.value.some((record) => record.category === 'provider')).toBe(true)
+    expect(JSON.stringify(listed.value)).not.toContain(secret)
+    dispose()
+  })
+
+  it('accepts only a bounded renderer error summary and categorizes it', async () => {
+    const app = createApplication(temporaryDirectory())
+    const { ipc, dispose } = register(app)
+    const reported = await ipc.invoke<{ ok: true; value: true }>(IPC_CHANNELS.reportRendererError, {
+      title: '界面显示异常', userMessage: '页面未能正常显示。',
+      technicalMessage: 'TypeError: render failed', source: 'react-error-boundary'
+    })
+    const listed = await ipc.invoke<{ ok: true; value: Array<{ category: string; source: string }> }>(IPC_CHANNELS.listRecentErrors)
+
+    expect(reported).toEqual({ ok: true, value: true })
+    expect(listed.value[0]).toMatchObject({ category: 'renderer', source: 'renderer:react-error-boundary' })
     dispose()
   })
 })

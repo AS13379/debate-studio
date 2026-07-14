@@ -49,6 +49,13 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     testSearchConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.testSearchConnection, input),
     saveResearchRuntimeSettings: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveResearchRuntimeSettings, input),
     decideResearchToolCall: (input) => invoke(ipcRenderer, IPC_CHANNELS.decideResearchToolCall, input),
+    listRecentErrors: () => invoke(ipcRenderer, IPC_CHANNELS.listRecentErrors),
+    getErrorDetail: (input) => invoke(ipcRenderer, IPC_CHANNELS.getErrorDetail, input),
+    clearErrors: () => invoke(ipcRenderer, IPC_CHANNELS.clearErrors),
+    exportDiagnosticReport: () => invoke(ipcRenderer, IPC_CHANNELS.exportDiagnosticReport),
+    getRecentLogs: () => invoke(ipcRenderer, IPC_CHANNELS.getRecentLogs),
+    clearLogs: () => invoke(ipcRenderer, IPC_CHANNELS.clearLogs),
+    reportRendererError: (input) => invoke(ipcRenderer, IPC_CHANNELS.reportRendererError, input),
     onRunEvent: (listener) => {
       const wrapped = (_event: IpcRendererEvent, payload: RunEventDto): void => listener(payload)
       ipcRenderer.on(IPC_CHANNELS.runEvent, wrapped)

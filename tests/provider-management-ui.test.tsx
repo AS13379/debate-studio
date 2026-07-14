@@ -64,7 +64,7 @@ describe('provider management UI states', () => {
     expect(html).toContain('重试')
     expect(html).toContain('更换模型')
     expect(html).toContain('打开连接设置')
-    expect(html).toContain('技术详情')
+    expect(html).toContain('查看详情')
   })
 
   it('uses the application Validator result as the only start gate', () => {

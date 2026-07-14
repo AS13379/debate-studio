@@ -13,6 +13,7 @@ import {
   MacOSKeychainCredentialStore,
   type CredentialStore
 } from '../security'
+import { ErrorCenter, ObservedCredentialStore, StructuredLogger } from '../observability'
 import { DebateConfigurationApplication } from './debate-configuration-application'
 import { ResearchApprovalController, ResearchRunCoordinator } from '../research'
 import { AutonomousResearchExecutor } from '../runtime'
@@ -23,17 +24,25 @@ import {
 } from './debate-run-application'
 import { DebateRunPersistence } from './debate-run-persistence'
 import { composeDebateSetupApplication } from './debate-setup-application'
+import { DiagnosticsApplication } from './diagnostics-application'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
   openAITransport?: HttpTransport
+  logger?: StructuredLogger
+  errorCenter?: ErrorCenter
+  appVersion?: string
+  systemInfo?: Record<string, string>
 }
 
 export class DebateDesktopApplication {
   constructor(
     readonly configuration: DebateConfigurationApplication,
     readonly run: DebateRunApplication,
-    readonly research: ResearchApplication
+    readonly research: ResearchApplication,
+    readonly diagnostics: DiagnosticsApplication,
+    readonly logger: StructuredLogger,
+    readonly errorCenter: ErrorCenter
   ) {}
 
   close(): Promise<PersistenceResult<void>> {
@@ -44,7 +53,17 @@ export class DebateDesktopApplication {
 export function initializeDebateDesktopApplication(
   options: DebateDesktopApplicationOptions
 ): PersistenceResult<DebateDesktopApplication> {
-  const persistenceResult = initializePersistence(options)
+  const logger = options.logger ?? new StructuredLogger({
+    directory: `${options.appDataDirectory}/logs`,
+    now: options.now
+  })
+  const errorCenter = options.errorCenter ?? new ErrorCenter({
+    filePath: `${options.appDataDirectory}/diagnostics/errors.jsonl`,
+    appVersion: options.appVersion ?? '0.1.0',
+    systemInfo: options.systemInfo ?? { platform: process.platform, arch: process.arch, node: process.versions.node },
+    now: options.now
+  })
+  const persistenceResult = initializePersistence({ ...options, logger })
   if (!persistenceResult.ok) return persistenceResult
   const persistence = persistenceResult.value
   const recoveredAt = (options.now ?? (() => new Date()))().toISOString()
@@ -65,8 +84,9 @@ export function initializeDebateDesktopApplication(
     return researchRecovered
   }
 
-  const credentialStore = options.credentialStore ?? new MacOSKeychainCredentialStore()
-  const openAITransport = options.openAITransport ?? new FetchHttpTransport({ timeoutMs: options.fetchTimeoutMs })
+  const baseCredentialStore = options.credentialStore ?? new MacOSKeychainCredentialStore()
+  const credentialStore = new ObservedCredentialStore(baseCredentialStore, logger, errorCenter)
+  const openAITransport = options.openAITransport ?? new FetchHttpTransport({ timeoutMs: options.fetchTimeoutMs, logger })
   const mockAdapter = options.mockAdapter ?? new MockAdapter({
     chunks: ['[Mock] ', '这是模拟模型的', '流式发言，', '不会访问网络。'],
     delayMs: 120
@@ -76,7 +96,8 @@ export function initializeDebateDesktopApplication(
     persistence,
     credentialStore,
     approvalController,
-    now: options.now
+    now: options.now,
+    logger
   })
   try {
     const setupApplication = composeDebateSetupApplication(persistence, {
@@ -108,10 +129,20 @@ export function initializeDebateDesktopApplication(
       appDataDirectory: options.appDataDirectory,
       credentialStore,
       approvalController,
+      now: options.now,
+      logger
+    })
+    const diagnostics = new DiagnosticsApplication({
+      appDataDirectory: options.appDataDirectory,
+      errorCenter,
+      logger,
       now: options.now
     })
-    return { ok: true, value: new DebateDesktopApplication(configuration, run, research) }
+    logger.info('Debate Studio 应用组合完成', { source: 'application' })
+    return { ok: true, value: new DebateDesktopApplication(configuration, run, research, diagnostics, logger, errorCenter) }
   } catch (cause) {
+    logger.error('Debate Studio 应用组合失败', { source: 'application' })
+    errorCenter.capture(cause, { source: 'application', severity: 'critical' })
     persistence.database.close()
     return persistenceFailure('QUERY_FAILED', 'composeDebateDesktopApplication', cause)
   }

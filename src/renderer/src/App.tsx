@@ -5,8 +5,9 @@ import { HomePage } from './pages/HomePage'
 import { LiveDebatePage } from './pages/LiveDebatePage'
 import { NewDebatePage } from './pages/NewDebatePage'
 import { ProviderManagementPage } from './pages/ProviderManagementPage'
+import { DiagnosticsPage } from './pages/DiagnosticsPage'
 
-type Page = 'home' | 'new' | 'models' | 'live'
+type Page = 'home' | 'new' | 'models' | 'diagnostics' | 'live'
 
 export function App() {
   const storedDebateId = localStorage.getItem('debate-studio:last-debate') ?? undefined
@@ -61,6 +62,7 @@ export function App() {
           <button className={page === 'home' ? 'active' : ''} onClick={goHome}>辩论列表</button>
           <button className={page === 'new' ? 'active' : ''} onClick={() => setPage('new')}>新建辩论</button>
           <button className={page === 'models' ? 'active' : ''} onClick={() => setPage('models')}>模型与平台</button>
+          <button className={page === 'diagnostics' ? 'active' : ''} onClick={() => setPage('diagnostics')}>诊断与日志</button>
         </nav>
         <span className="app-version">v{version || '…'}</span>
       </aside>
@@ -77,6 +79,7 @@ export function App() {
         )}
         {page === 'new' && <NewDebatePage onBack={goHome} onCreated={openDebate} onOpenModels={() => setPage('models')} />}
         {page === 'models' && <ProviderManagementPage />}
+        {page === 'diagnostics' && <DiagnosticsPage />}
         {page === 'live' && selectedDebateId && (
           <LiveDebatePage debateId={selectedDebateId} onBack={goHome} onOpenModels={() => setPage('models')} />
         )}

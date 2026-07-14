@@ -36,7 +36,17 @@ app.whenReady().then(() => {
       decryptString: (value) => safeStorage.decryptString(value)
     }
   })
-  const applicationResult = initializeDebateDesktopApplication({ appDataDirectory, credentialStore })
+  const applicationResult = initializeDebateDesktopApplication({
+    appDataDirectory,
+    credentialStore,
+    appVersion: app.getVersion(),
+    systemInfo: {
+      platform: process.platform,
+      arch: process.arch,
+      electron: process.versions.electron,
+      node: process.versions.node
+    }
+  })
   if (!applicationResult.ok) {
     throw new Error(`${applicationResult.error.code}: ${applicationResult.error.message}`)
   }
@@ -47,6 +57,9 @@ app.whenReady().then(() => {
     configuration: desktopApplication.configuration,
     run: desktopApplication.run,
     research: desktopApplication.research,
+    diagnostics: desktopApplication.diagnostics,
+    logger: desktopApplication.logger,
+    errorCenter: desktopApplication.errorCenter,
     getAppVersion: () => app.getVersion(),
     broadcastRunEvent: (event) => {
       for (const window of BrowserWindow.getAllWindows()) {

@@ -28,12 +28,10 @@ export function ErrorRecoveryPanel({ failure, onRetry, onChangeModel, onOpenConn
         {onChangeModel && <button className="button secondary" onClick={onChangeModel}>更换模型</button>}
         {onOpenConnection && <button className="button ghost" onClick={onOpenConnection}>打开连接设置</button>}
       </div>
-      {failure.technicalDetails && (
-        <details>
-          <summary>技术详情</summary>
-          <pre>{failure.technicalDetails}</pre>
-        </details>
-      )}
+      <details>
+        <summary>查看详情</summary>
+        <pre>错误代码：{failure.code}{failure.technicalDetails ? `\n${failure.technicalDetails}` : ''}</pre>
+      </details>
     </div>
   )
 }
