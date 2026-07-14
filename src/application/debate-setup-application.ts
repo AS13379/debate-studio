@@ -26,7 +26,8 @@ import {
   DebateRuntimePreparationService,
   DebateRuntimeResolver,
   TurnRunnerFactory,
-  type DebateRuntimePreparationResult
+  type DebateRuntimePreparationResult,
+  type RuntimeResearchExecutor
 } from '../runtime'
 import { DebatePromptBuilder, ResearchContextReader } from '../research'
 
@@ -36,6 +37,7 @@ export interface DebateSetupApplicationOptions extends DatabaseOptions {
   openAITransport?: HttpTransport
   mockAdapter?: ModelAdapter
   fetchTimeoutMs?: number
+  researchExecutor?: RuntimeResearchExecutor
 }
 
 export class DebateSetupApplication {
@@ -71,7 +73,7 @@ export class DebateSetupApplication {
       turnRunnerFactory: new TurnRunnerFactory(new DebatePromptBuilder(new ResearchContextReader(
         persistence.repositories.debates,
         persistence.repositories.research
-      ))),
+      )), options.researchExecutor),
       adapterRegistry
     })
   }
@@ -157,7 +159,8 @@ export function composeDebateSetupApplication(
     credentialStore,
     openAITransport,
     mockAdapter: options.mockAdapter,
-    fetchTimeoutMs: options.fetchTimeoutMs
+    fetchTimeoutMs: options.fetchTimeoutMs,
+    researchExecutor: options.researchExecutor
   }, adapterRegistry, new ConnectionTestService({
     transport: openAITransport,
     credentialStore

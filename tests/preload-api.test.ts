@@ -27,12 +27,13 @@ describe('preload DebateStudioApi', () => {
     const api = createDebateStudioApi(new RecordingIpcRenderer())
 
     expect(Object.keys(api).sort()).toEqual([
-      'addResearchAsset', 'challengeEvidence', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'deleteCredential',
-      'deleteModelProfile', 'deleteProviderConnection',
+      'addResearchAsset', 'challengeEvidence', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
+      'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
       'getAppVersion', 'getDebate', 'getRunState', 'listDebateTurns', 'listDebates',
-      'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
+      'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
       'pauseDebate', 'publishResearchEvidence', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
-      'saveParticipantBindings', 'saveProviderConnection', 'startDebate', 'stopDebate', 'testConnection', 'updateEvidenceStatus'
+      'saveParticipantBindings', 'saveProviderConnection', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection',
+      'startDebate', 'stopDebate', 'testConnection', 'testSearchConnection', 'updateEvidenceStatus'
     ].sort())
     expect(api).not.toHaveProperty('invoke')
     expect(api).not.toHaveProperty('getCredential')

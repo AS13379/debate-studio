@@ -2,8 +2,23 @@ import type { DebateParticipant, DebateStage, ParticipantRole } from '../domain'
 import type { ProviderFailureCode } from './provider-error-presentation'
 
 export interface UnifiedMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  name?: string
+  toolCallId?: string
+  toolCalls?: UnifiedToolCall[]
+}
+
+export interface UnifiedToolDefinition {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+export interface UnifiedToolCall {
+  id: string
+  name: string
+  arguments: Record<string, unknown>
 }
 
 export interface UnifiedRuntimeMetadata {
@@ -30,12 +45,15 @@ export interface UnifiedRequest {
   stream: boolean
   maxTokens: number | undefined
   runtimeMetadata: UnifiedRuntimeMetadata
+  tools?: UnifiedToolDefinition[]
+  toolChoice?: 'auto' | 'none'
 }
 
 export interface UnifiedResponse {
   requestId: string
   content: string
-  finishReason: 'stop'
+  finishReason: 'stop' | 'tool_calls'
+  toolCalls?: UnifiedToolCall[]
 }
 
 export interface UnifiedError {

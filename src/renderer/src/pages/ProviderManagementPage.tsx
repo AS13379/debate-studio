@@ -6,7 +6,8 @@ import type {
   ModelProfileDto,
   ProviderConnectionDto,
   ProviderPresetDto,
-  ProtocolTypeDto
+  ProtocolTypeDto,
+  SearchProviderConnectionDto
 } from '../../../shared/ipc-contract'
 
 const DEFAULT_CAPABILITIES: ModelCapabilitiesDto = {
@@ -245,6 +246,8 @@ export function ProviderManagementPage() {
         />
       )}
 
+      <SearchProviderSection onError={setError} />
+
       {import.meta.env.DEV && (
         <section className="panel development-test">
           <div>
@@ -394,7 +397,9 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
         ...profile.capabilities,
         textInput: form.get('textInput') === 'on',
         imageInput: form.get('imageInput') === 'on',
-        streaming: form.get('streaming') === 'on'
+        streaming: form.get('streaming') === 'on',
+        toolCalling: form.get('toolCalling') === 'on',
+        structuredOutput: form.get('structuredOutput') === 'on'
       },
       contextWindow: optionalNumber(form.get('contextWindow')),
       maxOutputTokens: optionalNumber(form.get('maxOutputTokens'))
@@ -416,10 +421,77 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
         <label><input name="textInput" type="checkbox" defaultChecked={profile.capabilities.textInput} />文本能力</label>
         <label><input name="imageInput" type="checkbox" defaultChecked={profile.capabilities.imageInput} />图片能力</label>
         <label><input name="streaming" type="checkbox" defaultChecked={profile.capabilities.streaming} />流式输出能力</label>
+        <label><input name="toolCalling" type="checkbox" defaultChecked={profile.capabilities.toolCalling} />原生工具调用</label>
+        <label><input name="structuredOutput" type="checkbox" defaultChecked={profile.capabilities.structuredOutput} />结构化输出</label>
       </div>
       <div className="form-actions span-2"><button type="button" className="button ghost" onClick={onCancel}>取消</button><button className="button primary" disabled={saving}>{saving ? '正在保存…' : '保存模型'}</button></div>
     </form>
   )
+}
+
+function SearchProviderSection({ onError }: { onError(message: string): void }) {
+  const [connections, setConnections] = useState<SearchProviderConnectionDto[]>([])
+  const [draft, setDraft] = useState<{ id?: string; displayName: string; baseUrl: string; enabled: boolean; isDefault: boolean }>({ displayName: 'Tavily', baseUrl: 'https://api.tavily.com', enabled: true, isDefault: true })
+  const [showEditor, setShowEditor] = useState(false)
+  const [credential, setCredential] = useState<Record<string, string>>({})
+  const [testMessage, setTestMessage] = useState<Record<string, string>>({})
+  const reload = async (): Promise<void> => {
+    const result = await window.debateStudio.listSearchProviderConnections()
+    if (result.ok) setConnections(result.value)
+    else onError(result.error.descriptionZh)
+  }
+  useEffect(() => { void reload() }, [])
+
+  const saveConnection = async (event: FormEvent): Promise<void> => {
+    event.preventDefault()
+    const result = await window.debateStudio.saveSearchProviderConnection(draft)
+    if (!result.ok) onError(result.error.descriptionZh)
+    else { setShowEditor(false); setDraft({ displayName: 'Tavily', baseUrl: 'https://api.tavily.com', enabled: true, isDefault: connections.length === 0 }); await reload() }
+  }
+  const saveKey = async (connectionId: string): Promise<void> => {
+    const result = await window.debateStudio.saveSearchCredential({ connectionId, credential: credential[connectionId] ?? '' })
+    setCredential((current) => ({ ...current, [connectionId]: '' }))
+    if (!result.ok) onError(result.error.descriptionZh)
+    else await reload()
+  }
+  const test = async (connectionId: string): Promise<void> => {
+    const result = await window.debateStudio.testSearchConnection({ connectionId })
+    if (!result.ok) onError(result.error.descriptionZh)
+    else setTestMessage((current) => ({
+      ...current,
+      [connectionId]: `${result.value.titleZh}（${Math.round(result.value.latencyMs)} ms）：${result.value.descriptionZh}`
+    }))
+  }
+  const remove = async (connection: SearchProviderConnectionDto): Promise<void> => {
+    if (!window.confirm(`确认删除搜索连接“${connection.displayName}”？如需删除凭据，请先点击“删除 API Key”。`)) return
+    const result = await window.debateStudio.deleteSearchProviderConnection({ id: connection.id })
+    if (!result.ok) onError(result.error.descriptionZh)
+    else await reload()
+  }
+
+  return <section className="panel search-provider-section">
+    <div className="section-heading"><div><strong>搜索服务</strong><span>Tavily 作为首个真实 SearchTool；API Key 只保存到系统加密存储</span></div><button className="button secondary" onClick={() => { setDraft({ displayName: 'Tavily', baseUrl: 'https://api.tavily.com', enabled: true, isDefault: connections.length === 0 }); setShowEditor(true) }}>新建搜索连接</button></div>
+    {connections.map((connection) => <article className="search-connection-row" key={connection.id}>
+      <div><strong>{connection.displayName}</strong><span>{connection.enabled ? '已启用' : '已禁用'} · {connection.isDefault ? '默认搜索工具' : '非默认'} · {connection.credentialConfigured ? '已配置凭据' : '未配置凭据'}</span><code>{connection.baseUrl}</code></div>
+      <div className="credential-editor">
+        <label className="field">保存或替换 API Key<input type="password" autoComplete="off" value={credential[connection.id] ?? ''} onChange={(event) => setCredential((current) => ({ ...current, [connection.id]: event.target.value }))} /></label>
+        <button className="button secondary" disabled={!credential[connection.id]} onClick={() => void saveKey(connection.id)}>保存凭据</button>
+        <button className="button secondary" disabled={!connection.credentialConfigured} onClick={() => void test(connection.id)}>测试搜索</button>
+        <button className="button ghost" onClick={() => { setDraft({ id: connection.id, displayName: connection.displayName, baseUrl: connection.baseUrl, enabled: connection.enabled, isDefault: connection.isDefault }); setShowEditor(true) }}>编辑</button>
+        {!connection.isDefault && <button className="button ghost" onClick={() => void window.debateStudio.saveSearchProviderConnection({ id: connection.id, displayName: connection.displayName, baseUrl: connection.baseUrl, enabled: connection.enabled, isDefault: true }).then(reload)}>设为默认</button>}
+        {connection.credentialConfigured && <button className="button ghost danger-text" onClick={() => void window.debateStudio.deleteSearchCredential({ connectionId: connection.id }).then(reload)}>删除 API Key</button>}
+        <button className="button ghost danger-text" onClick={() => void remove(connection)}>删除连接</button>
+      </div>
+      {testMessage[connection.id] && <p className="notice">{testMessage[connection.id]}</p>}
+    </article>)}
+    {(connections.length === 0 || showEditor) && <form className="form-grid" onSubmit={(event) => void saveConnection(event)}>
+      <label className="field">显示名称<input value={draft.displayName} onChange={(event) => setDraft({ ...draft, displayName: event.target.value })} /></label>
+      <label className="field">Base URL<input type="url" value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} /></label>
+      <label className="field checkbox-field"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />启用连接</label>
+      <label className="field checkbox-field"><input type="checkbox" checked={draft.isDefault} onChange={(event) => setDraft({ ...draft, isDefault: event.target.checked })} />设为默认搜索工具</label>
+      <div className="form-actions span-2">{showEditor && <button type="button" className="button ghost" onClick={() => setShowEditor(false)}>取消</button>}<button className="button primary">{draft.id ? '保存搜索连接' : '创建 Tavily 搜索连接'}</button></div>
+    </form>}
+  </section>
 }
 
 export function ConnectionTestStatus({ result }: { result: ConnectionTestDto }) {

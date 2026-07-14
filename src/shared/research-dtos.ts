@@ -2,15 +2,21 @@ import type {
   EvidenceReferenceIssue,
   EvidenceStatus,
   EvidenceStatusHistory,
+  FetchedWebPage,
   ProvisionalClaim,
   PublicResourcePool,
   PublishedEvidence,
   ResearchAsset,
   ResearchGoal,
+  ResearchLoopState,
   ResearchNote,
   ResearchSource,
+  ResearchToolCall,
   ResearchVisibility,
-  SearchQuery
+  SearchProviderConnection,
+  SearchQuery,
+  SearchSession,
+  SourceEvaluation
 } from '../research/types'
 
 export interface ResearchErrorDto {
@@ -34,6 +40,11 @@ export interface RoleResearchWorkspaceDto {
   assets: ResearchAssetDto[]
   notes: ResearchNote[]
   claims: ProvisionalClaim[]
+  searchSessions: SearchSession[]
+  fetchedPages: Array<Omit<FetchedWebPage, 'bodyText'> & { hasFullText: boolean }>
+  sourceEvaluations: SourceEvaluation[]
+  toolCalls: ResearchToolCall[]
+  loopState?: ResearchLoopState
 }
 
 export interface ResearchWorkspaceDto {
@@ -87,4 +98,26 @@ export interface RunMockSearchInput {
   sessionId: string
   ownerParticipantId: string
   query: string
+}
+
+export type SearchProviderConnectionDto = Omit<SearchProviderConnection, 'credentialRef'> & {
+  credentialConfigured: boolean
+}
+
+export interface SaveSearchProviderConnectionInput {
+  id?: string
+  displayName: string
+  baseUrl: string
+  enabled: boolean
+  isDefault: boolean
+}
+
+export interface ResearchRuntimeSettingsInput {
+  mode: 'automatic' | 'step-confirmation'
+  limits: {
+    maxToolCalls: number
+    maxSearches: number
+    maxPageReads: number
+    maxBodyCharacters: number
+  }
 }

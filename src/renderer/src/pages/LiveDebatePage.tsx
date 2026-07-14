@@ -61,7 +61,9 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
   useEffect(() => window.debateStudio.onRunEvent((event) => {
     if (event.sessionId === detail?.sessionId) {
       setSnapshot((current) => applyRunEvent(current, event))
-      if (event.type === 'turnCompleted') setResearchVersion((current) => current + 1)
+      if (event.type === 'turnCompleted' || (event.type === 'turnUpdated' && ['public_pool', 'affirmative_research', 'negative_research'].includes(event.stage))) {
+        setResearchVersion((current) => current + 1)
+      }
     }
   }), [detail?.sessionId])
 

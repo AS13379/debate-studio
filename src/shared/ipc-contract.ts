@@ -20,8 +20,11 @@ import type {
   PublishEvidenceInput,
   ResearchAssetDto,
   ResearchResultDto,
+  ResearchRuntimeSettingsInput,
   ResearchWorkspaceDto,
   RunMockSearchInput,
+  SaveSearchProviderConnectionInput,
+  SearchProviderConnectionDto,
   UpdateEvidenceStatusInput
 } from './research-dtos'
 
@@ -57,6 +60,14 @@ export const IPC_CHANNELS = {
   challengeEvidence: 'research:challenge-evidence',
   updateEvidenceStatus: 'research:update-evidence-status',
   runMockSearch: 'research:run-mock-search',
+  listSearchProviderConnections: 'research:list-search-provider-connections',
+  saveSearchProviderConnection: 'research:save-search-provider-connection',
+  deleteSearchProviderConnection: 'research:delete-search-provider-connection',
+  saveSearchCredential: 'research:save-search-credential',
+  deleteSearchCredential: 'research:delete-search-credential',
+  testSearchConnection: 'research:test-search-connection',
+  saveResearchRuntimeSettings: 'research:save-runtime-settings',
+  decideResearchToolCall: 'research:decide-tool-call',
   runEvent: 'run:event'
 } as const
 
@@ -134,6 +145,14 @@ export interface DebateStudioApi {
   challengeEvidence(input: ChallengeEvidenceInput): Promise<ResearchResultDto<boolean>>
   updateEvidenceStatus(input: UpdateEvidenceStatusInput): Promise<ResearchResultDto<boolean>>
   runMockSearch(input: RunMockSearchInput): Promise<ResearchResultDto<number>>
+  listSearchProviderConnections(): Promise<ResearchResultDto<SearchProviderConnectionDto[]>>
+  saveSearchProviderConnection(input: SaveSearchProviderConnectionInput): Promise<ResearchResultDto<SearchProviderConnectionDto>>
+  deleteSearchProviderConnection(input: { id: string }): Promise<ResearchResultDto<boolean>>
+  saveSearchCredential(input: { connectionId: string; credential: string }): Promise<ResearchResultDto<boolean>>
+  deleteSearchCredential(input: { connectionId: string }): Promise<ResearchResultDto<boolean>>
+  testSearchConnection(input: { connectionId: string }): Promise<ResearchResultDto<{ success: boolean; latencyMs: number; titleZh: string; descriptionZh: string; retryable: boolean }>>
+  saveResearchRuntimeSettings(input: ResearchRuntimeSettingsInput): Promise<ResearchResultDto<boolean>>
+  decideResearchToolCall(input: { callId: string; approved: boolean }): Promise<ResearchResultDto<boolean>>
   onRunEvent(listener: (event: RunEventDto) => void): () => void
 }
 
@@ -166,7 +185,10 @@ export type {
   ResearchErrorDto,
   ResearchResultDto,
   ResearchWorkspaceDto,
+  ResearchRuntimeSettingsInput,
   RoleResearchWorkspaceDto,
   RunMockSearchInput,
+  SaveSearchProviderConnectionInput,
+  SearchProviderConnectionDto,
   UpdateEvidenceStatusInput
 } from './research-dtos'

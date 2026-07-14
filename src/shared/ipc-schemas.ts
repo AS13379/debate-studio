@@ -135,3 +135,31 @@ export const runMockSearchSchema = z.object({
   sessionId: idSchema, ownerParticipantId: idSchema,
   query: z.string().trim().min(1).max(2_000)
 }).strict()
+
+export const saveSearchProviderConnectionSchema = z.object({
+  id: optionalIdSchema,
+  displayName: z.string().trim().min(1).max(200),
+  baseUrl: z.string().trim().url().max(2_000),
+  enabled: z.boolean(),
+  isDefault: z.boolean()
+}).strict()
+
+export const searchCredentialInputSchema = z.object({
+  connectionId: idSchema,
+  credential: z.string().min(1).max(16_384)
+}).strict()
+
+export const researchRuntimeSettingsSchema = z.object({
+  mode: z.enum(['automatic', 'step-confirmation']),
+  limits: z.object({
+    maxToolCalls: z.number().int().min(1).max(50),
+    maxSearches: z.number().int().min(0).max(20),
+    maxPageReads: z.number().int().min(0).max(20),
+    maxBodyCharacters: z.number().int().min(1_000).max(500_000)
+  }).strict()
+}).strict()
+
+export const researchToolDecisionSchema = z.object({
+  callId: idSchema,
+  approved: z.boolean()
+}).strict()

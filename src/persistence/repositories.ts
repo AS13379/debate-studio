@@ -6,15 +6,20 @@ import type {
   EvidenceReferenceIssue,
   EvidenceStatus,
   EvidenceStatusHistory,
+  FetchedWebPage,
   ProvisionalClaim,
   PublicResourcePool,
   PublishedEvidence,
   ResearchAsset,
   ResearchGoal,
+  ResearchLoopState,
   ResearchNote,
   ResearchOwnerRole,
   ResearchSession,
   ResearchSource,
+  ResearchToolCall,
+  SearchProviderConnection,
+  SourceEvaluation,
   SearchQuery,
   SearchSession
 } from '../research'
@@ -173,6 +178,26 @@ export interface ResearchRepository {
   listEvidenceHistory(debateSessionId: string): PersistenceResult<EvidenceStatusHistory[]>
   createReferenceIssue(issue: EvidenceReferenceIssue): PersistenceResult<void>
   listReferenceIssues(debateSessionId: string): PersistenceResult<EvidenceReferenceIssue[]>
+  saveFetchedPage(page: FetchedWebPage): PersistenceResult<void>
+  findFetchedPageBySource(sourceId: string): PersistenceResult<FetchedWebPage | undefined>
+  listFetchedPages(debateSessionId: string): PersistenceResult<FetchedWebPage[]>
+  saveSourceEvaluation(evaluation: SourceEvaluation): PersistenceResult<void>
+  listSourceEvaluations(debateSessionId: string): PersistenceResult<SourceEvaluation[]>
+  saveToolCall(call: ResearchToolCall): PersistenceResult<void>
+  findCompletedToolCall(operationKey: string): PersistenceResult<ResearchToolCall | undefined>
+  listToolCalls(debateSessionId: string): PersistenceResult<ResearchToolCall[]>
+  saveLoopState(state: ResearchLoopState): PersistenceResult<void>
+  listLoopStates(debateSessionId: string): PersistenceResult<ResearchLoopState[]>
+  markActiveToolCallsInterrupted(updatedAt: string): PersistenceResult<number>
+}
+
+export interface SearchProviderConnectionRepository {
+  create(connection: SearchProviderConnection): PersistenceResult<void>
+  findById(id: string): PersistenceResult<SearchProviderConnection | undefined>
+  list(): PersistenceResult<SearchProviderConnection[]>
+  update(connection: SearchProviderConnection): PersistenceResult<boolean>
+  delete(id: string): PersistenceResult<boolean>
+  setDefault(id: string, updatedAt: string): PersistenceResult<boolean>
 }
 
 export interface RepositoryCollection {
@@ -186,4 +211,5 @@ export interface RepositoryCollection {
   events: EventRepository
   usage: UsageRepository
   research: ResearchRepository
+  searchProviderConnections: SearchProviderConnectionRepository
 }

@@ -10,6 +10,7 @@ import type {
   DebateRuntimeConfig,
   RuntimeParticipant,
   RuntimePromptBuilder,
+  RuntimeResearchExecutor,
   RuntimeTurnExecutionError,
   RuntimeTurnPreparationResult
 } from './types'
@@ -17,7 +18,8 @@ import type {
 export class RuntimeTurnExecutor implements ModelAdapter {
   constructor(
     private readonly runtimeConfig: DebateRuntimeConfig,
-    private readonly promptBuilder?: RuntimePromptBuilder
+    private readonly promptBuilder?: RuntimePromptBuilder,
+    private readonly researchExecutor?: RuntimeResearchExecutor
   ) {}
 
   prepareRequest(request: UnifiedRequest, stream: boolean): RuntimeTurnPreparationResult {
@@ -64,6 +66,9 @@ export class RuntimeTurnExecutor implements ModelAdapter {
       throw new ModelAdapterError(this.promptBuildError(cause))
     }
     if (!prepared.ok) throw new ModelAdapterError(prepared.error)
+    if (this.researchExecutor?.shouldHandle(prepared.request, prepared.participant)) {
+      return this.researchExecutor.complete(prepared.request, prepared.participant)
+    }
     return prepared.participant.adapter.complete(prepared.request)
   }
 
@@ -79,6 +84,10 @@ export class RuntimeTurnExecutor implements ModelAdapter {
     if (!prepared.ok) {
       yield { type: 'started', requestId: request.requestId }
       yield { type: 'error', requestId: request.requestId, error: prepared.error }
+      return
+    }
+    if (this.researchExecutor?.shouldHandle(prepared.request, prepared.participant)) {
+      yield* this.researchExecutor.stream(prepared.request, prepared.participant)
       return
     }
     yield* prepared.participant.adapter.stream(prepared.request)

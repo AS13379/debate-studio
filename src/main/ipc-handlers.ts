@@ -20,7 +20,11 @@ import {
   deleteProviderConnectionSchema,
   idInputSchema,
   publishEvidenceSchema,
+  researchRuntimeSettingsSchema,
+  researchToolDecisionSchema,
   runMockSearchSchema,
+  saveSearchProviderConnectionSchema,
+  searchCredentialInputSchema,
   saveModelProfileSchema,
   saveParticipantBindingsSchema,
   saveProviderConnectionSchema,
@@ -77,6 +81,14 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.challengeEvidence, validated(challengeEvidenceSchema, (input) => research?.challengeEvidence(input) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.updateEvidenceStatus, validated(updateEvidenceStatusSchema, (input) => research?.updateEvidenceStatus(input) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.runMockSearch, validated(runMockSearchSchema, (input) => research?.runMockSearch(input) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.listSearchProviderConnections, () => research?.listSearchProviderConnections() ?? researchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.saveSearchProviderConnection, validated(saveSearchProviderConnectionSchema, (input) => research?.saveSearchProviderConnection(input) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.deleteSearchProviderConnection, validated(idInputSchema, (input) => research?.deleteSearchProviderConnection(input.id) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.saveSearchCredential, validated(searchCredentialInputSchema, (input) => research?.saveSearchCredential(input.connectionId, input.credential) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.deleteSearchCredential, validated(connectionInputSchema, (input) => research?.deleteSearchCredential(input.connectionId) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.testSearchConnection, validated(connectionInputSchema, (input) => research?.testSearchConnection(input.connectionId) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.saveResearchRuntimeSettings, validated(researchRuntimeSettingsSchema, (input) => research?.saveRuntimeSettings(input) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.decideResearchToolCall, validated(researchToolDecisionSchema, (input) => research?.decideToolCall(input.callId, input.approved) ?? researchUnavailable()))
 
   const unsubscribe = run.subscribe((event) => dependencies.broadcastRunEvent(mapRunEvent(event)))
   return () => {

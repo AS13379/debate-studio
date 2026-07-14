@@ -14,7 +14,8 @@ import {
   type CredentialStore
 } from '../security'
 import { DebateConfigurationApplication } from './debate-configuration-application'
-import { ResearchRunCoordinator } from '../research'
+import { ResearchApprovalController, ResearchRunCoordinator } from '../research'
+import { AutonomousResearchExecutor } from '../runtime'
 import { ResearchApplication } from './research-application'
 import {
   DebateRunApplication,
@@ -58,6 +59,11 @@ export function initializeDebateDesktopApplication(
     persistence.database.close()
     return sessionsRecovered
   }
+  const researchRecovered = persistence.repositories.research.markActiveToolCallsInterrupted(recoveredAt)
+  if (!researchRecovered.ok) {
+    persistence.database.close()
+    return researchRecovered
+  }
 
   const credentialStore = options.credentialStore ?? new MacOSKeychainCredentialStore()
   const openAITransport = options.openAITransport ?? new FetchHttpTransport({ timeoutMs: options.fetchTimeoutMs })
@@ -65,12 +71,20 @@ export function initializeDebateDesktopApplication(
     chunks: ['[Mock] ', '这是模拟模型的', '流式发言，', '不会访问网络。'],
     delayMs: 120
   })
+  const approvalController = new ResearchApprovalController()
+  const researchExecutor = new AutonomousResearchExecutor({
+    persistence,
+    credentialStore,
+    approvalController,
+    now: options.now
+  })
   try {
     const setupApplication = composeDebateSetupApplication(persistence, {
       ...options,
       credentialStore,
       openAITransport,
-      mockAdapter
+      mockAdapter,
+      researchExecutor
     })
     const configuration = new DebateConfigurationApplication({
       persistence,
@@ -92,6 +106,8 @@ export function initializeDebateDesktopApplication(
     const research = new ResearchApplication({
       persistence,
       appDataDirectory: options.appDataDirectory,
+      credentialStore,
+      approvalController,
       now: options.now
     })
     return { ok: true, value: new DebateDesktopApplication(configuration, run, research) }

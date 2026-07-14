@@ -16,6 +16,8 @@ interface ResearchPanelProps {
 export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProps) {
   const [workspace, setWorkspace] = useState<ResearchWorkspaceDto>()
   const [busy, setBusy] = useState(false)
+  const [mode, setMode] = useState<'automatic' | 'step-confirmation'>('automatic')
+  const [limits, setLimits] = useState({ maxToolCalls: 12, maxSearches: 3, maxPageReads: 3, maxBodyCharacters: 45000 })
 
   const reload = async (): Promise<void> => {
     const result = await window.debateStudio.loadResearchWorkspace({ sessionId: detail.sessionId })
@@ -49,6 +51,22 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
       </summary>
 
       <div className="research-content">
+        {([['主持人', workspace.moderator], ['正方', workspace.affirmative], ['反方', workspace.negative]] as const).map(([label, roleWorkspace]) => roleWorkspace.loopState && ['running', 'waiting-approval', 'summarizing'].includes(roleWorkspace.loopState.status) ? <div className="notice" key={label}>当前研究角色：<strong>{label}</strong> · 进度 {roleWorkspace.loopState.status} · 目标 {roleWorkspace.loopState.goal?.slice(0, 160) || '未填写'}
+        </div> : null)}
+        <section className="research-section research-controls">
+          <div className="section-heading"><div><strong>自主研究控制</strong><span>限制会在主进程强制执行，不依赖模型自律</span></div></div>
+          <div className="research-limit-grid">
+            <label className="field">执行模式<select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="automatic">自动研究</option><option value="step-confirmation">逐步确认</option></select></label>
+            <label className="field">最大工具调用<input type="number" min="1" max="50" value={limits.maxToolCalls} onChange={(event) => setLimits({ ...limits, maxToolCalls: Number(event.target.value) })} /></label>
+            <label className="field">最大搜索次数<input type="number" min="0" max="20" value={limits.maxSearches} onChange={(event) => setLimits({ ...limits, maxSearches: Number(event.target.value) })} /></label>
+            <label className="field">最大读页次数<input type="number" min="0" max="20" value={limits.maxPageReads} onChange={(event) => setLimits({ ...limits, maxPageReads: Number(event.target.value) })} /></label>
+            <label className="field">正文总字符上限<input type="number" min="1000" max="500000" step="1000" value={limits.maxBodyCharacters} onChange={(event) => setLimits({ ...limits, maxBodyCharacters: Number(event.target.value) })} /></label>
+          </div>
+          <div className="compact-actions">
+            <button className="button secondary" onClick={() => void act(() => window.debateStudio.saveResearchRuntimeSettings({ mode, limits }))}>保存研究模式与限制</button>
+            <button className="button danger" onClick={() => void window.debateStudio.stopDebate({ sessionId: detail.sessionId }).then((result) => { if (!result.ok) onError(result.error.descriptionZh) })}>停止研究 / 辩论</button>
+          </div>
+        </section>
         <section className="research-section public-pool">
           <div className="section-heading"><div><strong>公共资源池</strong><span>所有角色可见；主持人不会在此替双方完成论证</span></div></div>
           {workspace.publicPool ? (
@@ -156,11 +174,46 @@ function RoleWorkspace({ title, role, workspace, sessionId, participantId, disab
       <ResearchList title="资料与评价" values={workspace.sources.map((item) => `${item.title}：${item.evaluation || item.summary || '未评价'}`)} />
       <ResearchList title="研究笔记" values={workspace.notes.map((item) => item.content)} />
       <ResearchList title="暂定主张" values={workspace.claims.map((item) => item.claim)} />
+      {workspace.loopState && <div className="research-progress">
+        <strong>研究进度：{workspace.loopState.status}</strong>
+        <span>工具 {workspace.loopState.toolCallCount}/{workspace.loopState.limits.maxToolCalls} · 搜索 {workspace.loopState.searchCount}/{workspace.loopState.limits.maxSearches} · 读页 {workspace.loopState.pageReadCount}/{workspace.loopState.limits.maxPageReads} · 正文 {workspace.loopState.bodyCharacters.toLocaleString()}/{workspace.loopState.limits.maxBodyCharacters.toLocaleString()}</span>
+        {workspace.loopState.goal && <small>当前研究目标：{workspace.loopState.goal.slice(0, 300)}</small>}
+      </div>}
+      <ToolCallList calls={workspace.toolCalls} onDecision={async (callId, approved) => {
+        const result = await window.debateStudio.decideResearchToolCall({ callId, approved })
+        if (!result.ok) onError(result.error.descriptionZh)
+        await onSaved()
+      }} />
+      <FetchedPageList workspace={workspace} />
       <div className="mock-search-row"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入 Mock 搜索词（不访问网络）" /><button className="button secondary" disabled={disabled || !query.trim()} onClick={() => void search()}>Mock 搜索</button></div>
       <AssetComposer label="添加本方资料" sessionId={sessionId} ownerParticipantId={participantId} visibility={`${role}-private`} disabled={disabled} onError={onError} onSaved={onSaved} />
       <AssetList assets={workspace.assets} onPublish={onPublish} />
     </section>
   )
+}
+
+function ToolCallList({ calls, onDecision }: { calls: RoleResearchWorkspaceDto['toolCalls']; onDecision(callId: string, approved: boolean): Promise<void> }) {
+  const [page, setPage] = useState(0)
+  const pageSize = 8
+  if (!calls.length) return null
+  const visible = [...calls].reverse().slice(page * pageSize, (page + 1) * pageSize)
+  return <div className="tool-call-list"><b>研究工具调用</b>{visible.map((call) => <div className="tool-call-row" key={call.id}>
+    <div><strong>{call.toolName}</strong><span>{call.status} · {new Date(call.createdAt).toLocaleTimeString('zh-CN')}</span><small>{call.resultSummary || call.errorDescriptionZh || '等待执行'}</small></div>
+    {call.status === 'pending-approval' && <div className="compact-actions"><button className="button primary" onClick={() => void onDecision(call.id, true)}>允许</button><button className="button secondary" onClick={() => void onDecision(call.id, false)}>拒绝</button></div>}
+  </div>)}
+  {calls.length > pageSize && <div className="pagination"><button className="button ghost" disabled={page === 0} onClick={() => setPage(page - 1)}>上一页</button><span>{page + 1}/{Math.ceil(calls.length / pageSize)}</span><button className="button ghost" disabled={(page + 1) * pageSize >= calls.length} onClick={() => setPage(page + 1)}>下一页</button></div>}
+  </div>
+}
+
+function FetchedPageList({ workspace }: { workspace: RoleResearchWorkspaceDto }) {
+  if (!workspace.fetchedPages.length && !workspace.sourceEvaluations.length) return null
+  return <div className="fetched-page-list"><b>已打开网页与来源评价</b>{workspace.fetchedPages.map((page) => {
+    const evaluations = workspace.sourceEvaluations.filter((item) => item.sourceId === page.sourceId)
+    return <details key={page.id}><summary>{page.title} · {page.status === 'completed' ? '已读取正文' : '无法访问'}</summary>
+      <p>{page.summary}</p><small>{page.finalUrl}</small>
+      {evaluations.map((evaluation) => <div className="source-evaluation" key={evaluation.id}><strong>{evaluation.sourceType} · {evaluation.basedOn === 'full-text' ? '基于正文' : '仅基于摘要'}</strong><p>用途：{evaluation.purpose}</p><p>可信度：{evaluation.credibility}</p><p>局限：{evaluation.limitations}</p></div>)}
+    </details>
+  })}</div>
 }
 
 function ResearchList({ title, values }: { title: string; values: string[] }) {

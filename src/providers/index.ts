@@ -36,7 +36,9 @@ export type {
   UnifiedRequest,
   UnifiedResponse,
   UnifiedRuntimeMetadata,
-  UnifiedStreamEvent
+  UnifiedStreamEvent,
+  UnifiedToolCall,
+  UnifiedToolDefinition
 } from './model-adapter'
 export { OpenAIChatAdapter } from './openai-chat-adapter'
 export type { OpenAIChatMessage, OpenAIChatRequestBody } from './openai-chat-adapter'

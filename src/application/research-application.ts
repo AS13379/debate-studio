@@ -7,12 +7,18 @@ import type { PersistenceContext, PersistenceError } from '../persistence'
 import {
   EVIDENCE_STATUSES,
   MockSearchTool,
+  ResearchApprovalController,
   ResearchVisibilityPolicy,
+  SearchConnectionTestService,
+  TavilySearchTool,
   type EvidenceStatus,
   type PrivateResearchVisibility,
   type ResearchAsset,
   type ResearchOwnerRole,
   type ResearchSession,
+  type SearchCredentialStore,
+  type SearchFetch,
+  type SearchProviderConnection,
   type SearchTool
 } from '../research'
 import type {
@@ -22,8 +28,11 @@ import type {
   ResearchAssetDto,
   ResearchResultDto,
   ResearchWorkspaceDto,
+  ResearchRuntimeSettingsInput,
   RoleResearchWorkspaceDto,
   RunMockSearchInput,
+  SaveSearchProviderConnectionInput,
+  SearchProviderConnectionDto,
   UpdateEvidenceStatusInput
 } from '../shared/research-dtos'
 
@@ -31,6 +40,9 @@ export interface ResearchApplicationDependencies {
   persistence: PersistenceContext
   appDataDirectory: string
   searchTool?: SearchTool
+  credentialStore?: SearchCredentialStore
+  approvalController?: ResearchApprovalController
+  searchFetch?: SearchFetch
   createId?: () => string
   now?: () => Date
 }
@@ -40,11 +52,13 @@ export class ResearchApplication {
   private readonly now: () => Date
   private readonly searchTool: SearchTool
   private readonly visibilityPolicy = new ResearchVisibilityPolicy()
+  private readonly approvalController: ResearchApprovalController
 
   constructor(private readonly dependencies: ResearchApplicationDependencies) {
     this.createId = dependencies.createId ?? randomUUID
     this.now = dependencies.now ?? (() => new Date())
     this.searchTool = dependencies.searchTool ?? new MockSearchTool()
+    this.approvalController = dependencies.approvalController ?? new ResearchApprovalController()
   }
 
   loadWorkspace(sessionId: string): ResearchResultDto<ResearchWorkspaceDto> {
@@ -73,6 +87,16 @@ export class ResearchApplication {
     if (!history.ok) return this.persistenceError(history.error)
     const issues = repository.listReferenceIssues(sessionId)
     if (!issues.ok) return this.persistenceError(issues.error)
+    const searchSessions = repository.listSearchSessions(sessionId)
+    if (!searchSessions.ok) return this.persistenceError(searchSessions.error)
+    const fetchedPages = repository.listFetchedPages(sessionId)
+    if (!fetchedPages.ok) return this.persistenceError(fetchedPages.error)
+    const sourceEvaluations = repository.listSourceEvaluations(sessionId)
+    if (!sourceEvaluations.ok) return this.persistenceError(sourceEvaluations.error)
+    const toolCalls = repository.listToolCalls(sessionId)
+    if (!toolCalls.ok) return this.persistenceError(toolCalls.error)
+    const loopStates = repository.listLoopStates(sessionId)
+    if (!loopStates.ok) return this.persistenceError(loopStates.error)
 
     const ownerFor = (role: DebateParticipantRole) => participants.value.find((item) => item.role === role)?.id
     const workspaceFor = (role: ResearchOwnerRole): RoleResearchWorkspaceDto => {
@@ -83,7 +107,12 @@ export class ResearchApplication {
         sources: sources.value.filter((item) => item.ownerParticipantId === ownerId && item.visibility !== 'public'),
         assets: assets.value.filter((item) => item.ownerParticipantId === ownerId && item.visibility !== 'public').map((item) => this.assetDto(item)),
         notes: notes.value.filter((item) => item.ownerParticipantId === ownerId),
-        claims: claims.value.filter((item) => item.ownerParticipantId === ownerId)
+        claims: claims.value.filter((item) => item.ownerParticipantId === ownerId),
+        searchSessions: searchSessions.value.filter((item) => item.ownerParticipantId === ownerId),
+        fetchedPages: fetchedPages.value.filter((item) => item.ownerParticipantId === ownerId).map(({ bodyText, ...page }) => ({ ...page, hasFullText: Boolean(bodyText) })),
+        sourceEvaluations: sourceEvaluations.value.filter((item) => item.ownerParticipantId === ownerId),
+        toolCalls: toolCalls.value.filter((item) => item.ownerParticipantId === ownerId),
+        loopState: loopStates.value.find((item) => item.ownerParticipantId === ownerId)
       }
     }
     return {
@@ -96,6 +125,89 @@ export class ResearchApplication {
         evidence: evidence.value, evidenceHistory: history.value, invalidEvidenceReferences: issues.value
       }
     }
+  }
+
+  async listSearchProviderConnections(): Promise<ResearchResultDto<SearchProviderConnectionDto[]>> {
+    const listed = this.dependencies.persistence.repositories.searchProviderConnections.list()
+    if (!listed.ok) return this.persistenceError(listed.error)
+    const values: SearchProviderConnectionDto[] = []
+    for (const connection of listed.value) {
+      const configured = this.dependencies.credentialStore
+        ? await this.dependencies.credentialStore.hasCredential(connection.credentialRef)
+        : { ok: true as const, value: false }
+      if (!configured.ok) return this.credentialError(configured.error.message, configured.error.retryable)
+      const { credentialRef: _credentialRef, ...safe } = connection
+      values.push({ ...safe, credentialConfigured: configured.value })
+    }
+    return { ok: true, value: values }
+  }
+
+  saveSearchProviderConnection(input: SaveSearchProviderConnectionInput): ResearchResultDto<SearchProviderConnectionDto> {
+    let parsed: URL
+    try { parsed = new URL(input.baseUrl) } catch { return this.invalid('搜索 Base URL 无效', '请输入完整的 HTTPS URL。') }
+    if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost') return this.invalid('搜索 Base URL 不安全', '真实搜索连接必须使用 HTTPS。')
+    const repository = this.dependencies.persistence.repositories.searchProviderConnections
+    const now = this.timestamp()
+    const existing = input.id ? repository.findById(input.id) : { ok: true as const, value: undefined }
+    if (!existing.ok) return this.persistenceError(existing.error)
+    const id = existing.value?.id ?? input.id ?? this.createId()
+    const connection: SearchProviderConnection = {
+      id, displayName: input.displayName.trim(), providerType: 'tavily', baseUrl: parsed.toString().replace(/\/$/, ''),
+      credentialRef: existing.value?.credentialRef ?? `search:tavily:${id}`, enabled: input.enabled,
+      isDefault: false, createdAt: existing.value?.createdAt ?? now, updatedAt: now
+    }
+    const saved = existing.value ? repository.update(connection) : repository.create(connection)
+    if (!saved.ok) return this.persistenceError(saved.error)
+    if (input.isDefault) {
+      const defaulted = repository.setDefault(id, now)
+      if (!defaulted.ok) return this.persistenceError(defaulted.error)
+    }
+    const { credentialRef: _credentialRef, ...safe } = { ...connection, isDefault: input.isDefault }
+    return { ok: true, value: { ...safe, credentialConfigured: false } }
+  }
+
+  async saveSearchCredential(connectionId: string, credential: string): Promise<ResearchResultDto<boolean>> {
+    if (!this.dependencies.credentialStore) return this.invalid('凭据存储不可用', '主进程未配置 CredentialStore。')
+    const connection = this.dependencies.persistence.repositories.searchProviderConnections.findById(connectionId)
+    if (!connection.ok) return this.persistenceError(connection.error)
+    if (!connection.value) return this.notFound('搜索连接不存在')
+    const result = await this.dependencies.credentialStore.setCredential(connection.value.credentialRef, credential)
+    return result.ok ? { ok: true, value: true } : this.credentialError(result.error.message, result.error.retryable)
+  }
+
+  async deleteSearchCredential(connectionId: string): Promise<ResearchResultDto<boolean>> {
+    if (!this.dependencies.credentialStore) return this.invalid('凭据存储不可用', '主进程未配置 CredentialStore。')
+    const connection = this.dependencies.persistence.repositories.searchProviderConnections.findById(connectionId)
+    if (!connection.ok) return this.persistenceError(connection.error)
+    if (!connection.value) return this.notFound('搜索连接不存在')
+    const result = await this.dependencies.credentialStore.deleteCredential(connection.value.credentialRef)
+    return result.ok ? { ok: true, value: result.value } : this.credentialError(result.error.message, result.error.retryable)
+  }
+
+  async testSearchConnection(connectionId: string, signal?: AbortSignal): Promise<ResearchResultDto<Awaited<ReturnType<SearchConnectionTestService['test']>>>> {
+    if (!this.dependencies.credentialStore) return this.invalid('凭据存储不可用', '主进程未配置 CredentialStore。')
+    const connection = this.dependencies.persistence.repositories.searchProviderConnections.findById(connectionId)
+    if (!connection.ok) return this.persistenceError(connection.error)
+    if (!connection.value) return this.notFound('搜索连接不存在')
+    const result = await new SearchConnectionTestService().test(
+      new TavilySearchTool({ connection: connection.value, credentialStore: this.dependencies.credentialStore, fetchImplementation: this.dependencies.searchFetch }), signal
+    )
+    return { ok: true, value: result }
+  }
+
+  deleteSearchProviderConnection(id: string): ResearchResultDto<boolean> {
+    const deleted = this.dependencies.persistence.repositories.searchProviderConnections.delete(id)
+    return deleted.ok ? { ok: true, value: deleted.value } : this.persistenceError(deleted.error)
+  }
+
+  saveRuntimeSettings(input: ResearchRuntimeSettingsInput): ResearchResultDto<boolean> {
+    const saved = this.dependencies.persistence.repositories.settings.set('research.runtime.defaults', input)
+    return saved.ok ? { ok: true, value: true } : this.persistenceError(saved.error)
+  }
+
+  decideToolCall(callId: string, approved: boolean): ResearchResultDto<boolean> {
+    const accepted = this.approvalController.decide(callId, approved)
+    return accepted ? { ok: true, value: true } : this.invalid('待确认工具调用不存在', '该工具调用已经结束、被取消或不属于当前进程。')
   }
 
   addAsset(input: AddResearchAssetInput): ResearchResultDto<ResearchAssetDto> {
@@ -351,6 +463,10 @@ export class ResearchApplication {
 
   private notFound(titleZh: string): ResearchResultDto<never> {
     return { ok: false, error: { code: 'RESEARCH_NOT_FOUND', titleZh, descriptionZh: '目标研究记录不存在或不属于当前 Session。', retryable: false } }
+  }
+
+  private credentialError(descriptionZh: string, retryable: boolean): ResearchResultDto<never> {
+    return { ok: false, error: { code: 'SEARCH_CREDENTIAL_ERROR', titleZh: '搜索凭据操作失败', descriptionZh, retryable } }
   }
 
   private timestamp(): string {

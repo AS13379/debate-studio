@@ -54,8 +54,107 @@ export interface ResearchSource extends OwnedResearchRecord {
   summary?: string
   publishedAt?: string
   fetchedAt?: string
-  sourceType: 'manual-url' | 'manual-text' | 'mock-search'
+  sourceType: 'manual-url' | 'manual-text' | 'mock-search' | 'tavily-search'
   evaluation?: string
+  score?: number
+  verificationLevel?: 'summary-only' | 'full-text-read'
+}
+
+export type SearchDepth = 'basic' | 'advanced' | 'fast' | 'ultra-fast'
+export type SearchTimeRange = 'day' | 'week' | 'month' | 'year'
+
+export interface SearchProviderConnection {
+  id: string
+  displayName: string
+  providerType: 'tavily'
+  baseUrl: string
+  credentialRef: string
+  enabled: boolean
+  isDefault: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FetchedWebPage extends OwnedResearchRecord {
+  researchSessionId: string
+  sourceId: string
+  url: string
+  finalUrl: string
+  title: string
+  author?: string
+  publishedAt?: string
+  contentType: string
+  bodyText: string
+  summary: string
+  excerpt: string
+  bodyCharacters: number
+  status: 'completed' | 'inaccessible'
+  errorCode?: string
+  fetchedAt: string
+}
+
+export const RESEARCH_SOURCE_TYPES = [
+  '官方机构', '学术研究', '新闻媒体', '企业资料', '评论或博客', '论坛或社交内容', '未知'
+] as const
+export type ResearchSourceCategory = (typeof RESEARCH_SOURCE_TYPES)[number]
+
+export interface SourceEvaluation extends OwnedResearchRecord {
+  researchSessionId: string
+  sourceId: string
+  purpose: string
+  relevance: string
+  stance: string
+  sourceType: ResearchSourceCategory
+  publishedAt?: string
+  credibility: string
+  limitations: string
+  recommendPublication: boolean
+  basedOn: 'summary-only' | 'full-text'
+}
+
+export type ResearchMode = 'automatic' | 'step-confirmation'
+export type ResearchToolName =
+  | 'searchWeb'
+  | 'readWebPage'
+  | 'saveResearchNote'
+  | 'saveProvisionalClaim'
+  | 'publishEvidence'
+  | 'finishResearch'
+
+export interface ResearchToolLimits {
+  maxToolCalls: number
+  maxSearches: number
+  maxPageReads: number
+  maxBodyCharacters: number
+}
+
+export interface ResearchToolCall extends OwnedResearchRecord {
+  researchSessionId: string
+  role: ResearchOwnerRole
+  toolName: ResearchToolName
+  operationKey: string
+  argumentsJson: string
+  status: 'pending-approval' | 'running' | 'completed' | 'failed' | 'denied' | 'interrupted'
+  resultSummary?: string
+  errorCode?: string
+  errorDescriptionZh?: string
+  completedAt?: string
+}
+
+export interface ResearchLoopState {
+  debateSessionId: string
+  researchSessionId: string
+  ownerParticipantId: string
+  role: ResearchOwnerRole
+  mode: ResearchMode
+  status: 'idle' | 'running' | 'waiting-approval' | 'summarizing' | 'completed' | 'failed' | 'interrupted'
+  goal?: string
+  toolCallCount: number
+  searchCount: number
+  pageReadCount: number
+  bodyCharacters: number
+  limits: ResearchToolLimits
+  updatedAt: string
 }
 
 export type ResearchAssetKind = 'text' | 'url' | 'image'
@@ -175,9 +274,14 @@ export interface SearchRequest {
   debateSessionId: string
   researchSessionId: string
   ownerParticipantId: string
-  visibility: PrivateResearchVisibility
+  visibility: ResearchVisibility
   query: string
   signal: AbortSignal
+  maxResults?: number
+  searchDepth?: SearchDepth
+  timeRange?: SearchTimeRange
+  includeDomains?: string[]
+  excludeDomains?: string[]
 }
 
 export interface SearchResult {
@@ -187,6 +291,7 @@ export interface SearchResult {
   domain: string
   publishedAt?: string
   fetchedAt: string
+  score?: number
 }
 
 export interface SearchTool {

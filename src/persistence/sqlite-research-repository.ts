@@ -2,15 +2,19 @@ import type {
   EvidenceReferenceIssue,
   EvidenceStatus,
   EvidenceStatusHistory,
+  FetchedWebPage,
   ProvisionalClaim,
   PublicResourcePool,
   PublishedEvidence,
   ResearchAsset,
   ResearchGoal,
+  ResearchLoopState,
   ResearchNote,
   ResearchOwnerRole,
   ResearchSession,
   ResearchSource,
+  ResearchToolCall,
+  SourceEvaluation,
   SearchQuery,
   SearchSession
 } from '../research'
@@ -110,15 +114,18 @@ export class SQLiteResearchRepository implements ResearchRepository {
     return this.voidResult(this.database.run(
       `INSERT INTO research_sources
        (id, debate_session_id, research_session_id, search_session_id, owner_participant_id,
-        visibility, title, url, domain, summary, published_at, fetched_at, source_type, evaluation, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        visibility, title, url, domain, summary, published_at, fetched_at, source_type, evaluation,
+        score, verification_level, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET title = excluded.title, url = excluded.url,
         domain = excluded.domain, summary = excluded.summary, published_at = excluded.published_at,
-        fetched_at = excluded.fetched_at, evaluation = excluded.evaluation`,
+        fetched_at = excluded.fetched_at, evaluation = excluded.evaluation,
+        score = excluded.score, verification_level = excluded.verification_level`,
       source.id, source.debateSessionId, source.researchSessionId ?? null, source.searchSessionId ?? null,
       source.ownerParticipantId, source.visibility, source.title, source.url ?? null, source.domain ?? null,
       source.summary ?? null, source.publishedAt ?? null, source.fetchedAt ?? null,
-      source.sourceType, source.evaluation ?? null, source.createdAt
+      source.sourceType, source.evaluation ?? null, source.score ?? null,
+      source.verificationLevel ?? null, source.createdAt
     ))
   }
 
@@ -301,6 +308,133 @@ export class SQLiteResearchRepository implements ResearchRepository {
     }), debateSessionId)
   }
 
+  saveFetchedPage(page: FetchedWebPage): PersistenceResult<void> {
+    return this.voidResult(this.database.run(
+      `INSERT INTO fetched_web_pages
+       (id, debate_session_id, research_session_id, source_id, owner_participant_id, visibility,
+        url, final_url, title, author, published_at, content_type, body_text, summary, excerpt,
+        body_characters, status, error_code, fetched_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(source_id) DO UPDATE SET final_url = excluded.final_url, title = excluded.title,
+        author = excluded.author, published_at = excluded.published_at, content_type = excluded.content_type,
+        body_text = excluded.body_text, summary = excluded.summary, excerpt = excluded.excerpt,
+        body_characters = excluded.body_characters, status = excluded.status,
+        error_code = excluded.error_code, fetched_at = excluded.fetched_at`,
+      page.id, page.debateSessionId, page.researchSessionId, page.sourceId, page.ownerParticipantId,
+      page.visibility, page.url, page.finalUrl, page.title, page.author ?? null, page.publishedAt ?? null,
+      page.contentType, page.bodyText, page.summary, page.excerpt, page.bodyCharacters, page.status,
+      page.errorCode ?? null, page.fetchedAt, page.createdAt
+    ))
+  }
+
+  findFetchedPageBySource(sourceId: string): PersistenceResult<FetchedWebPage | undefined> {
+    const result = this.database.get<Row>('SELECT * FROM fetched_web_pages WHERE source_id = ?', sourceId)
+    return result.ok ? { ok: true, value: result.value ? this.mapFetchedPage(result.value) : undefined } : result
+  }
+
+  listFetchedPages(debateSessionId: string): PersistenceResult<FetchedWebPage[]> {
+    return this.mapAll('SELECT * FROM fetched_web_pages WHERE debate_session_id = ? ORDER BY fetched_at, id',
+      (row) => this.mapFetchedPage(row), debateSessionId)
+  }
+
+  saveSourceEvaluation(evaluation: SourceEvaluation): PersistenceResult<void> {
+    return this.voidResult(this.database.run(
+      `INSERT INTO source_evaluations
+       (id, debate_session_id, research_session_id, source_id, owner_participant_id, visibility,
+        purpose, relevance, stance, source_type, published_at, credibility, limitations,
+        recommend_publication, based_on, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      evaluation.id, evaluation.debateSessionId, evaluation.researchSessionId, evaluation.sourceId,
+      evaluation.ownerParticipantId, evaluation.visibility, evaluation.purpose, evaluation.relevance,
+      evaluation.stance, evaluation.sourceType, evaluation.publishedAt ?? null, evaluation.credibility,
+      evaluation.limitations, evaluation.recommendPublication ? 1 : 0, evaluation.basedOn, evaluation.createdAt
+    ))
+  }
+
+  listSourceEvaluations(debateSessionId: string): PersistenceResult<SourceEvaluation[]> {
+    return this.mapAll('SELECT * FROM source_evaluations WHERE debate_session_id = ? ORDER BY created_at, id', (row) => ({
+      ...this.owned(row), researchSessionId: this.text(row, 'research_session_id'),
+      sourceId: this.text(row, 'source_id'), purpose: this.text(row, 'purpose'),
+      relevance: this.text(row, 'relevance'), stance: this.text(row, 'stance'),
+      sourceType: this.text(row, 'source_type') as SourceEvaluation['sourceType'],
+      publishedAt: this.optional(row, 'published_at'), credibility: this.text(row, 'credibility'),
+      limitations: this.text(row, 'limitations'), recommendPublication: Number(row.recommend_publication) === 1,
+      basedOn: this.text(row, 'based_on') as SourceEvaluation['basedOn']
+    }), debateSessionId)
+  }
+
+  saveToolCall(call: ResearchToolCall): PersistenceResult<void> {
+    return this.voidResult(this.database.run(
+      `INSERT INTO research_tool_calls
+       (id, debate_session_id, research_session_id, owner_participant_id, visibility, role,
+        tool_name, operation_key, arguments_json, status, result_summary, error_code,
+        error_description_zh, created_at, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET status = excluded.status, result_summary = excluded.result_summary,
+        error_code = excluded.error_code, error_description_zh = excluded.error_description_zh,
+        completed_at = excluded.completed_at`,
+      call.id, call.debateSessionId, call.researchSessionId, call.ownerParticipantId, call.visibility,
+      call.role, call.toolName, call.operationKey, call.argumentsJson, call.status,
+      call.resultSummary ?? null, call.errorCode ?? null, call.errorDescriptionZh ?? null,
+      call.createdAt, call.completedAt ?? null
+    ))
+  }
+
+  findCompletedToolCall(operationKey: string): PersistenceResult<ResearchToolCall | undefined> {
+    const result = this.database.get<Row>(
+      "SELECT * FROM research_tool_calls WHERE operation_key = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
+      operationKey
+    )
+    return result.ok ? { ok: true, value: result.value ? this.mapToolCall(result.value) : undefined } : result
+  }
+
+  listToolCalls(debateSessionId: string): PersistenceResult<ResearchToolCall[]> {
+    return this.mapAll('SELECT * FROM research_tool_calls WHERE debate_session_id = ? ORDER BY created_at, rowid',
+      (row) => this.mapToolCall(row), debateSessionId)
+  }
+
+  saveLoopState(state: ResearchLoopState): PersistenceResult<void> {
+    return this.voidResult(this.database.run(
+      `INSERT INTO research_loop_states
+       (debate_session_id, research_session_id, owner_participant_id, role, mode, status, goal,
+        tool_call_count, search_count, page_read_count, body_characters, limits_json, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(debate_session_id, role) DO UPDATE SET research_session_id = excluded.research_session_id,
+        owner_participant_id = excluded.owner_participant_id, mode = excluded.mode, status = excluded.status,
+        goal = excluded.goal, tool_call_count = excluded.tool_call_count, search_count = excluded.search_count,
+        page_read_count = excluded.page_read_count, body_characters = excluded.body_characters,
+        limits_json = excluded.limits_json, updated_at = excluded.updated_at`,
+      state.debateSessionId, state.researchSessionId, state.ownerParticipantId, state.role,
+      state.mode, state.status, state.goal ?? null, state.toolCallCount, state.searchCount,
+      state.pageReadCount, state.bodyCharacters, JSON.stringify(state.limits), state.updatedAt
+    ))
+  }
+
+  listLoopStates(debateSessionId: string): PersistenceResult<ResearchLoopState[]> {
+    return this.mapAll('SELECT * FROM research_loop_states WHERE debate_session_id = ? ORDER BY role', (row) => ({
+      debateSessionId: this.text(row, 'debate_session_id'), researchSessionId: this.text(row, 'research_session_id'),
+      ownerParticipantId: this.text(row, 'owner_participant_id'), role: this.text(row, 'role') as ResearchOwnerRole,
+      mode: this.text(row, 'mode') as ResearchLoopState['mode'], status: this.text(row, 'status') as ResearchLoopState['status'],
+      goal: this.optional(row, 'goal'), toolCallCount: Number(row.tool_call_count), searchCount: Number(row.search_count),
+      pageReadCount: Number(row.page_read_count), bodyCharacters: Number(row.body_characters),
+      limits: this.jsonObject(row, 'limits_json') as unknown as ResearchLoopState['limits'],
+      updatedAt: this.text(row, 'updated_at')
+    }), debateSessionId)
+  }
+
+  markActiveToolCallsInterrupted(updatedAt: string): PersistenceResult<number> {
+    const result = this.database.run(
+      `UPDATE research_tool_calls SET status = 'interrupted', completed_at = ?
+       WHERE status IN ('running', 'pending-approval')`, updatedAt
+    )
+    if (!result.ok) return result
+    const loops = this.database.run(
+      `UPDATE research_loop_states SET status = 'interrupted', updated_at = ?
+       WHERE status IN ('running', 'waiting-approval', 'summarizing')`, updatedAt
+    )
+    return loops.ok ? { ok: true, value: Number(result.value.changes) + Number(loops.value.changes) } : loops
+  }
+
   private mapSession(row: Row): ResearchSession {
     return {
       ...this.owned(row), ownerRole: this.text(row, 'owner_role') as ResearchOwnerRole,
@@ -315,7 +449,8 @@ export class SQLiteResearchRepository implements ResearchRepository {
       url: this.optional(row, 'url'), domain: this.optional(row, 'domain'), summary: this.optional(row, 'summary'),
       publishedAt: this.optional(row, 'published_at'), fetchedAt: this.optional(row, 'fetched_at'),
       sourceType: this.text(row, 'source_type') as ResearchSource['sourceType'],
-      evaluation: this.optional(row, 'evaluation')
+      evaluation: this.optional(row, 'evaluation'), score: this.optionalNumber(row, 'score'),
+      verificationLevel: this.optional(row, 'verification_level') as ResearchSource['verificationLevel']
     }
   }
 
@@ -353,6 +488,29 @@ export class SQLiteResearchRepository implements ResearchRepository {
       title: this.text(row, 'title'), summary: this.optional(row, 'summary'),
       sourceUrl: this.optional(row, 'source_url'), currentStatus: this.text(row, 'current_status') as EvidenceStatus,
       createdAt: this.text(row, 'created_at')
+    }
+  }
+
+  private mapFetchedPage(row: Row): FetchedWebPage {
+    return {
+      ...this.owned(row), researchSessionId: this.text(row, 'research_session_id'),
+      sourceId: this.text(row, 'source_id'), url: this.text(row, 'url'), finalUrl: this.text(row, 'final_url'),
+      title: this.text(row, 'title'), author: this.optional(row, 'author'), publishedAt: this.optional(row, 'published_at'),
+      contentType: this.text(row, 'content_type'), bodyText: this.text(row, 'body_text'),
+      summary: this.text(row, 'summary'), excerpt: this.text(row, 'excerpt'), bodyCharacters: Number(row.body_characters),
+      status: this.text(row, 'status') as FetchedWebPage['status'], errorCode: this.optional(row, 'error_code'),
+      fetchedAt: this.text(row, 'fetched_at')
+    }
+  }
+
+  private mapToolCall(row: Row): ResearchToolCall {
+    return {
+      ...this.owned(row), researchSessionId: this.text(row, 'research_session_id'),
+      role: this.text(row, 'role') as ResearchOwnerRole, toolName: this.text(row, 'tool_name') as ResearchToolCall['toolName'],
+      operationKey: this.text(row, 'operation_key'), argumentsJson: this.text(row, 'arguments_json'),
+      status: this.text(row, 'status') as ResearchToolCall['status'], resultSummary: this.optional(row, 'result_summary'),
+      errorCode: this.optional(row, 'error_code'), errorDescriptionZh: this.optional(row, 'error_description_zh'),
+      completedAt: this.optional(row, 'completed_at')
     }
   }
 
@@ -396,6 +554,16 @@ export class SQLiteResearchRepository implements ResearchRepository {
   private optional(row: Row, key: string): string | undefined {
     const value = row[key]
     return value === null || value === undefined ? undefined : String(value)
+  }
+
+  private optionalNumber(row: Row, key: string): number | undefined {
+    const value = row[key]
+    return value === null || value === undefined ? undefined : Number(value)
+  }
+
+  private jsonObject(row: Row, key: string): Record<string, unknown> {
+    const value = JSON.parse(this.text(row, key)) as unknown
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
   }
 
   private jsonArray(row: Row, key: string): string[] {

@@ -10,13 +10,21 @@ import {
   type UnifiedError,
   type UnifiedRequest,
   type UnifiedResponse,
-  type UnifiedStreamEvent
+  type UnifiedStreamEvent,
+  type UnifiedToolCall
 } from './model-adapter'
 import { presentProviderFailure } from './provider-error-presentation'
 
 export interface OpenAIChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  name?: string
+  tool_call_id?: string
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }>
 }
 
 export interface OpenAIChatRequestBody {
@@ -24,6 +32,11 @@ export interface OpenAIChatRequestBody {
   messages: OpenAIChatMessage[]
   stream: boolean
   max_tokens?: number
+  tools?: Array<{
+    type: 'function'
+    function: { name: string; description: string; parameters: Record<string, unknown> }
+  }>
+  tool_choice?: 'auto' | 'none'
 }
 
 export class OpenAIChatAdapter implements ModelAdapter {
@@ -36,15 +49,21 @@ export class OpenAIChatAdapter implements ModelAdapter {
         throw new ModelAdapterError(this.httpError(response.status, response.body))
       }
 
-      const content = this.responseContent(response.body)
-      if (!content) {
+      const content = this.responseContent(response.body) ?? ''
+      const toolCalls = this.responseToolCalls(response.body)
+      if (!content && !toolCalls.length) {
         throw new ModelAdapterError({
           code: 'EMPTY_RESPONSE',
           message: 'OpenAI Chat response did not contain assistant content.',
           retryable: false
         })
       }
-      return { requestId: request.requestId, content, finishReason: 'stop' }
+      return {
+        requestId: request.requestId,
+        content,
+        finishReason: toolCalls.length ? 'tool_calls' : 'stop',
+        toolCalls: toolCalls.length ? toolCalls : undefined
+      }
     } catch (cause) {
       if (cause instanceof ModelAdapterError) throw cause
       throw new ModelAdapterError(this.transportError(request, cause))
@@ -121,10 +140,27 @@ export class OpenAIChatAdapter implements ModelAdapter {
 
     const body: OpenAIChatRequestBody = {
       model: request.modelId,
-      messages: request.messages,
+      messages: request.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+        name: message.name,
+        tool_call_id: message.toolCallId,
+        tool_calls: message.toolCalls?.map((call) => ({
+          id: call.id,
+          type: 'function' as const,
+          function: { name: call.name, arguments: JSON.stringify(call.arguments) }
+        }))
+      })),
       stream
     }
     if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens
+    if (request.tools?.length) {
+      body.tools = request.tools.map((tool) => ({
+        type: 'function',
+        function: { name: tool.name, description: tool.description, parameters: tool.parameters }
+      }))
+      body.tool_choice = request.toolChoice ?? 'auto'
+    }
 
     return {
       method: 'POST',
@@ -142,6 +178,28 @@ export class OpenAIChatAdapter implements ModelAdapter {
     const choice = this.firstChoice(body)
     if (!choice || !this.isRecord(choice.message)) return undefined
     return typeof choice.message.content === 'string' ? choice.message.content : undefined
+  }
+
+  private responseToolCalls(body: unknown): UnifiedToolCall[] {
+    const choice = this.firstChoice(body)
+    if (!choice || !this.isRecord(choice.message) || !Array.isArray(choice.message.tool_calls)) return []
+    return choice.message.tool_calls.flatMap((item): UnifiedToolCall[] => {
+      if (!this.isRecord(item) || typeof item.id !== 'string' || !this.isRecord(item.function) || typeof item.function.name !== 'string') return []
+      const rawArguments = typeof item.function.arguments === 'string' ? item.function.arguments : '{}'
+      try {
+        const parsed: unknown = JSON.parse(rawArguments)
+        if (!this.isRecord(parsed)) return []
+        return [{ id: item.id, name: item.function.name, arguments: parsed }]
+      } catch {
+        throw new ModelAdapterError({
+          code: 'REQUEST_FAILED',
+          message: `Tool call ${item.function.name} returned invalid JSON arguments.`,
+          titleZh: '工具参数无法解析',
+          descriptionZh: '模型返回的结构化工具参数不是有效 JSON。',
+          retryable: true
+        })
+      }
+    })
   }
 
   private streamDelta(event: Extract<HttpTransportStreamEvent, { type: 'data' }>): string | undefined {

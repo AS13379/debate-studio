@@ -394,6 +394,114 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_evidence_history_debate ON evidence_status_history(debate_session_id);
       CREATE INDEX idx_evidence_reference_issues_debate ON evidence_reference_issues(debate_session_id);
     `
+  },
+  {
+    version: 9,
+    name: 'autonomous_research_tools',
+    sql: `
+      CREATE TABLE search_provider_connections (
+        id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        provider_type TEXT NOT NULL CHECK (provider_type = 'tavily'),
+        base_url TEXT NOT NULL,
+        credential_ref TEXT NOT NULL,
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        is_default INTEGER NOT NULL CHECK (is_default IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE UNIQUE INDEX idx_search_provider_default
+        ON search_provider_connections(is_default) WHERE is_default = 1;
+
+      ALTER TABLE research_sources ADD COLUMN score REAL;
+      ALTER TABLE research_sources ADD COLUMN verification_level TEXT;
+
+      CREATE TABLE fetched_web_pages (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL REFERENCES research_sources(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        url TEXT NOT NULL,
+        final_url TEXT NOT NULL,
+        title TEXT NOT NULL,
+        author TEXT,
+        published_at TEXT,
+        content_type TEXT NOT NULL,
+        body_text TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        excerpt TEXT NOT NULL,
+        body_characters INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('completed', 'inaccessible')),
+        error_code TEXT,
+        fetched_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (source_id)
+      );
+
+      CREATE TABLE source_evaluations (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        source_id TEXT NOT NULL REFERENCES research_sources(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        purpose TEXT NOT NULL,
+        relevance TEXT NOT NULL,
+        stance TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        published_at TEXT,
+        credibility TEXT NOT NULL,
+        limitations TEXT NOT NULL,
+        recommend_publication INTEGER NOT NULL CHECK (recommend_publication IN (0, 1)),
+        based_on TEXT NOT NULL CHECK (based_on IN ('summary-only', 'full-text')),
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE research_tool_calls (
+        id TEXT PRIMARY KEY,
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        visibility TEXT NOT NULL CHECK (visibility IN ('public', 'affirmative-private', 'negative-private', 'moderator-private')),
+        role TEXT NOT NULL CHECK (role IN ('affirmative', 'negative', 'moderator')),
+        tool_name TEXT NOT NULL,
+        operation_key TEXT NOT NULL,
+        arguments_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result_summary TEXT,
+        error_code TEXT,
+        error_description_zh TEXT,
+        created_at TEXT NOT NULL,
+        completed_at TEXT
+      );
+
+      CREATE UNIQUE INDEX idx_research_tool_completed_operation
+        ON research_tool_calls(operation_key) WHERE status = 'completed';
+      CREATE INDEX idx_research_tool_calls_debate ON research_tool_calls(debate_session_id, created_at);
+
+      CREATE TABLE research_loop_states (
+        debate_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        research_session_id TEXT NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+        owner_participant_id TEXT NOT NULL REFERENCES participants(id),
+        role TEXT NOT NULL CHECK (role IN ('affirmative', 'negative', 'moderator')),
+        mode TEXT NOT NULL CHECK (mode IN ('automatic', 'step-confirmation')),
+        status TEXT NOT NULL,
+        goal TEXT,
+        tool_call_count INTEGER NOT NULL,
+        search_count INTEGER NOT NULL,
+        page_read_count INTEGER NOT NULL,
+        body_characters INTEGER NOT NULL,
+        limits_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (debate_session_id, role)
+      );
+
+      CREATE INDEX idx_fetched_web_pages_debate ON fetched_web_pages(debate_session_id);
+      CREATE INDEX idx_source_evaluations_debate ON source_evaluations(debate_session_id);
+    `
   }
 ]
 

@@ -86,6 +86,24 @@ describe('OpenAIChatAdapter', () => {
     })
   })
 
+  it('maps native function tools and parses tool calls', async () => {
+    const transport = new MockHttpTransport({ response: { status: 200, body: {
+      choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
+        id: 'call-1', type: 'function', function: { name: 'searchWeb', arguments: '{"query":"测试"}' }
+      }] }, finish_reason: 'tool_calls' }]
+    } } })
+    const adapter = new OpenAIChatAdapter(transport)
+    const response = await adapter.complete({
+      ...request(),
+      tools: [{ name: 'searchWeb', description: '搜索', parameters: { type: 'object' } }],
+      toolChoice: 'auto'
+    })
+    expect((transport.requests[0].body as OpenAIChatRequestBody & { tools: unknown[]; tool_choice: string })).toMatchObject({
+      tool_choice: 'auto', tools: [{ type: 'function', function: { name: 'searchWeb' } }]
+    })
+    expect(response).toEqual({ requestId: 'request-openai', content: '', finishReason: 'tool_calls', toolCalls: [{ id: 'call-1', name: 'searchWeb', arguments: { query: '测试' } }] })
+  })
+
   it('converts OpenAI stream chunks into UnifiedStreamEvent values', async () => {
     const transport = new MockHttpTransport({
       streamEvents: [

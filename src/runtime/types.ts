@@ -1,7 +1,7 @@
 import type { DebateParticipantConfig, DebateParticipantRole } from '../participant-config'
 import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { SessionRecord } from '../persistence'
-import type { ModelAdapter, UnifiedError, UnifiedMessage, UnifiedRequest } from '../providers'
+import type { ModelAdapter, UnifiedError, UnifiedMessage, UnifiedRequest, UnifiedResponse, UnifiedStreamEvent } from '../providers'
 
 export interface RuntimeParticipant {
   role: DebateParticipantRole
@@ -52,4 +52,10 @@ export type RuntimeTurnPreparationResult =
 
 export interface RuntimePromptBuilder {
   build(request: UnifiedRequest, participant: RuntimeParticipant, runtimeConfig: DebateRuntimeConfig): UnifiedMessage[]
+}
+
+export interface RuntimeResearchExecutor {
+  shouldHandle(request: UnifiedRequest, participant: RuntimeParticipant): boolean
+  complete(request: UnifiedRequest, participant: RuntimeParticipant): Promise<UnifiedResponse>
+  stream(request: UnifiedRequest, participant: RuntimeParticipant): AsyncIterable<UnifiedStreamEvent>
 }

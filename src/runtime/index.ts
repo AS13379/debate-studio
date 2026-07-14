@@ -2,6 +2,8 @@ export { DebateRuntimeResolver } from './debate-runtime-resolver'
 export { DebateRuntimePreparationService } from './debate-runtime-preparation-service'
 export { RuntimeTurnExecutor } from './runtime-turn-executor'
 export { TurnRunnerFactory } from './turn-runner-factory'
+export { AutonomousResearchExecutor } from './autonomous-research-executor'
+export type { AutonomousResearchExecutorOptions } from './autonomous-research-executor'
 export type {
   DebateRuntimeConfig,
   RuntimeParticipant,
@@ -10,7 +12,8 @@ export type {
   RuntimeResolveResult,
   RuntimeTurnExecutionError,
   RuntimeTurnPreparationResult,
-  RuntimePromptBuilder
+  RuntimePromptBuilder,
+  RuntimeResearchExecutor
 } from './types'
 export type { RuntimeTurnRunnerBundle } from './turn-runner-factory'
 export type {

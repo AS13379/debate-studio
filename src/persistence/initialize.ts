@@ -13,6 +13,7 @@ import {
 import { SQLiteSessionRepository } from './sqlite-session-repository'
 import { SQLiteSettingsRepository } from './sqlite-settings-repository'
 import { SQLiteResearchRepository } from './sqlite-research-repository'
+import { SQLiteSearchProviderConnectionRepository } from './sqlite-search-provider-connection-repository'
 
 export interface PersistenceContext {
   database: Database
@@ -47,7 +48,8 @@ export function initializePersistence(options: DatabaseOptions): PersistenceResu
         turns: new SQLiteTurnRepository(database),
         events: new SQLiteEventRepository(database),
         usage: new SQLiteUsageRepository(database),
-        research: new SQLiteResearchRepository(database)
+        research: new SQLiteResearchRepository(database),
+        searchProviderConnections: new SQLiteSearchProviderConnectionRepository(database)
       }
     }
   }
