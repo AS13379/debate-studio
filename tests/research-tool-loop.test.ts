@@ -87,19 +87,29 @@ describe('ResearchToolLoop', () => {
     seeded.persistence.database.close()
   })
 
-  it('waits for approval in step mode and supports explicit denial', async () => {
+  it('runs search automatically in step mode and only asks before publishing evidence', async () => {
     const seeded = seed()
     const approval = new ResearchApprovalController()
-    const adapter = new ScriptedAdapter((index) => index === 0
-      ? tool('searchWeb', { query: '需审批搜索' })
-      : tool('finishResearch', { summary: '用户拒绝搜索后结束。' }))
-    const running = loop(seeded, adapter, new RecordingSearchTool(), approval).run(request(), context(seeded.researchSession, 'step-confirmation'))
+    const search = new RecordingSearchTool()
+    const adapter = new ScriptedAdapter((index) => {
+      const sources = seeded.persistence.repositories.research.listSources('session-1')
+      const sourceId = sources.ok ? sources.value[0]?.id : undefined
+      return [
+        tool('searchWeb', { query: '自动搜索' }),
+        tool('publishEvidence', { sourceId }),
+        tool('finishResearch', { summary: '用户拒绝发布后结束。' })
+      ][index]!
+    })
+    const running = loop(seeded, adapter, search, approval).run(request(), context(seeded.researchSession, 'step-confirmation'))
     const pending = await waitForPending(seeded.persistence)
+    expect(search.calls).toBe(1)
+    expect(pending.toolName).toBe('publishEvidence')
     expect(pending.status).toBe('pending-approval')
     expect(approval.decide(pending.id, false)).toBe(true)
     const result = await running
-    expect(result.content).toContain('拒绝搜索')
-    expect(seeded.persistence.repositories.research.listSources('session-1')).toMatchObject({ ok: true, value: [] })
+    expect(result.content).toContain('拒绝发布')
+    expect(seeded.persistence.repositories.research.listSources('session-1')).toMatchObject({ ok: true, value: [expect.any(Object)] })
+    expect(seeded.persistence.repositories.research.listEvidence('session-1')).toMatchObject({ ok: true, value: [] })
     seeded.persistence.database.close()
   })
 
@@ -121,7 +131,7 @@ describe('ResearchToolLoop', () => {
   it('cancels a pending approval and restores active tool state as interrupted', async () => {
     const seeded = seed()
     const approval = new ResearchApprovalController()
-    const adapter = new ScriptedAdapter(() => tool('searchWeb', { query: '待取消搜索' }))
+    const adapter = new ScriptedAdapter(() => tool('publishEvidence', { sourceId: 'pending-source' }))
     const controller = new AbortController()
     const running = loop(seeded, adapter, new RecordingSearchTool(), approval).run(
       { ...request(), signal: controller.signal }, context(seeded.researchSession, 'step-confirmation')

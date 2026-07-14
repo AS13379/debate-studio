@@ -97,6 +97,12 @@ export class ResearchApplication {
     if (!toolCalls.ok) return this.persistenceError(toolCalls.error)
     const loopStates = repository.listLoopStates(sessionId)
     if (!loopStates.ok) return this.persistenceError(loopStates.error)
+    const runtimeSettingsResult = this.dependencies.persistence.repositories.settings.get<ResearchRuntimeSettingsInput>('research.runtime.defaults')
+    if (!runtimeSettingsResult.ok) return this.persistenceError(runtimeSettingsResult.error)
+    const runtimeSettings = runtimeSettingsResult.value ?? {
+      mode: 'automatic' as const,
+      limits: { maxToolCalls: 12, maxSearches: 3, maxPageReads: 3, maxBodyCharacters: 45_000 }
+    }
 
     const ownerFor = (role: DebateParticipantRole) => participants.value.find((item) => item.role === role)?.id
     const workspaceFor = (role: ResearchOwnerRole): RoleResearchWorkspaceDto => {
@@ -119,6 +125,7 @@ export class ResearchApplication {
       ok: true,
       value: {
         debateSessionId: sessionId,
+        runtimeSettings,
         publicPool: pool.value,
         publicAssets: assets.value.filter((item) => item.visibility === 'public').map((item) => this.assetDto(item)),
         affirmative: workspaceFor('affirmative'), negative: workspaceFor('negative'), moderator: workspaceFor('moderator'),

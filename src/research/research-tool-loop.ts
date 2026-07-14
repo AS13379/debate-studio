@@ -466,7 +466,7 @@ export class ResearchToolLoop {
   }
 
   private requiresApproval(name: ResearchToolName): boolean {
-    return name === 'searchWeb' || name === 'readWebPage'
+    return name === 'publishEvidence'
   }
 
   private operationKey(context: ResearchToolLoopContext, name: ResearchToolName, args: Record<string, unknown>): string {

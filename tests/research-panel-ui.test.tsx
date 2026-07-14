@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { ModeratorResearchToolSection } from '../src/renderer/src/components/ResearchPanel'
+import { ModeratorResearchToolSection, ResearchPresetSelector, researchPresetForLimits } from '../src/renderer/src/components/ResearchPanel'
 import type { RoleResearchWorkspaceDto } from '../src/shared/ipc-contract'
 
 describe('research panel UI', () => {
@@ -21,9 +21,22 @@ describe('research panel UI', () => {
       <ModeratorResearchToolSection workspace={workspace} onDecision={async () => undefined} />
     )
 
-    expect(html).toContain('主持人研究工具')
+    expect(html).toContain('主持人研究记录')
     expect(html).toContain('searchWeb')
     expect(html).toContain('允许')
     expect(html).toContain('拒绝')
+  })
+
+  it('offers simple research presets instead of raw numeric limit inputs', () => {
+    const html = renderToStaticMarkup(<ResearchPresetSelector value="balanced" onChange={() => undefined} />)
+
+    expect(html).toContain('精简')
+    expect(html).toContain('标准')
+    expect(html).toContain('深入')
+    expect(html).toContain('更省额度')
+    expect(html).not.toContain('type="number"')
+    expect(html).toContain('aria-pressed="true"')
+    expect(researchPresetForLimits({ maxToolCalls: 8, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 25_000 })).toBe('quick')
+    expect(researchPresetForLimits({ maxToolCalls: 20, maxSearches: 5, maxPageReads: 5, maxBodyCharacters: 80_000 })).toBe('deep')
   })
 })

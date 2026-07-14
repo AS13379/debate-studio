@@ -13,15 +13,52 @@ interface ResearchPanelProps {
   onError(message: string): void
 }
 
+export type ResearchPresetId = 'quick' | 'balanced' | 'deep'
+
+export const RESEARCH_PRESETS = {
+  quick: {
+    label: '精简', description: '更快、更省额度',
+    limits: { maxToolCalls: 8, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 25_000 }
+  },
+  balanced: {
+    label: '标准', description: '搜索深度与消耗平衡',
+    limits: { maxToolCalls: 12, maxSearches: 3, maxPageReads: 3, maxBodyCharacters: 45_000 }
+  },
+  deep: {
+    label: '深入', description: '更多来源与正文阅读',
+    limits: { maxToolCalls: 20, maxSearches: 5, maxPageReads: 5, maxBodyCharacters: 80_000 }
+  }
+} as const
+
+export function researchPresetForLimits(limits: ResearchWorkspaceDto['runtimeSettings']['limits']): ResearchPresetId {
+  const matching = (Object.entries(RESEARCH_PRESETS) as Array<[ResearchPresetId, typeof RESEARCH_PRESETS[ResearchPresetId]]>)
+    .find(([, preset]) => Object.entries(preset.limits).every(([key, value]) => limits[key as keyof typeof limits] === value))
+  return matching?.[0] ?? 'balanced'
+}
+
+export function ResearchPresetSelector({ value, onChange }: { value: ResearchPresetId; onChange(value: ResearchPresetId): void }) {
+  return <div className="research-preset-selector" role="group" aria-label="研究深度">
+    {(Object.entries(RESEARCH_PRESETS) as Array<[ResearchPresetId, typeof RESEARCH_PRESETS[ResearchPresetId]]>).map(([id, preset]) => (
+      <button key={id} type="button" className={value === id ? 'selected' : ''} aria-pressed={value === id} onClick={() => onChange(id)}>
+        <strong>{preset.label}</strong><span>{preset.description}</span>
+      </button>
+    ))}
+  </div>
+}
+
 export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProps) {
   const [workspace, setWorkspace] = useState<ResearchWorkspaceDto>()
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState<'automatic' | 'step-confirmation'>('automatic')
-  const [limits, setLimits] = useState({ maxToolCalls: 12, maxSearches: 3, maxPageReads: 3, maxBodyCharacters: 45000 })
+  const [presetId, setPresetId] = useState<ResearchPresetId>('balanced')
 
   const reload = async (): Promise<void> => {
     const result = await window.debateStudio.loadResearchWorkspace({ sessionId: detail.sessionId })
-    if (result.ok) setWorkspace(result.value)
+    if (result.ok) {
+      setWorkspace(result.value)
+      setMode(result.value.runtimeSettings.mode)
+      setPresetId(researchPresetForLimits(result.value.runtimeSettings.limits))
+    }
     else onError(result.error.descriptionZh)
   }
 
@@ -43,38 +80,39 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
 
   if (!workspace) return <section className="panel muted">正在加载研究与证据数据…</section>
 
+  const activeResearch = ([['主持人', workspace.moderator], ['正方', workspace.affirmative], ['反方', workspace.negative]] as const)
+    .find(([, roleWorkspace]) => roleWorkspace.loopState && ['running', 'waiting-approval', 'summarizing'].includes(roleWorkspace.loopState.status))
+  const limits = RESEARCH_PRESETS[presetId].limits
+
   return (
-    <details className="research-panel panel" open>
+    <details className={`research-panel panel ${activeResearch ? 'is-active' : ''}`}>
       <summary>
-        <div><strong>研究与证据</strong><span>公共资源池、双方隔离研究区与公开证据桌</span></div>
+        <div><strong className={activeResearch ? 'research-shimmer-text' : undefined}>{activeResearch ? '研究中…' : '研究资料与证据'}</strong><span>{activeResearch ? `${activeResearch[0]}正在搜索、阅读并整理资料` : '已折叠；需要时点击三角展开'}</span></div>
         <span>{workspace.evidence.length} 条公开证据</span>
       </summary>
 
       <div className="research-content">
-        {([['主持人', workspace.moderator], ['正方', workspace.affirmative], ['反方', workspace.negative]] as const).map(([label, roleWorkspace]) => roleWorkspace.loopState && ['running', 'waiting-approval', 'summarizing'].includes(roleWorkspace.loopState.status) ? <div className="notice" key={label}>当前研究角色：<strong>{label}</strong> · 进度 {roleWorkspace.loopState.status} · 目标 {roleWorkspace.loopState.goal?.slice(0, 160) || '未填写'}
-        </div> : null)}
-        <section className="research-section research-controls">
-          <div className="section-heading"><div><strong>自主研究控制</strong><span>限制会在主进程强制执行，不依赖模型自律</span></div></div>
-          <div className="research-limit-grid">
-            <label className="field">执行模式<select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="automatic">自动研究</option><option value="step-confirmation">逐步确认</option></select></label>
-            <label className="field">最大工具调用<input type="number" min="1" max="50" value={limits.maxToolCalls} onChange={(event) => setLimits({ ...limits, maxToolCalls: Number(event.target.value) })} /></label>
-            <label className="field">最大搜索次数<input type="number" min="0" max="20" value={limits.maxSearches} onChange={(event) => setLimits({ ...limits, maxSearches: Number(event.target.value) })} /></label>
-            <label className="field">最大读页次数<input type="number" min="0" max="20" value={limits.maxPageReads} onChange={(event) => setLimits({ ...limits, maxPageReads: Number(event.target.value) })} /></label>
-            <label className="field">正文总字符上限<input type="number" min="1000" max="500000" step="1000" value={limits.maxBodyCharacters} onChange={(event) => setLimits({ ...limits, maxBodyCharacters: Number(event.target.value) })} /></label>
+        {activeResearch && <div className="research-activity-line"><span className="activity-dot" /><strong>{activeResearch[0]}研究正在进行</strong><span>系统会自动完成搜索和网页阅读</span></div>}
+        <details className="research-section collapsible-section research-controls">
+          <summary><div><strong>研究设置</strong><span>{RESEARCH_PRESETS[presetId].label} · {mode === 'automatic' ? '全自动' : '只在发布证据前确认'}</span></div></summary>
+          <div className="collapsible-body">
+            <label className="field compact-field">执行模式<select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="automatic">全自动（推荐）</option><option value="step-confirmation">只在发布证据前确认</option></select></label>
+            <ResearchPresetSelector value={presetId} onChange={setPresetId} />
+            <div className="compact-actions">
+              <button className="button secondary" onClick={() => void act(() => window.debateStudio.saveResearchRuntimeSettings({ mode, limits }))}>保存研究偏好</button>
+              <button className="button danger" onClick={() => void window.debateStudio.stopDebate({ sessionId: detail.sessionId }).then((result) => { if (!result.ok) onError(result.error.descriptionZh) })}>停止研究 / 辩论</button>
+            </div>
           </div>
-          <div className="compact-actions">
-            <button className="button secondary" onClick={() => void act(() => window.debateStudio.saveResearchRuntimeSettings({ mode, limits }))}>保存研究模式与限制</button>
-            <button className="button danger" onClick={() => void window.debateStudio.stopDebate({ sessionId: detail.sessionId }).then((result) => { if (!result.ok) onError(result.error.descriptionZh) })}>停止研究 / 辩论</button>
-          </div>
-        </section>
+        </details>
         <ModeratorResearchToolSection workspace={workspace.moderator} onDecision={async (callId, approved) => {
           const result = await window.debateStudio.decideResearchToolCall({ callId, approved })
           if (!result.ok) onError(result.error.descriptionZh)
           await reload()
         }} />
-        <section className="research-section public-pool">
-          <div className="section-heading"><div><strong>公共资源池</strong><span>所有角色可见；主持人不会在此替双方完成论证</span></div></div>
-          {workspace.publicPool ? (
+        <details className="research-section collapsible-section public-pool">
+          <summary><div><strong>公共资源池</strong><span>{workspace.publicAssets.length} 条人工资料</span></div></summary>
+          <div className="collapsible-body">
+            {workspace.publicPool ? (
             <div className="research-copy">
               <p><b>辩题定义：</b>{workspace.publicPool.topicDefinition}</p>
               <p><b>范围：</b>{workspace.publicPool.temporalScope || '未限定时间'} · {workspace.publicPool.geographicScope || '未限定地域'}</p>
@@ -82,20 +120,21 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
               <p><b>争议方向：</b>{workspace.publicPool.controversyDirections.join('、') || '暂无'}</p>
               <p><b>事实边界：</b>{workspace.publicPool.factBoundaries.join('、') || '暂无'}</p>
             </div>
-          ) : <p className="muted">运行到“公共资源池”阶段后，主持人输出会保存在这里。</p>}
-          {participants.moderator && (
-            <AssetComposer
-              label="添加公共资料"
-              sessionId={detail.sessionId}
-              ownerParticipantId={participants.moderator.id}
-              visibility="public"
-              disabled={busy}
-              onError={onError}
-              onSaved={reload}
-            />
-          )}
-          <AssetList assets={workspace.publicAssets} />
-        </section>
+            ) : <p className="muted">运行到“公共资源池”阶段后，主持人输出会保存在这里。</p>}
+            {participants.moderator && (
+              <AssetComposer
+                label="添加公共资料"
+                sessionId={detail.sessionId}
+                ownerParticipantId={participants.moderator.id}
+                visibility="public"
+                disabled={busy}
+                onError={onError}
+                onSaved={reload}
+              />
+            )}
+            <AssetList assets={workspace.publicAssets} />
+          </div>
+        </details>
 
         <div className="private-research-grid">
           {participants.affirmative && <RoleWorkspace
@@ -116,39 +155,43 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
           />}
         </div>
 
-        <section className="research-section evidence-desk">
-          <div className="section-heading"><div><strong>公开证据桌</strong><span>发布不会删除原私有资料；状态变化保留完整历史</span></div></div>
-          {workspace.evidence.length === 0 ? <p className="muted">尚未发布公开证据。</p> : workspace.evidence.map((evidence) => {
+        <details className="research-section collapsible-section evidence-desk">
+          <summary><div><strong>公开证据桌</strong><span>{workspace.evidence.length} 条证据</span></div></summary>
+          <div className="collapsible-body">
+            {workspace.evidence.length === 0 ? <p className="muted">尚未发布公开证据。</p> : workspace.evidence.map((evidence) => {
             const history = workspace.evidenceHistory.filter((item) => item.evidenceId === evidence.id)
             const challenger = evidence.submitterRole === 'affirmative' ? participants.negative : participants.affirmative
             return (
-              <article className="evidence-card" key={evidence.id}>
-                <header><strong>{evidence.publicCode} · {evidence.title}</strong><span className={`evidence-status evidence-${evidence.currentStatus}`}>{evidenceStatusLabel(evidence.currentStatus)}</span></header>
-                <p>{evidence.summary || '无摘要'}</p>
-                <small>{evidence.sourceUrl || '人工资料 / 本地资产'}</small>
-                <div className="compact-actions">
-                  {challenger && <button className="button secondary" disabled={busy} onClick={() => void act(() => window.debateStudio.challengeEvidence({
-                    sessionId: detail.sessionId, evidenceId: evidence.id, changedBy: challenger.id, note: '对该证据的适用性或可靠性提出质疑。'
-                  }))}>提出质疑</button>}
-                  {participants.moderator && <EvidenceStatusEditor
-                    value={evidence.currentStatus} disabled={busy}
-                    onSave={(status) => act(() => window.debateStudio.updateEvidenceStatus({
-                      sessionId: detail.sessionId, evidenceId: evidence.id, changedBy: participants.moderator!.id,
-                      status, note: '主持人在公开证据桌更新状态。'
-                    }))}
-                  />}
+              <details className="evidence-card" key={evidence.id}>
+                <summary><strong>{evidence.publicCode} · {evidence.title}</strong><span className={`evidence-status evidence-${evidence.currentStatus}`}>{evidenceStatusLabel(evidence.currentStatus)}</span></summary>
+                <div className="evidence-body">
+                  <p>{evidence.summary || '无摘要'}</p>
+                  <small>{evidence.sourceUrl || '人工资料 / 本地资产'}</small>
+                  <div className="compact-actions">
+                    {challenger && <button className="button secondary" disabled={busy} onClick={() => void act(() => window.debateStudio.challengeEvidence({
+                      sessionId: detail.sessionId, evidenceId: evidence.id, changedBy: challenger.id, note: '对该证据的适用性或可靠性提出质疑。'
+                    }))}>提出质疑</button>}
+                    {participants.moderator && <EvidenceStatusEditor
+                      value={evidence.currentStatus} disabled={busy}
+                      onSave={(status) => act(() => window.debateStudio.updateEvidenceStatus({
+                        sessionId: detail.sessionId, evidenceId: evidence.id, changedBy: participants.moderator!.id,
+                        status, note: '主持人在公开证据桌更新状态。'
+                      }))}
+                    />}
+                  </div>
+                  <details className="history-list"><summary>状态历史（{history.length}）</summary>{history.map((item) => (
+                    <p key={item.id}>{new Date(item.createdAt).toLocaleString('zh-CN')} · {evidenceStatusLabel(item.toStatus)} · {item.note}</p>
+                  ))}</details>
                 </div>
-                <details className="history-list"><summary>状态历史（{history.length}）</summary>{history.map((item) => (
-                  <p key={item.id}>{new Date(item.createdAt).toLocaleString('zh-CN')} · {evidenceStatusLabel(item.toStatus)} · {item.note}</p>
-                ))}</details>
-              </article>
+              </details>
             )
-          })}
-          {workspace.invalidEvidenceReferences.length > 0 && <div className="notice error">
-            检测到 {workspace.invalidEvidenceReferences.length} 个不存在的证据编号引用：
-            {workspace.invalidEvidenceReferences.map((item) => item.referenceCode).join('、')}
-          </div>}
-        </section>
+            })}
+            {workspace.invalidEvidenceReferences.length > 0 && <div className="notice error">
+              检测到 {workspace.invalidEvidenceReferences.length} 个不存在的证据编号引用：
+              {workspace.invalidEvidenceReferences.map((item) => item.referenceCode).join('、')}
+            </div>}
+          </div>
+        </details>
       </div>
     </details>
   )
@@ -159,11 +202,10 @@ export function ModeratorResearchToolSection({ workspace, onDecision }: {
   onDecision(callId: string, approved: boolean): Promise<void>
 }) {
   if (!workspace.toolCalls.length && !workspace.fetchedPages.length && !workspace.sourceEvaluations.length) return null
-  return <section className="research-section moderator-tool-activity">
-    <div className="section-heading"><div><strong>主持人研究工具</strong><span>公共资源方向的搜索、读页与审批记录</span></div></div>
-    <ToolCallList calls={workspace.toolCalls} onDecision={onDecision} />
-    <FetchedPageList workspace={workspace} />
-  </section>
+  return <details className="research-section collapsible-section moderator-tool-activity">
+    <summary><div><strong>主持人研究记录</strong><span>{workspace.toolCalls.length} 次工具调用</span></div></summary>
+    <div className="collapsible-body"><ToolCallList calls={workspace.toolCalls} onDecision={onDecision} /><FetchedPageList workspace={workspace} /></div>
+  </details>
 }
 
 function RoleWorkspace({ title, role, workspace, sessionId, participantId, disabled, onError, onSaved, onPublish }: {
@@ -184,28 +226,31 @@ function RoleWorkspace({ title, role, workspace, sessionId, participantId, disab
     else { setQuery(''); await onSaved() }
   }
   return (
-    <section className={`research-section private-workspace role-${role}`}>
-      <div className="section-heading"><div><strong>{title}</strong><span>仅注入本方模型上下文；用户界面可查看</span></div></div>
-      <ResearchList title="研究目标" values={workspace.goals.map((item) => item.description)} />
-      <ResearchList title="准备核实的问题" values={workspace.queries.map((item) => item.query)} />
-      <ResearchList title="资料与评价" values={workspace.sources.map((item) => `${item.title}：${item.evaluation || item.summary || '未评价'}`)} />
-      <ResearchList title="研究笔记" values={workspace.notes.map((item) => item.content)} />
-      <ResearchList title="暂定主张" values={workspace.claims.map((item) => item.claim)} />
-      {workspace.loopState && <div className="research-progress">
-        <strong>研究进度：{workspace.loopState.status}</strong>
-        <span>工具 {workspace.loopState.toolCallCount}/{workspace.loopState.limits.maxToolCalls} · 搜索 {workspace.loopState.searchCount}/{workspace.loopState.limits.maxSearches} · 读页 {workspace.loopState.pageReadCount}/{workspace.loopState.limits.maxPageReads} · 正文 {workspace.loopState.bodyCharacters.toLocaleString()}/{workspace.loopState.limits.maxBodyCharacters.toLocaleString()}</span>
-        {workspace.loopState.goal && <small>当前研究目标：{workspace.loopState.goal.slice(0, 300)}</small>}
-      </div>}
-      <ToolCallList calls={workspace.toolCalls} onDecision={async (callId, approved) => {
-        const result = await window.debateStudio.decideResearchToolCall({ callId, approved })
-        if (!result.ok) onError(result.error.descriptionZh)
-        await onSaved()
-      }} />
-      <FetchedPageList workspace={workspace} />
-      <div className="mock-search-row"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入 Mock 搜索词（不访问网络）" /><button className="button secondary" disabled={disabled || !query.trim()} onClick={() => void search()}>Mock 搜索</button></div>
-      <AssetComposer label="添加本方资料" sessionId={sessionId} ownerParticipantId={participantId} visibility={`${role}-private`} disabled={disabled} onError={onError} onSaved={onSaved} />
-      <AssetList assets={workspace.assets} onPublish={onPublish} />
-    </section>
+    <details className={`research-section collapsible-section private-workspace role-${role}`}>
+      <summary><div><strong>{title}</strong><span>{workspace.sources.length} 条资料 · {workspace.claims.length} 条暂定主张</span></div></summary>
+      <div className="collapsible-body">
+        {workspace.loopState && <div className="research-progress">
+          <strong>{['running', 'waiting-approval', 'summarizing'].includes(workspace.loopState.status) ? '研究中…' : '研究已记录'}</strong>
+          <span>工具 {workspace.loopState.toolCallCount}/{workspace.loopState.limits.maxToolCalls} · 搜索 {workspace.loopState.searchCount}/{workspace.loopState.limits.maxSearches} · 读页 {workspace.loopState.pageReadCount}/{workspace.loopState.limits.maxPageReads}</span>
+        </div>}
+        <ResearchList title="研究目标" values={workspace.goals.map((item) => item.description)} />
+        <ResearchList title="准备核实的问题" values={workspace.queries.map((item) => item.query)} />
+        <ResearchList title="资料与评价" values={workspace.sources.map((item) => `${item.title}：${item.evaluation || item.summary || '未评价'}`)} />
+        <ResearchList title="研究笔记" values={workspace.notes.map((item) => item.content)} />
+        <ResearchList title="暂定主张" values={workspace.claims.map((item) => item.claim)} />
+        <ToolCallList calls={workspace.toolCalls} onDecision={async (callId, approved) => {
+          const result = await window.debateStudio.decideResearchToolCall({ callId, approved })
+          if (!result.ok) onError(result.error.descriptionZh)
+          await onSaved()
+        }} />
+        <FetchedPageList workspace={workspace} />
+        <details className="research-subsection"><summary>手动添加或搜索资料</summary><div className="research-subsection-body">
+          <div className="mock-search-row"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入 Mock 搜索词（不访问网络）" /><button className="button secondary" disabled={disabled || !query.trim()} onClick={() => void search()}>Mock 搜索</button></div>
+          <AssetComposer label="添加本方资料" sessionId={sessionId} ownerParticipantId={participantId} visibility={`${role}-private`} disabled={disabled} onError={onError} onSaved={onSaved} />
+          <AssetList assets={workspace.assets} onPublish={onPublish} />
+        </div></details>
+      </div>
+    </details>
   )
 }
 
@@ -234,7 +279,7 @@ function FetchedPageList({ workspace }: { workspace: RoleResearchWorkspaceDto })
 }
 
 function ResearchList({ title, values }: { title: string; values: string[] }) {
-  return <div className="research-list"><b>{title}</b>{values.length ? <ul>{values.map((value, index) => <li key={`${index}-${value.slice(0, 20)}`}>{value}</li>)}</ul> : <span>暂无</span>}</div>
+  return <details className="research-list"><summary><b>{title}</b><span>{values.length}</span></summary>{values.length ? <ul>{values.map((value, index) => <li key={`${index}-${value.slice(0, 20)}`}>{value}</li>)}</ul> : <span>暂无</span>}</details>
 }
 
 function AssetList({ assets, onPublish }: { assets: ResearchAssetDto[]; onPublish?(assetId: string): Promise<void> }) {

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { HomePage } from '../src/renderer/src/pages/HomePage'
+import { isResearchPreparationStage } from '../src/renderer/src/pages/LiveDebatePage'
 import { applyRunEvent } from '../src/renderer/src/run-state'
 
 describe('Renderer state', () => {
@@ -56,5 +57,13 @@ describe('Renderer state', () => {
 
     expect(streamed.turns).toEqual([expect.objectContaining({ id: 'turn-ui', status: 'streaming', content: '流式内容' })])
     expect(completed.turns).toEqual([expect.objectContaining({ id: 'turn-ui', status: 'completed', content: '流式内容' })])
+  })
+
+  it('separates research preparation from the formal debate timeline', () => {
+    expect(isResearchPreparationStage('public_pool')).toBe(true)
+    expect(isResearchPreparationStage('negative_research')).toBe(true)
+    expect(isResearchPreparationStage('argument_drafting')).toBe(true)
+    expect(isResearchPreparationStage('affirmative_opening')).toBe(false)
+    expect(isResearchPreparationStage('free_debate')).toBe(false)
   })
 })

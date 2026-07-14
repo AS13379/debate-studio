@@ -11,6 +11,7 @@ import type {
   RunErrorDto
 } from '../../../shared/ipc-contract'
 import { ErrorRecoveryPanel } from '../components/ErrorRecoveryPanel'
+import { DebateProgress } from '../components/DebateProgress'
 import { ResearchPanel } from '../components/ResearchPanel'
 import { applyRunEvent, type LiveRunSnapshot } from '../run-state'
 import { stageLabel, statusLabel } from './HomePage'
@@ -23,6 +24,15 @@ export interface LiveDebatePageProps {
 
 export function isDebateStartBlocked(setup?: Pick<DebateSetupDto, 'validation'>): boolean {
   return !setup?.validation.valid
+}
+
+const RESEARCH_PREPARATION_STAGES = new Set([
+  'validating', 'moderating', 'public_pool', 'affirmative_planning', 'negative_planning',
+  'affirmative_research', 'negative_research', 'argument_drafting'
+])
+
+export function isResearchPreparationStage(stage: string): boolean {
+  return RESEARCH_PREPARATION_STAGES.has(stage)
 }
 
 export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePageProps) {
@@ -90,6 +100,20 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
     .reverse()
     .find((turn) => ['failed', 'cancelled', 'interrupted'].includes(turn.status))?.id
   const startBlocked = isDebateStartBlocked(setup)
+  const researchTurns = snapshot.turns.filter((turn) => isResearchPreparationStage(turn.stage))
+  const debateTurns = snapshot.turns.filter((turn) => !isResearchPreparationStage(turn.stage))
+  const renderTurn = (turn: DebateTurnDto) => {
+    const participant = participantById.get(turn.participantId)
+    return <TurnCard
+      key={turn.id}
+      turn={turn}
+      role={participant?.role ?? 'moderator'}
+      name={participant?.displayName ?? turn.participantId}
+      onRetry={turn.id === retryableTurnId ? () => void runCommand(() => window.debateStudio.retryFailedTurn({ sessionId })) : undefined}
+      onChangeModel={() => setShowRoleEditor(true)}
+      onOpenModels={onOpenModels}
+    />
+  }
 
   return (
     <section className="page-stack live-page" aria-labelledby="live-title">
@@ -104,6 +128,8 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
         </div>
         <button className="button ghost" onClick={onBack}>返回列表</button>
       </header>
+
+      <DebateProgress stage={state?.currentStage ?? detail.currentStage} />
 
       {error && <div className="notice error" role="alert">{error}</div>}
       {commandFailure && (
@@ -161,22 +187,15 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
 
       <ResearchPanel detail={detail} refreshKey={researchVersion} onError={setError} />
 
+      {researchTurns.length > 0 && <details className="research-turn-archive panel">
+        <summary><div><strong>研究过程</strong><span>搜索、读页和资料整理已折叠，不影响查看正式辩论</span></div><span>{researchTurns.length} 条记录</span></summary>
+        <div className="research-turn-archive-body">{researchTurns.map(renderTurn)}</div>
+      </details>}
+
       <div className="turn-list" aria-live="polite">
         {snapshot.turns.length === 0 && <div className="empty-state compact"><h2>尚未开始发言</h2><p>点击“启动”后，模型的 SSE 流式输出会显示在这里。</p></div>}
-        {snapshot.turns.map((turn) => {
-          const participant = participantById.get(turn.participantId)
-          return (
-            <TurnCard
-              key={turn.id}
-              turn={turn}
-              role={participant?.role ?? 'moderator'}
-              name={participant?.displayName ?? turn.participantId}
-              onRetry={turn.id === retryableTurnId ? () => void runCommand(() => window.debateStudio.retryFailedTurn({ sessionId })) : undefined}
-              onChangeModel={() => setShowRoleEditor(true)}
-              onOpenModels={onOpenModels}
-            />
-          )
-        })}
+        {snapshot.turns.length > 0 && debateTurns.length === 0 && <div className="empty-state compact"><h2>正在准备正式辩论</h2><p>研究过程已收起，开篇发言将直接显示在这里。</p></div>}
+        {debateTurns.map(renderTurn)}
       </div>
     </section>
   )
@@ -185,25 +204,22 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
 function SetupValidationPanel({ setup, onChangeModel, onOpenModels }: { setup: DebateSetupDto; onChangeModel(): void; onOpenModels(): void }) {
   const { validation } = setup
   return (
-    <section className={`setup-validation panel ${validation.valid ? 'valid' : 'invalid'}`}>
-      <div className="section-heading">
-        <div>
-          <strong>{validation.valid ? '启动前检查通过' : '启动前检查未通过'}</strong>
-          <span>{validation.errors.length} 个错误 · {validation.warnings.length} 个警告</span>
-        </div>
+    <details className={`setup-validation panel ${validation.valid ? 'valid' : 'invalid'}`} open={!validation.valid}>
+      <summary><div><strong>{validation.valid ? '启动前检查通过' : '启动前检查未通过'}</strong><span>{validation.errors.length} 个错误 · {validation.warnings.length} 个警告</span></div></summary>
+      <div className="setup-validation-body">
         <div className="header-actions"><button className="button secondary" onClick={onChangeModel}>更换角色模型</button><button className="button ghost" onClick={onOpenModels}>打开模型与平台</button></div>
-      </div>
-      {validation.errors.map((issue) => (
+        {validation.errors.map((issue) => (
         <div className="validation-issue error" key={`${issue.code}-${issue.configId ?? issue.role ?? ''}`}>
           <strong>{issue.titleZh}</strong><p>{issue.descriptionZh}</p><span>建议：{issue.suggestedActionZh}</span>
         </div>
-      ))}
-      {validation.warnings.map((issue) => (
+        ))}
+        {validation.warnings.map((issue) => (
         <div className="validation-issue warning" key={`${issue.code}-${issue.configId ?? issue.role ?? ''}`}>
           <strong>{issue.titleZh}</strong><p>{issue.descriptionZh}</p><span>建议：{issue.suggestedActionZh}</span>
         </div>
-      ))}
-    </section>
+        ))}
+      </div>
+    </details>
   )
 }
 

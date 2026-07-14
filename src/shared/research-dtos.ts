@@ -49,6 +49,7 @@ export interface RoleResearchWorkspaceDto {
 
 export interface ResearchWorkspaceDto {
   debateSessionId: string
+  runtimeSettings: ResearchRuntimeSettingsInput
   publicPool?: PublicResourcePool
   publicAssets: ResearchAssetDto[]
   affirmative: RoleResearchWorkspaceDto
