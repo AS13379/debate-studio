@@ -94,7 +94,21 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .turn-card header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .turn-card header > div { display: flex; flex-direction: column; gap: 3px; }
 .turn-card header span { color: #8a8d96; font-size: 12px; }
-.turn-content { margin-top: 17px; color: #343740; line-height: 1.75; white-space: pre-wrap; }
+.turn-content { margin-top: 17px; color: #343740; line-height: 1.75; overflow-wrap: anywhere; }
+.turn-content > :first-child { margin-top: 0; }
+.turn-content > :last-child { margin-bottom: 0; }
+.turn-content p { margin: 0 0 12px; white-space: pre-wrap; }
+.turn-content h3, .turn-content h4 { margin: 18px 0 8px; line-height: 1.45; }
+.turn-content h3 { font-size: 17px; }
+.turn-content h4 { font-size: 15px; }
+.turn-content ul, .turn-content ol { margin: 8px 0 14px; padding-left: 24px; }
+.turn-content li { margin: 5px 0; }
+.turn-content blockquote { margin: 12px 0; padding: 9px 13px; color: #5d6170; background: #f4f3fb; border-left: 3px solid #8b7de7; border-radius: 0 7px 7px 0; }
+.turn-content blockquote p { margin: 0; }
+.turn-content code { padding: 2px 5px; background: #f0eff5; border-radius: 5px; font-size: .92em; }
+.turn-content pre { max-width: 100%; padding: 12px; overflow: auto; background: #f0eff5; border-radius: 8px; }
+.turn-content pre code { padding: 0; background: transparent; }
+.markdown-link { color: #6251d6; text-decoration: underline; text-underline-offset: 2px; }
 .turn-error { margin-top: 14px; padding: 10px 12px; color: #9d2034; background: #fff0f2; border-radius: 8px; }
 .turn-card small { display: block; margin-top: 12px; color: #8a8d96; }
 .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
@@ -252,6 +266,10 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .field input, .field textarea, .field select { color: #f0f1f4; background: #1b1d22; border-color: #41444d; }
   .inline-editor { background: #211f31; border-color: #46405f; }
   .turn-content { color: #e2e3e7; }
+  .turn-content blockquote { color: #c5c7d0; background: #292733; border-left-color: #8b7de7; }
+  .turn-content code, .turn-content pre { background: #191a1f; }
+  .turn-content pre code { background: transparent; }
+  .markdown-link { color: #afa4f5; }
   .control-bar { background: rgba(34,36,42,.9); }
   .debate-progress-heading span { color: #a8abb4; }
   .debate-progress-segment .segment-track { background: #3a3d45; }

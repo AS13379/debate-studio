@@ -12,7 +12,9 @@ import type {
 } from '../../../shared/ipc-contract'
 import { ErrorRecoveryPanel } from '../components/ErrorRecoveryPanel'
 import { DebateProgress } from '../components/DebateProgress'
+import { MarkdownContent } from '../components/MarkdownContent'
 import { ResearchPanel } from '../components/ResearchPanel'
+import { formatDebateSpeechMarkdown } from '../debate-speech'
 import { applyRunEvent, type LiveRunSnapshot } from '../run-state'
 import { stageLabel, statusLabel } from './HomePage'
 
@@ -269,6 +271,8 @@ function TurnCard({ turn, role, name, onRetry, onChangeModel, onOpenModels }: {
   onChangeModel(): void
   onOpenModels(): void
 }) {
+  const speech = formatDebateSpeechMarkdown(turn.content, turn.stage)
+  const visibleContent = speech || (['running', 'streaming'].includes(turn.status) ? '正在整理发言…' : '无文本')
   const failure = turn.failure ?? (turn.error ? {
     code: 'TURN_FAILED',
     titleZh: '模型请求失败',
@@ -283,7 +287,7 @@ function TurnCard({ turn, role, name, onRetry, onChangeModel, onOpenModels }: {
         <div><strong>{name}</strong><span>{stageLabel(turn.stage)}</span></div>
         <span className={`turn-status status-${turn.status}`}>{statusLabel(turn.status)}</span>
       </header>
-      <div className="turn-content">{turn.content || (['running', 'streaming'].includes(turn.status) ? '正在生成…' : '无文本')}</div>
+      <div className="turn-content"><MarkdownContent content={visibleContent} /></div>
       <small>Token 用量：未知</small>
       {failure && <ErrorRecoveryPanel failure={failure} onRetry={onRetry} onChangeModel={onChangeModel} onOpenConnection={onOpenModels} />}
       {turn.retryOfTurnId && <small>重试自 Turn {turn.retryOfTurnId}</small>}
