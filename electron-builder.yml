@@ -1,0 +1,26 @@
+appId: com.leander.debatestudio
+productName: Debate Studio
+copyright: Copyright © 2026 Leander
+asar: true
+npmRebuild: false
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - arm64
+dmg:
+  sign: false
+  title: Debate Studio ${version}
+  artifactName: Debate-Studio-${version}-${arch}.${ext}

@@ -4,6 +4,8 @@ export type PersistenceErrorCode =
   | 'DATABASE_CLOSED'
   | 'QUERY_FAILED'
   | 'MIGRATION_FAILED'
+  | 'BACKUP_FAILED'
+  | 'RESTORE_FAILED'
   | 'SERIALIZATION_FAILED'
 
 export interface PersistenceError {
@@ -33,4 +35,3 @@ export function persistenceFailure(
     }
   }
 }
-

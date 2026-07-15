@@ -1,11 +1,16 @@
 {
   "name": "debate-studio",
-  "version": "0.1.0",
-  "description": "A local macOS debate experiment tool.",
+  "version": "0.1.0-rc.1",
+  "description": "A local macOS AI debate studio.",
+  "author": "Leander",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "release:mac:arm64": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg --arm64",
+    "release:mac:signed": "node scripts/build-macos-signed.mjs",
+    "release:notarize": "node scripts/notarize-macos.mjs",
+    "release:check": "node scripts/check-release-artifacts.mjs",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
@@ -23,6 +28,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^35.0.0",
+    "electron-builder": "^26.0.12",
     "electron-vite": "^3.0.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
@@ -30,6 +36,8 @@
   },
   "allowScripts": {
     "electron@35.7.5": true,
-    "esbuild@0.25.12": true
+    "esbuild@0.25.12": true,
+    "fsevents@2.3.3": true,
+    "electron-winstaller@5.4.0": true
   }
 }

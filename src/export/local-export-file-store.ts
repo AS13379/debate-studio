@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, open, rename, stat, unlink } from 'node:fs/promises'
+import { chmod, mkdir, open, rename, stat, unlink } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 import type { ExportFileStore } from './types'
@@ -10,7 +10,8 @@ export class LocalExportFileStore implements ExportFileStore {
     onProgress?: (progress: number) => void
     chunkCharacters?: number
   } = {}): Promise<number> {
-    await mkdir(dirname(filePath), { recursive: true })
+    await mkdir(dirname(filePath), { recursive: true, mode: 0o700 })
+    await chmod(dirname(filePath), 0o700)
     const temporaryPath = `${filePath}.tmp`
     const chunkSize = Math.max(16_384, options.chunkCharacters ?? 256 * 1024)
     let handle: Awaited<ReturnType<typeof open>> | undefined

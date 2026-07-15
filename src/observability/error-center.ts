@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 
@@ -28,7 +28,7 @@ export class ErrorCenter {
     this.maxRecords = Math.max(1, options.maxRecords ?? 200)
     this.createId = options.createId ?? randomUUID
     this.now = options.now ?? (() => new Date())
-    mkdirSync(dirname(options.filePath), { recursive: true })
+    ensurePrivateDirectory(dirname(options.filePath))
     this.records = this.readRecords().slice(-this.maxRecords)
   }
 
@@ -116,13 +116,19 @@ export class ErrorCenter {
 
   private persist(): void {
     try {
-      mkdirSync(dirname(this.options.filePath), { recursive: true })
+      ensurePrivateDirectory(dirname(this.options.filePath))
       const body = this.records.map((record) => JSON.stringify(record)).join('\n')
       writeFileSync(this.options.filePath, body ? `${body}\n` : '', { encoding: 'utf8', mode: 0o600 })
+      chmodSync(this.options.filePath, 0o600)
     } catch {
       // Error capture remains available in memory if its diagnostic file cannot be written.
     }
   }
+}
+
+function ensurePrivateDirectory(path: string): void {
+  mkdirSync(path, { recursive: true, mode: 0o700 })
+  chmodSync(path, 0o700)
 }
 
 function inferCategory(code: string, source: string): ErrorCategory {

@@ -8,7 +8,8 @@ describe('application startup window', () => {
     expect(options.webPreferences).toMatchObject({
       preload: '/tmp/preload.js',
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     })
   })
 })

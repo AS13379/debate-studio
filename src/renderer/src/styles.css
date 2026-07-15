@@ -333,6 +333,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .diagnostics-grid { display: grid; grid-template-columns: minmax(340px, 1.15fr) minmax(300px, .85fr); gap: 16px; align-items: start; }
 .diagnostics-section { padding: 20px; }
 .diagnostics-section h2 { margin: 0; font-size: 18px; }
+.data-management-panel { display: grid; gap: 18px; }
+.data-management-facts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(120px, .45fr) minmax(180px, .75fr); gap: 12px; }
+.data-management-facts > div { display: flex; flex-direction: column; gap: 7px; padding: 14px; border-radius: 10px; background: #f7f7f9; }
+.data-management-facts span, .backup-row span, .data-management-note { color: #777b85; font-size: 12px; }
+.data-management-facts code { overflow-wrap: anywhere; font-size: 12px; }
+.backup-list { display: grid; gap: 8px; }
+.backup-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 11px 13px; border: 1px solid #e1e2e7; border-radius: 10px; }
+.backup-row > div { display: flex; flex-direction: column; gap: 4px; }
+.data-management-note { margin: 0; line-height: 1.65; }
+.empty-actions { justify-content: center; }
 .diagnostics-empty { display: flex; flex-direction: column; gap: 5px; margin-top: 16px; padding: 28px; color: #727680; text-align: center; background: #f7f7f9; border-radius: 10px; }
 .error-record-list { display: flex; flex-direction: column; gap: 7px; margin-top: 16px; }
 .error-record-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 12px; color: inherit; text-align: left; background: #fafafc; border: 1px solid #e4e5e9; border-radius: 9px; cursor: pointer; }
@@ -413,7 +423,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .performance-fact { background: #1b1d22; }
   .performance-fact span { color: #a8abb4; }
   .diagnostics-summary span, .error-record-row small, .error-record-row em, .error-detail-facts, .log-row time, .log-row strong { color: #a8abb4; }
-  .diagnostics-empty, .error-detail-body details { background: #1b1d22; }
+  .diagnostics-empty, .error-detail-body details, .data-management-facts > div { background: #1b1d22; }
+  .backup-row { border-color: #343740; }
   .error-record-row { background: #202228; border-color: #383b44; }
   .error-record-row:hover, .error-record-row.active { background: #2a2640; border-color: #786bcf; }
   .log-list { border-color: #383b44; }
@@ -455,7 +466,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .content-area { padding: 24px 18px 48px; }
   .page-header { align-items: flex-start; flex-direction: column; }
   .header-actions { flex-wrap: wrap; }
-  .history-toolbar, .performance-grid, .diagnostics-summary { grid-template-columns: 1fr; }
+  .history-toolbar, .performance-grid, .diagnostics-summary, .data-management-facts { grid-template-columns: 1fr; }
   .history-fact-grid { grid-template-columns: 1fr; }
   .history-danger-zone, .control-bar { align-items: stretch; flex-direction: column; }
   .debate-grid { grid-template-columns: 1fr; }

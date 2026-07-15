@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import type { ErrorRecordDto, LogEntryDto, PerformanceSnapshotDto } from '../../../shared/ipc-contract'
+import type {
+  DataManagementStateDto,
+  ErrorRecordDto,
+  LogEntryDto,
+  PerformanceSnapshotDto
+} from '../../../shared/ipc-contract'
 
 const categoryLabel: Record<ErrorRecordDto['category'], string> = {
   provider: '模型服务', network: '网络', authentication: '凭据', validation: '校验',
@@ -15,6 +20,7 @@ export function DiagnosticsPage() {
   const [errors, setErrors] = useState<ErrorRecordDto[]>([])
   const [logs, setLogs] = useState<LogEntryDto[]>([])
   const [performance, setPerformance] = useState<PerformanceSnapshotDto>()
+  const [dataState, setDataState] = useState<DataManagementStateDto>()
   const [selectedId, setSelectedId] = useState<string>()
   const [message, setMessage] = useState<string>()
   const [loading, setLoading] = useState(true)
@@ -22,8 +28,9 @@ export function DiagnosticsPage() {
 
   const reload = async (): Promise<void> => {
     setLoading(true)
-    const [errorResult, logResult, performanceResult] = await Promise.all([
-      window.debateStudio.listRecentErrors(), window.debateStudio.getRecentLogs(), window.debateStudio.getPerformanceSnapshot()
+    const [errorResult, logResult, performanceResult, dataResult] = await Promise.all([
+      window.debateStudio.listRecentErrors(), window.debateStudio.getRecentLogs(),
+      window.debateStudio.getPerformanceSnapshot(), window.debateStudio.getDataManagementState()
     ])
     if (errorResult.ok) {
       setErrors(errorResult.value)
@@ -33,6 +40,8 @@ export function DiagnosticsPage() {
     else setMessage(logResult.error.descriptionZh)
     if (performanceResult.ok) setPerformance(performanceResult.value)
     else setMessage(performanceResult.error.descriptionZh)
+    if (dataResult.ok) setDataState(dataResult.value)
+    else setMessage(dataResult.error.descriptionZh)
     setLoading(false)
   }
 
@@ -70,6 +79,21 @@ export function DiagnosticsPage() {
     } catch { setMessage('复制失败，可改用“导出诊断报告”。') }
   }
 
+  const createBackup = async (): Promise<void> => {
+    setMessage('正在创建一致性数据库备份…')
+    const result = await window.debateStudio.createDatabaseBackup()
+    setMessage(result.ok ? `数据库备份已创建：${formatDate(result.value.createdAt)}` : result.error.descriptionZh)
+    if (result.ok) void reload()
+  }
+
+  const restoreBackup = async (backupId: string): Promise<void> => {
+    if (!window.confirm('恢复会替换当前数据库，并停止正在运行的辩论。是否继续？')) return
+    if (!window.confirm('请再次确认：当前数据库会先自动备份，恢复完成后应用将重新启动。')) return
+    setMessage('正在安全停止运行并恢复数据库，请勿关闭应用…')
+    const result = await window.debateStudio.restoreDatabaseBackup({ backupId, confirmed: true })
+    setMessage(result.ok ? '数据库已恢复，应用即将重新启动。' : result.error.descriptionZh)
+  }
+
   return (
     <section className="page diagnostics-page">
       <header className="page-header">
@@ -82,6 +106,28 @@ export function DiagnosticsPage() {
         <div className="panel"><strong>{logs.length}</strong><span>最近日志</span></div>
         <div className="panel"><strong>{errors.filter((item) => item.retryable).length}</strong><span>可重试问题</span></div>
       </div>
+      <section className="panel diagnostics-section data-management-panel">
+        <div className="section-heading">
+          <div><h2>数据管理</h2><span>备份保存在应用数据目录；系统加密凭据独立存放，不写入 SQLite</span></div>
+          <button className="button primary" onClick={() => void createBackup()}>创建备份</button>
+        </div>
+        {!dataState ? <p className="muted">正在读取数据库信息…</p> : <>
+          <div className="data-management-facts">
+            <div><span>数据库位置</span><code>{dataState.databasePath}</code></div>
+            <div><span>Schema 版本</span><strong>v{dataState.schemaVersion}</strong></div>
+            <div><span>最近备份</span><strong>{dataState.latestBackup ? formatDate(dataState.latestBackup.createdAt) : '尚无备份'}</strong></div>
+          </div>
+          {!dataState.backups.length ? <p className="muted">尚无数据库备份。发布前建议先创建一次手动备份。</p> : (
+            <div className="backup-list">
+              {dataState.backups.map((backup) => <div className="backup-row" key={backup.id}>
+                <div><strong>{backupReasonLabel(backup.reason)}</strong><span>{formatDate(backup.createdAt)} · v{backup.schemaVersion} · {formatBytes(backup.fileSize)}</span></div>
+                <button className="button ghost danger-text" onClick={() => void restoreBackup(backup.id)}>恢复此备份</button>
+              </div>)}
+            </div>
+          )}
+          <p className="data-management-note">恢复前会再次创建安全备份，并取消所有在途请求。Provider、模型配置随数据库版本恢复；系统加密凭据文件不会被覆盖。</p>
+        </>}
+      </section>
       <section className="panel diagnostics-section performance-panel">
         <div className="section-heading"><div><h2>本次运行性能</h2><span>仅统计耗时、数量、字符数和进程内存，不记录任何正文</span></div></div>
         {!performance ? <p className="muted">正在收集性能数据…</p> : (
@@ -139,4 +185,12 @@ function formatMs(value: number): string {
 
 function formatBytes(value: number): string {
   return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString('zh-CN')
+}
+
+function backupReasonLabel(reason: 'manual' | 'pre-migration' | 'pre-restore'): string {
+  return { manual: '手动备份', 'pre-migration': '升级前自动备份', 'pre-restore': '恢复前安全备份' }[reason]
 }

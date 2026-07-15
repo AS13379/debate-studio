@@ -28,3 +28,5 @@ export type { DebateHistoryApplicationDependencies } from './debate-history-appl
 export { ExportApplication } from './export-application'
 export type { ExportApplicationDependencies } from './export-application'
 export type { DiagnosticsApplicationOptions } from './diagnostics-application'
+export { DataManagementApplication } from './data-management-application'
+export type { DataManagementApplicationDependencies } from './data-management-application'

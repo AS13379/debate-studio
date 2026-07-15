@@ -1,4 +1,4 @@
-import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
@@ -235,10 +235,11 @@ export class ResearchApplication {
     if (input.kind === 'image') {
       try {
         const directory = join(this.dependencies.appDataDirectory, 'assets', 'research', input.sessionId)
-        mkdirSync(directory, { recursive: true })
+        mkdirSync(directory, { recursive: true, mode: 0o700 })
+        chmodSync(directory, 0o700)
         const extension = extname(input.fileName || '') || this.extensionForMime(input.mimeType || '')
         localPath = join(directory, `${this.createId()}${extension}`)
-        writeFileSync(localPath, Uint8Array.from(input.bytes || []), { flag: 'wx' })
+        writeFileSync(localPath, Uint8Array.from(input.bytes || []), { flag: 'wx', mode: 0o600 })
       } catch (cause) {
         return this.invalid('图片保存失败', cause instanceof Error ? cause.message : '无法写入应用资产目录。', true)
       }

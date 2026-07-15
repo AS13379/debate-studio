@@ -117,6 +117,7 @@ export function App() {
             onLoadMore={() => void loadDebates(historyQuery, true)}
             onCreate={() => setPage('new')}
             onCreateDemo={() => void createDemo()}
+            onOpenModels={() => setPage('models')}
             onOpen={openDebate}
             onOpenHistory={openHistory}
             onExport={openHistory}

@@ -27,11 +27,11 @@ describe('preload DebateStudioApi', () => {
     const api = createDebateStudioApi(new RecordingIpcRenderer())
 
     expect(Object.keys(api).sort()).toEqual([
-      'addResearchAsset', 'addTag', 'archiveDebate', 'cancelExport', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
+      'addResearchAsset', 'addTag', 'archiveDebate', 'cancelExport', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDatabaseBackup', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
       'deleteDebate', 'deleteExport', 'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
-      'exportDiagnosticReport', 'exportHtml', 'exportMarkdown', 'getAppVersion', 'getDebate', 'getDebateDetail', 'getErrorDetail', 'getPerformanceSnapshot', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebateTurnsPage', 'listDebates',
+      'exportDiagnosticReport', 'exportHtml', 'exportMarkdown', 'getAppVersion', 'getDataManagementState', 'getDebate', 'getDebateDetail', 'getErrorDetail', 'getPerformanceSnapshot', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebateTurnsPage', 'listDebates',
       'listExports', 'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
-      'pauseDebate', 'publishResearchEvidence', 'removeTag', 'renameDebate', 'reportRendererError', 'reportRendererPerformance', 'restoreDebate', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
+      'pauseDebate', 'publishResearchEvidence', 'removeTag', 'renameDebate', 'reportRendererError', 'reportRendererPerformance', 'restoreDatabaseBackup', 'restoreDebate', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
       'saveParticipantBindings', 'saveProviderConnection', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection',
       'startDebate', 'stopDebate', 'testConnection', 'testSearchConnection', 'toggleFavorite', 'updateEvidenceStatus'
     ].sort())

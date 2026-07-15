@@ -32,6 +32,7 @@ import { composeDebateSetupApplication } from './debate-setup-application'
 import { DiagnosticsApplication } from './diagnostics-application'
 import { DebateHistoryApplication } from './debate-history-application'
 import { ExportApplication } from './export-application'
+import { DataManagementApplication } from './data-management-application'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -41,6 +42,7 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
   appVersion?: string
   systemInfo?: Record<string, string>
   performanceMetrics?: PerformanceMetricsCollector
+  onDatabaseRestoreCompleted?(): void
 }
 
 export class DebateDesktopApplication {
@@ -49,15 +51,16 @@ export class DebateDesktopApplication {
     readonly run: DebateRunApplication,
     readonly research: ResearchApplication,
     readonly diagnostics: DiagnosticsApplication,
+    readonly dataManagement: DataManagementApplication,
     readonly history: DebateHistoryApplication,
     readonly exports: ExportApplication,
     readonly logger: StructuredLogger,
-    readonly errorCenter: ErrorCenter
+    readonly errorCenter: ErrorCenter,
+    private readonly closeApplication: () => Promise<PersistenceResult<void>>
   ) {}
 
   async close(): Promise<PersistenceResult<void>> {
-    await this.exports.close()
-    return this.run.close()
+    return this.closeApplication()
   }
 }
 
@@ -166,8 +169,26 @@ export function initializeDebateDesktopApplication(
       performanceMetrics,
       now: options.now
     })
+    let closed = false
+    const closeApplication = async (): Promise<PersistenceResult<void>> => {
+      if (closed) return { ok: true, value: undefined }
+      await exports.close()
+      const result = await run.close()
+      if (result.ok) closed = true
+      return result
+    }
+    const dataManagement = new DataManagementApplication({
+      persistence,
+      prepareForRestore: closeApplication,
+      onRestoreCompleted: options.onDatabaseRestoreCompleted
+    }, logger)
     logger.info('Debate Studio 应用组合完成', { source: 'application' })
-    return { ok: true, value: new DebateDesktopApplication(configuration, run, research, diagnostics, history, exports, logger, errorCenter) }
+    return {
+      ok: true,
+      value: new DebateDesktopApplication(
+        configuration, run, research, diagnostics, dataManagement, history, exports, logger, errorCenter, closeApplication
+      )
+    }
   } catch (cause) {
     logger.error('Debate Studio 应用组合失败', { source: 'application' })
     errorCenter.capture(cause, { source: 'application', severity: 'critical' })

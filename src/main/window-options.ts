@@ -8,8 +8,8 @@ export function createWindowOptions(preloadPath: string): BrowserWindowConstruct
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     }
   }
 }
-

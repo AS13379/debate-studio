@@ -10,6 +10,7 @@ export interface HomePageProps {
   onCreate(): void
   onLoadMore?(): void
   onCreateDemo(): void
+  onOpenModels?(): void
   onOpen(debate: DebateHistorySummaryDto): void
   onOpenHistory?(debate: DebateHistorySummaryDto): void
   onExport?(debate: DebateHistorySummaryDto): void
@@ -17,7 +18,8 @@ export interface HomePageProps {
 
 export function HomePage({
   debates, query = {}, loading, error, onQueryChange = () => undefined, onCreate, onCreateDemo, onOpen,
-  onOpenHistory = onOpen, onExport = onOpenHistory, hasMore = false, onLoadMore = () => undefined
+  onOpenHistory = onOpen, onExport = onOpenHistory, onOpenModels = () => undefined,
+  hasMore = false, onLoadMore = () => undefined
 }: HomePageProps) {
   const availableTags = [...new Set([
     ...debates.flatMap((debate) => debate.tags),
@@ -96,10 +98,14 @@ export function HomePage({
       {!loading && debates.length === 0 && (
         <div className="empty-state">
           <div className="empty-icon">辩</div>
+          {status === 'active' && !query.search && !query.favoriteOnly && !query.tag && <p className="eyebrow">欢迎使用 Debate Studio</p>}
           <h2>{emptyTitle(status, query)}</h2>
           <p>{emptyDescription(status, query)}</p>
           {status === 'active' && !query.search && !query.favoriteOnly && !query.tag && (
-            <button className="button primary" onClick={onCreateDemo}>创建 Mock 示例辩论</button>
+            <div className="compact-actions empty-actions">
+              <button className="button primary" onClick={onCreateDemo}>创建 Mock 示例辩论</button>
+              <button className="button secondary" onClick={onOpenModels}>配置真实模型</button>
+            </div>
           )}
         </div>
       )}
@@ -137,14 +143,14 @@ function emptyTitle(status: string, query: DebateHistoryListQueryDto): string {
   if (query.search || query.favoriteOnly || query.tag) return '没有符合筛选条件的辩论'
   if (status === 'archived') return '还没有归档记录'
   if (status === 'deleted') return '回收站是空的'
-  return '还没有辩论'
+  return '欢迎，这里还没有辩论'
 }
 
 function emptyDescription(status: string, query: DebateHistoryListQueryDto): string {
   if (query.search || query.favoriteOnly || query.tag) return '换一个关键词或调整筛选条件试试。'
   if (status === 'archived') return '归档的辩论会显示在这里，并且可以随时恢复。'
   if (status === 'deleted') return '软删除的辩论会显示在这里，关联数据不会立即丢失。'
-  return '先创建一个不访问网络的 Mock 示例，立即体验完整流程。'
+  return '无需配置 API。Mock 示例完全在本地运行；需要时也可以稍后配置真实模型。'
 }
 
 function formatDate(value: string): string {

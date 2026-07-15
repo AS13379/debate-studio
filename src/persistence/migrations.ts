@@ -656,6 +656,11 @@ export class MigrationManager {
   }
 
   currentVersion(): PersistenceResult<number> {
+    const table = this.database.get<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'"
+    )
+    if (!table.ok) return persistenceFailure('MIGRATION_FAILED', 'currentVersion', table.error)
+    if (!table.value?.count) return { ok: true, value: 0 }
     const result = this.database.get<VersionRow>('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations')
     if (!result.ok) return persistenceFailure('MIGRATION_FAILED', 'currentVersion', result.error)
     return { ok: true, value: result.value?.version ?? 0 }

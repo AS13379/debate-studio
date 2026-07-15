@@ -8,11 +8,27 @@ import { IPC_CHANNELS } from '../shared/ipc-contract'
 import { EncryptedFileCredentialStore } from '../security'
 import { registerDebateIpc } from './ipc-handlers'
 import { createWindowOptions } from './window-options'
+import { resolveAppDataDirectory } from './app-paths'
 
 let desktopApplication: DebateDesktopApplication | undefined
 let disposeIpc: (() => void) | undefined
 let shutdownStarted = false
 let readyToQuit = false
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.setPath('userData', resolveAppDataDirectory(app.getPath('appData')))
+  app.on('second-instance', () => {
+    const window = BrowserWindow.getAllWindows()[0]
+    if (!window) return
+    if (window.isMinimized()) window.restore()
+    window.show()
+    window.focus()
+  })
+}
 
 function createWindow(): void {
   const window = new BrowserWindow(createWindowOptions(join(__dirname, '../preload/index.js')))
@@ -26,7 +42,7 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+if (hasSingleInstanceLock) void app.whenReady().then(() => {
   const appDataDirectory = app.getPath('userData')
   const credentialStore = new EncryptedFileCredentialStore({
     filePath: join(appDataDirectory, 'security', 'credentials.bin'),
@@ -40,6 +56,12 @@ app.whenReady().then(() => {
     appDataDirectory,
     credentialStore,
     appVersion: app.getVersion(),
+    onDatabaseRestoreCompleted: () => {
+      setTimeout(() => {
+        app.relaunch()
+        app.exit(0)
+      }, 750)
+    },
     systemInfo: {
       platform: process.platform,
       arch: process.arch,
@@ -59,6 +81,7 @@ app.whenReady().then(() => {
     run: desktopApplication.run,
     research: desktopApplication.research,
     diagnostics: desktopApplication.diagnostics,
+    dataManagement: desktopApplication.dataManagement,
     exports: desktopApplication.exports,
     logger: desktopApplication.logger,
     errorCenter: desktopApplication.errorCenter,
@@ -87,7 +110,7 @@ app.on('before-quit', (event) => {
   void closing.finally(() => {
     desktopApplication = undefined
     readyToQuit = true
-    app.quit()
+    app.exit(0)
   })
 })
 

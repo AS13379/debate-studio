@@ -110,6 +110,7 @@ function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()
     run: application.run,
     research: application.research,
     diagnostics: application.diagnostics,
+    dataManagement: application.dataManagement,
     exports: application.exports,
     logger: application.logger,
     errorCenter: application.errorCenter,

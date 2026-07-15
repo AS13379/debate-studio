@@ -206,3 +206,7 @@ export const exportDebateSchema = z.object({
 
 export const deleteExportSchema = z.object({ exportId: idSchema }).strict()
 export const cancelExportSchema = z.object({ exportId: idSchema }).strict()
+export const restoreDatabaseBackupSchema = z.object({
+  backupId: idSchema,
+  confirmed: z.boolean()
+}).strict()

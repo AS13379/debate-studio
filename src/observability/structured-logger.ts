@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 
@@ -27,7 +27,7 @@ export class StructuredLogger implements LoggerLike {
     this.maxFiles = Math.max(1, options.maxFiles ?? 3)
     this.createId = options.createId ?? randomUUID
     this.now = options.now ?? (() => new Date())
-    mkdirSync(dirname(this.filePath), { recursive: true })
+    this.ensurePrivateDirectory()
   }
 
   debug(message: string, context: LogContext): void { this.write('debug', message, context) }
@@ -57,9 +57,10 @@ export class StructuredLogger implements LoggerLike {
     }
     const line = `${JSON.stringify(entry)}\n`
     try {
-      mkdirSync(dirname(this.filePath), { recursive: true })
+      this.ensurePrivateDirectory()
       if (existsSync(this.filePath) && statSync(this.filePath).size + Buffer.byteLength(line) > this.maxFileSizeBytes) this.rotate()
       appendFileSync(this.filePath, line, { encoding: 'utf8', mode: 0o600 })
+      chmodSync(this.filePath, 0o600)
     } catch {
       // Observability must never interrupt the application path it observes.
     }
@@ -86,5 +87,11 @@ export class StructuredLogger implements LoggerLike {
 
   private remove(path: string): void {
     try { rmSync(path, { force: true }) } catch { /* best effort */ }
+  }
+
+  private ensurePrivateDirectory(): void {
+    const directory = dirname(this.filePath)
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+    chmodSync(directory, 0o700)
   }
 }

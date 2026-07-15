@@ -55,6 +55,13 @@ import type {
   DeleteExportInputDto,
   ExportDebateInputDto
 } from './export-dtos'
+import type {
+  DatabaseBackupDto,
+  DataManagementResultDto,
+  DataManagementStateDto,
+  RestoreDatabaseBackupInputDto,
+  RestoreDatabaseBackupResultDto
+} from './data-management-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
@@ -114,6 +121,9 @@ export const IPC_CHANNELS = {
   reportRendererError: 'diagnostics:report-renderer-error',
   reportRendererPerformance: 'diagnostics:report-renderer-performance',
   getPerformanceSnapshot: 'diagnostics:get-performance-snapshot',
+  getDataManagementState: 'data:get-state',
+  createDatabaseBackup: 'data:create-backup',
+  restoreDatabaseBackup: 'data:restore-backup',
   exportMarkdown: 'export:markdown',
   exportHtml: 'export:html',
   listExports: 'export:list',
@@ -222,6 +232,9 @@ export interface DebateStudioApi {
   reportRendererError(input: RendererErrorInputDto): Promise<DiagnosticsResultDto<boolean>>
   reportRendererPerformance(input: RendererPerformanceInputDto): Promise<DiagnosticsResultDto<boolean>>
   getPerformanceSnapshot(): Promise<DiagnosticsResultDto<PerformanceSnapshotDto>>
+  getDataManagementState(): Promise<DataManagementResultDto<DataManagementStateDto>>
+  createDatabaseBackup(): Promise<DataManagementResultDto<DatabaseBackupDto>>
+  restoreDatabaseBackup(input: RestoreDatabaseBackupInputDto): Promise<DataManagementResultDto<RestoreDatabaseBackupResultDto>>
   exportMarkdown(input: ExportDebateInputDto): Promise<DebateExportResultDto<DebateExportRecordDto>>
   exportHtml(input: ExportDebateInputDto): Promise<DebateExportResultDto<DebateExportRecordDto>>
   listExports(): Promise<DebateExportResultDto<DebateExportRecordDto[]>>
@@ -229,6 +242,15 @@ export interface DebateStudioApi {
   cancelExport(input: CancelExportInputDto): Promise<DebateExportResultDto<{ cancelled: boolean }>>
   onRunEvent(listener: (event: RunEventDto) => void): () => void
 }
+
+export type {
+  DatabaseBackupDto,
+  DataManagementErrorDto,
+  DataManagementResultDto,
+  DataManagementStateDto,
+  RestoreDatabaseBackupInputDto,
+  RestoreDatabaseBackupResultDto
+} from './data-management-dtos'
 
 export type {
   ConfigurationResultDto,

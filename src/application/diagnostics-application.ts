@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { ErrorCenter, PerformanceMetricsCollector, StructuredLogger } from '../observability'
@@ -73,10 +73,12 @@ export class DiagnosticsApplication {
         performance: this.performanceMetrics.snapshot()
       }
       const directory = join(this.options.appDataDirectory, 'diagnostics', 'exports')
-      mkdirSync(directory, { recursive: true })
+      mkdirSync(directory, { recursive: true, mode: 0o700 })
+      chmodSync(directory, 0o700)
       const stamp = this.now().toISOString().replace(/[:.]/g, '-')
       const filePath = join(directory, `debate-studio-diagnostic-${stamp}.json`)
       writeFileSync(filePath, `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+      chmodSync(filePath, 0o600)
       this.options.logger.info('脱敏诊断报告已生成', { source: 'diagnostics', metadata: { errorCount: report.recentErrors.length } })
       return { ok: true, value: { filePath, generatedAt: report.generatedAt, errorCount: report.recentErrors.length } }
     } catch {

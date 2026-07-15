@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod'
 
 import type {
-  DebateConfigurationApplication, DebateHistoryApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ResearchApplication
+  DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ResearchApplication
 } from '../application'
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
@@ -33,6 +33,7 @@ import {
   researchRuntimeSettingsSchema,
   rendererErrorSchema,
   rendererPerformanceSchema,
+  restoreDatabaseBackupSchema,
   renameDebateSchema,
   researchToolDecisionSchema,
   runMockSearchSchema,
@@ -58,6 +59,7 @@ export interface DebateIpcDependencies {
   run: DebateRunApplication
   research?: ResearchApplication
   diagnostics: DiagnosticsApplication
+  dataManagement: DataManagementApplication
   exports: ExportApplication
   logger: LoggerLike
   errorCenter: ErrorCenter
@@ -128,6 +130,12 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.reportRendererError, validated(rendererErrorSchema, (input) => dependencies.diagnostics.reportRendererError(input)))
   ipcMain.handle(IPC_CHANNELS.reportRendererPerformance, validated(rendererPerformanceSchema, (input) => dependencies.diagnostics.reportRendererPerformance(input)))
   ipcMain.handle(IPC_CHANNELS.getPerformanceSnapshot, () => dependencies.diagnostics.getPerformanceSnapshot())
+  ipcMain.handle(IPC_CHANNELS.getDataManagementState, () => dependencies.dataManagement.getState())
+  ipcMain.handle(IPC_CHANNELS.createDatabaseBackup, () => dependencies.dataManagement.createBackup())
+  ipcMain.handle(IPC_CHANNELS.restoreDatabaseBackup, validated(
+    restoreDatabaseBackupSchema,
+    (input) => dependencies.dataManagement.restoreBackup(input.backupId, input.confirmed)
+  ))
   ipcMain.handle(IPC_CHANNELS.exportMarkdown, validated(exportDebateSchema, (input) => dependencies.exports.exportDebateMarkdown(input.debateId, input.exportOptions)))
   ipcMain.handle(IPC_CHANNELS.exportHtml, validated(exportDebateSchema, (input) => dependencies.exports.exportDebateHtml(input.debateId, input.exportOptions)))
   ipcMain.handle(IPC_CHANNELS.listExports, () => dependencies.exports.getExportHistory())

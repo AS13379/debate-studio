@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -39,13 +39,15 @@ export class Database {
 
     const path = join(options.appDataDirectory, fileName)
     try {
-      mkdirSync(options.appDataDirectory, { recursive: true })
+      mkdirSync(options.appDataDirectory, { recursive: true, mode: 0o700 })
+      chmodSync(options.appDataDirectory, 0o700)
       const connection = new DatabaseSync(path, {
         enableForeignKeyConstraints: true,
         enableDoubleQuotedStringLiterals: false,
         timeout: 5_000
       })
       connection.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;')
+      chmodSync(path, 0o600)
       options.logger?.info('SQLite 数据库已打开', { source: 'sqlite', metadata: { operation: 'open' } })
       return { ok: true, value: new Database(connection, path, options.logger, options.performanceMetrics) }
     } catch (cause) {
@@ -116,6 +118,19 @@ export class Database {
       this.logFailure('transaction', cause)
       this.execute('ROLLBACK')
       return persistenceFailure(this.errorCode(cause), 'transaction', cause)
+    }
+  }
+
+  backupTo(destinationPath: string): PersistenceResult<void> {
+    try {
+      this.connection.exec('PRAGMA wal_checkpoint(FULL)')
+      this.connection.prepare('VACUUM INTO ?').run(destinationPath)
+      chmodSync(destinationPath, 0o600)
+      this.logger?.info('SQLite 备份已创建', { source: 'sqlite', metadata: { operation: 'backup' } })
+      return { ok: true, value: undefined }
+    } catch (cause) {
+      this.logFailure('backup', cause)
+      return persistenceFailure('BACKUP_FAILED', 'backup', cause)
     }
   }
 
