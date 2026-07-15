@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { DebateParticipantConfig, DebateParticipantRole } from '../participant-config'
 import {
   type DebateRecord,
+  type DebatePlanRecord,
   type PersistenceContext,
   type PersistenceError,
   type PersistenceResult,
@@ -257,6 +258,18 @@ export class DebateConfigurationApplication {
     if (!Number.isInteger(input.freeDebateRounds) || input.freeDebateRounds < 1 || input.freeDebateRounds > 20) {
       return this.invalid('自由辩论轮数无效', '自由辩论轮数必须是 1 到 20 之间的整数。')
     }
+    if (input.planning) {
+      const plan = input.planning.plan
+      if (
+        plan.topic.trim() !== input.topic.trim()
+        || plan.background.trim() !== (input.background?.trim() ?? '')
+        || plan.affirmativePosition.trim() !== input.affirmativePosition.trim()
+        || plan.negativePosition.trim() !== input.negativePosition.trim()
+      ) return this.invalid('规划方案与创建内容不一致', '请确认当前编辑后的方案，再重新提交创建。')
+      const planningModel = this.dependencies.persistence.repositories.modelProfiles.findById(input.planning.provenance.modelProfileId)
+      if (!planningModel.ok) return this.persistenceError(planningModel.error)
+      if (!planningModel.value) return this.notFound('ModelProfile', input.planning.provenance.modelProfileId)
+    }
     const timestamp = this.timestamp()
     const debate: DebateRecord = {
       id: this.createId(),
@@ -277,9 +290,19 @@ export class DebateConfigurationApplication {
       createdAt: timestamp,
       updatedAt: timestamp
     }
+    const planRecord: DebatePlanRecord | undefined = input.planning ? {
+      id: this.createId(), debateId: debate.id, sessionId: session.id, mode: input.planning.mode,
+      ...input.planning.plan,
+      promptVersion: input.planning.provenance.promptVersion,
+      modelProfileId: input.planning.provenance.modelProfileId,
+      modelId: input.planning.provenance.modelId,
+      createdAt: input.planning.provenance.createdAt,
+      confirmedAt: timestamp
+    } : undefined
     const saved = this.dependencies.persistence.database.transaction(() => {
       this.unwrap(this.dependencies.persistence.repositories.debates.save(debate))
       this.unwrap(this.dependencies.persistence.repositories.sessions.create(session))
+      if (planRecord) this.unwrap(this.dependencies.persistence.repositories.debatePlans.create(planRecord))
     })
     if (!saved.ok) return this.persistenceError(saved.error)
     return { ok: true, value: this.detailDto(debate, session, []) }

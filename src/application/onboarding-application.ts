@@ -131,7 +131,7 @@ export class OnboardingApplication {
     }
     const saved = this.dependencies.persistence.repositories.settings.set(DEFAULTS_KEY, defaults)
     if (!saved.ok) return this.failure('ONBOARDING_SAVE_FAILED', '默认配置保存失败', '无法保存默认角色模型。')
-    for (const task of ['research', 'search_summary', 'argument_generation', 'rebuttal', 'judge'] as const) {
+    for (const task of ['debate_planning', 'research', 'search_summary', 'argument_generation', 'rebuttal', 'judge'] as const) {
       const modelProfileId = task === 'judge' ? defaults.moderator : defaults.affirmative
       const routed = this.dependencies.modelRouting.save(task, modelProfileId)
       if (!routed.ok) return this.failure('ONBOARDING_SAVE_FAILED', '模型策略保存失败', routed.error.descriptionZh)

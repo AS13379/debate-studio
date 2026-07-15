@@ -35,6 +35,7 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     saveCredential: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveCredential, input),
     deleteCredential: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteCredential, input),
     testConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.testConnection, input),
+    planDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.planDebate, input),
     createDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.createDebate, input),
     saveParticipantBindings: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveParticipantBindings, input),
     createMockDemoDebate: () => invoke(ipcRenderer, IPC_CHANNELS.createMockDemoDebate),

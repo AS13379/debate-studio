@@ -1,6 +1,6 @@
 import type { ConfigurationErrorDto, ConfigurationResultDto, ModelCapabilitiesDto, ModelProfileDto, ProviderConnectionDto } from './debate-dtos'
 
-export type ModelRoutingTaskDto = 'research' | 'search_summary' | 'argument_generation' | 'rebuttal' | 'judge' | 'vision_analysis'
+export type ModelRoutingTaskDto = 'debate_planning' | 'research' | 'search_summary' | 'argument_generation' | 'rebuttal' | 'judge' | 'vision_analysis'
 
 export interface ModelRoutingPolicyDto {
   task: ModelRoutingTaskDto

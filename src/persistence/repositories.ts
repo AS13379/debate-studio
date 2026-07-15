@@ -5,6 +5,7 @@ import type { DebateTurnFailure } from '../domain'
 import type { AssetFileRecord } from '../assets'
 import type { ProviderPricing } from '../cost'
 import type { ModelRoutingPolicy, ModelRoutingTask } from '../model-routing'
+import type { DebatePlan, DebatePlanProvenance, DebatePlanningMode } from '../debate-planner'
 import type {
   EvidenceReferenceIssue,
   EvidenceStatus,
@@ -37,6 +38,15 @@ export interface DebateRecord {
   status: string
   createdAt: string
   updatedAt: string
+}
+
+export interface DebatePlanRecord extends DebatePlan, Omit<DebatePlanProvenance, 'modelProfileId'> {
+  id: string
+  debateId: string
+  sessionId: string
+  mode: DebatePlanningMode
+  modelProfileId?: string
+  confirmedAt: string
 }
 
 export type DebateHistoryStatus = 'active' | 'archived' | 'deleted'
@@ -194,6 +204,10 @@ export interface EntityRepository<T extends { id: string }> {
 export interface DebateRepository extends EntityRepository<DebateRecord> {
   list(): PersistenceResult<DebateRecord[]>
   delete(id: string): PersistenceResult<boolean>
+}
+export interface DebatePlanRepository {
+  create(record: DebatePlanRecord): PersistenceResult<void>
+  findByDebate(debateId: string): PersistenceResult<DebatePlanRecord | undefined>
 }
 export interface DebateHistoryRepository {
   list(query: DebateHistoryListQuery): PersistenceResult<DebateHistoryListRecord[]>
@@ -357,6 +371,7 @@ export interface RepositoryCollection {
   participants: DebateParticipantRepository
   sessions: SessionRepository
   debates: DebateRepository
+  debatePlans: DebatePlanRepository
   debateHistory: DebateHistoryRepository
   turns: TurnRepository
   events: EventRepository

@@ -2,6 +2,11 @@ import type {
   ConfigurationResultDto,
   ConnectionTestDto,
   CreateDebateInput,
+  DebatePlanDto,
+  DebatePlannerErrorDto,
+  DebatePlannerResultDto,
+  DebatePlanningDepthDto,
+  DebatePlanningModeDto,
   DebateDetailDto,
   DebateParticipantRoleDto,
   DebateSetupDto,
@@ -10,6 +15,8 @@ import type {
   DebateTurnPageDto,
   DebateTurnPageInputDto,
   ModelProfileDto,
+  PlanDebateInputDto,
+  PlannedDebateDto,
   ProviderPresetDto,
   ProviderConnectionDto,
   SaveModelProfileInput,
@@ -101,6 +108,7 @@ export const IPC_CHANNELS = {
   deleteCredential: 'configuration:delete-credential',
   testConnection: 'configuration:test-connection',
   createDebate: 'configuration:create-debate',
+  planDebate: 'configuration:plan-debate',
   saveParticipantBindings: 'configuration:save-participant-bindings',
   createMockDemoDebate: 'configuration:create-mock-demo-debate',
   startDebate: 'run:start-debate',
@@ -225,6 +233,7 @@ export interface DebateStudioApi {
   saveCredential(input: { connectionId: string; credential: string }): Promise<ConfigurationResultDto<boolean>>
   deleteCredential(input: { connectionId: string }): Promise<ConfigurationResultDto<boolean>>
   testConnection(input: { connectionId: string; modelProfileId?: string }): Promise<ConfigurationResultDto<ConnectionTestDto>>
+  planDebate(input: PlanDebateInputDto): Promise<DebatePlannerResultDto>
   createDebate(input: CreateDebateInput): Promise<ConfigurationResultDto<DebateDetailDto>>
   saveParticipantBindings(input: SaveParticipantBindingsInput): Promise<ConfigurationResultDto<DebateDetailDto>>
   createMockDemoDebate(): Promise<ConfigurationResultDto<DebateDetailDto>>
@@ -308,6 +317,11 @@ export type {
   ConfigurationResultDto,
   ConnectionTestDto,
   CreateDebateInput,
+  DebatePlanDto,
+  DebatePlannerErrorDto,
+  DebatePlannerResultDto,
+  DebatePlanningDepthDto,
+  DebatePlanningModeDto,
   DebateDetailDto,
   DebateParticipantRoleDto,
   DebateSetupDto,
@@ -319,6 +333,8 @@ export type {
   DebateSetupIssueDto,
   ModelCapabilitiesDto,
   ModelProfileDto,
+  PlanDebateInputDto,
+  PlannedDebateDto,
   ProviderPresetDto,
   ParticipantBindingDto,
   ProtocolTypeDto,

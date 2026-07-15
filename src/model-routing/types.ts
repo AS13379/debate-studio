@@ -2,6 +2,7 @@ import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { ModelAdapter } from '../providers'
 
 export const MODEL_ROUTING_TASKS = [
+  'debate_planning',
   'research',
   'search_summary',
   'argument_generation',
@@ -40,6 +41,7 @@ export type ModelRoutingResult =
   | { ok: false; error: ModelRoutingError }
 
 export const MODEL_ROUTING_TASK_LABELS: Record<ModelRoutingTask, string> = {
+  debate_planning: '辩题规划',
   research: '研究',
   search_summary: '搜索摘要',
   argument_generation: '正式论证',

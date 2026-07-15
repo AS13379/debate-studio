@@ -89,12 +89,18 @@ export class ModelRoutingService {
     const economical = textProfiles.find((profile) => profile.modelId.toLowerCase().includes('mini'))
       ?? textProfiles.find((profile) => profile.modelId.toLowerCase().includes('flash'))
       ?? textProfiles[0]
+    const planning = textProfiles.find((profile) => {
+      const id = profile.modelId.toLowerCase()
+      return profile.capabilities.reasoning && ['deepseek', 'flash', 'mini', 'small', 'lite'].some((hint) => id.includes(hint))
+    }) ?? textProfiles.find((profile) => profile.capabilities.reasoning) ?? economical
     const vision = profiles.value.find((profile) => profile.capabilities.imageInput)
     const existing = new Set(this.list().map((policy) => policy.task))
     for (const task of MODEL_ROUTING_TASKS) {
       if (existing.has(task)) continue
       const selected = task === 'vision_analysis'
         ? vision
+        : task === 'debate_planning'
+          ? planning
         : task === 'research' || task === 'search_summary'
           ? economical
           : capable

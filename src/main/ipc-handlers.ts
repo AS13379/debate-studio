@@ -5,6 +5,7 @@ import type {
 } from '../application'
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
+import type { DebatePlanner } from '../debate-planner'
 import { redactForExport, redactSensitiveText } from '../security'
 import {
   IPC_CHANNELS,
@@ -43,6 +44,7 @@ import {
   saveModelProfileSchema,
   saveParticipantBindingsSchema,
   saveProviderConnectionSchema,
+  planDebateSchema,
   sessionInputSchema,
   toggleFavoriteSchema,
   updateEvidenceStatusSchema
@@ -60,6 +62,7 @@ export interface IpcMainLike {
 export interface DebateIpcDependencies {
   ipcMain: IpcMainLike
   configuration: DebateConfigurationApplication
+  planner?: DebatePlanner
   onboarding?: OnboardingApplication
   modelRouting?: ModelRoutingApplication
   costs?: CostApplication
@@ -106,6 +109,7 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.saveCredential, validated(credentialInputSchema, (input) => configuration.saveCredential(input.connectionId, input.credential)))
   ipcMain.handle(IPC_CHANNELS.deleteCredential, validated(connectionInputSchema, (input) => configuration.deleteCredential(input.connectionId)))
   ipcMain.handle(IPC_CHANNELS.testConnection, validated(connectionTestInputSchema, (input) => configuration.testConnection(input.connectionId, input.modelProfileId)))
+  ipcMain.handle(IPC_CHANNELS.planDebate, validated(planDebateSchema, (input) => dependencies.planner?.plan(input) ?? workbenchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.createDebate, validated(createDebateSchema, (input) => configuration.createDebate(input)))
   ipcMain.handle(IPC_CHANNELS.saveParticipantBindings, validated(saveParticipantBindingsSchema, (input) => configuration.saveParticipantBindings(input)))
   ipcMain.handle(IPC_CHANNELS.createMockDemoDebate, () => configuration.createMockDemoDebate())

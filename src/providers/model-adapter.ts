@@ -31,6 +31,7 @@ export interface UnifiedRuntimeMetadata {
   providerId?: string
   baseUrl?: string
   reasoningEnabled?: boolean
+  purpose?: 'debate-planning'
 }
 
 export interface UnifiedRequest {

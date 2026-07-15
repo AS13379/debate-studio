@@ -61,7 +61,7 @@ describe('local AI workbench enhancements', () => {
     const state = await app.onboarding.getState()
     expect(state).toMatchObject({ ok: true, value: { defaultModels: { affirmative: profileId, negative: profileId, moderator: profileId } } })
     const policies = await app.modelRouting.listPolicies()
-    expect(policies.ok && policies.value.map((item) => item.task)).toEqual(expect.arrayContaining(['research', 'argument_generation', 'rebuttal', 'judge']))
+    expect(policies.ok && policies.value.map((item) => item.task)).toEqual(expect.arrayContaining(['debate_planning', 'research', 'argument_generation', 'rebuttal', 'judge']))
   })
 
   it('routes different tasks to different saved models', async () => {

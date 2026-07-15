@@ -80,7 +80,55 @@ export interface CreateDebateInput {
   affirmativePosition: string
   negativePosition: string
   freeDebateRounds: number
+  planning?: PlannedDebateDto
 }
+
+export type DebatePlanningModeDto = 'auto' | 'assist'
+export type DebatePlanningDepthDto = 'light' | 'standard' | 'deep'
+
+export interface DebatePlanDto {
+  topic: string
+  background: string
+  affirmativePosition: string
+  negativePosition: string
+  keyQuestions: string[]
+  researchDirections: string[]
+  evidenceSuggestions: string[]
+}
+
+export interface PlannedDebateDto {
+  mode: DebatePlanningModeDto
+  plan: DebatePlanDto
+  provenance: {
+    promptVersion: string
+    modelProfileId: string
+    modelId: string
+    createdAt: string
+  }
+}
+
+export interface PlanDebateInputDto {
+  mode: DebatePlanningModeDto
+  topic: string
+  background?: string
+  domain?: string
+  depth?: DebatePlanningDepthDto
+  affirmativePosition?: string
+  negativePosition?: string
+}
+
+export interface DebatePlannerErrorDto {
+  code: string
+  titleZh: string
+  descriptionZh: string
+  retryable: boolean
+  suggestedActionZh: string
+  technicalDetails?: string
+}
+
+export type DebatePlannerResultDto =
+  | { ok: true; value: PlannedDebateDto }
+  | { ok: false; error: DebatePlannerErrorDto }
 
 export interface ParticipantBindingInput {
   modelProfileId: string

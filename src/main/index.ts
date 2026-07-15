@@ -84,6 +84,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
   disposeIpc = registerDebateIpc({
     ipcMain,
     configuration: desktopApplication.configuration,
+    planner: desktopApplication.planner,
     onboarding: desktopApplication.onboarding,
     modelRouting: desktopApplication.modelRouting,
     costs: desktopApplication.costs,

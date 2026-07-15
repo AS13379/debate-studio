@@ -44,12 +44,48 @@ export const saveModelProfileSchema = z.object({
   maxOutputTokens: z.number().int().positive().max(10_000_000).optional()
 }).strict()
 
+const debatePlanSchema = z.object({
+  topic: z.string().trim().min(1).max(1_000),
+  background: z.string().trim().min(1).max(20_000),
+  affirmativePosition: z.string().trim().min(1).max(5_000),
+  negativePosition: z.string().trim().min(1).max(5_000),
+  keyQuestions: z.array(z.string().trim().min(1).max(2_000)).max(12),
+  researchDirections: z.array(z.string().trim().min(1).max(2_000)).max(12),
+  evidenceSuggestions: z.array(z.string().trim().min(1).max(2_000)).max(12)
+}).strict()
+
+const plannedDebateSchema = z.object({
+  mode: z.enum(['auto', 'assist']),
+  plan: debatePlanSchema,
+  provenance: z.object({
+    promptVersion: z.string().trim().min(1).max(100),
+    modelProfileId: idSchema,
+    modelId: z.string().trim().min(1).max(300),
+    createdAt: z.string().datetime()
+  }).strict()
+}).strict()
+
+export const planDebateSchema = z.object({
+  mode: z.enum(['auto', 'assist']),
+  topic: z.string().trim().min(1).max(1_000),
+  background: z.string().trim().max(20_000).optional(),
+  domain: z.string().trim().max(200).optional(),
+  depth: z.enum(['light', 'standard', 'deep']).optional(),
+  affirmativePosition: z.string().trim().max(5_000).optional(),
+  negativePosition: z.string().trim().max(5_000).optional()
+}).strict().superRefine((value, context) => {
+  if (value.mode !== 'assist') return
+  if (!value.affirmativePosition) context.addIssue({ code: 'custom', path: ['affirmativePosition'], message: 'AI 辅助模式需要正方初始立场' })
+  if (!value.negativePosition) context.addIssue({ code: 'custom', path: ['negativePosition'], message: 'AI 辅助模式需要反方初始立场' })
+})
+
 export const createDebateSchema = z.object({
   topic: z.string().trim().min(1).max(1_000),
   background: z.string().trim().max(20_000).optional(),
   affirmativePosition: z.string().trim().min(1).max(5_000),
   negativePosition: z.string().trim().min(1).max(5_000),
-  freeDebateRounds: z.number().int().min(1).max(20)
+  freeDebateRounds: z.number().int().min(1).max(20),
+  planning: plannedDebateSchema.optional()
 }).strict()
 
 const participantBindingSchema = z.object({
@@ -123,7 +159,7 @@ export const onboardingDefaultsSchema = z.object({
 }).strict()
 
 export const modelRoutingTaskSchema = z.enum([
-  'research', 'search_summary', 'argument_generation', 'rebuttal', 'judge', 'vision_analysis'
+  'debate_planning', 'research', 'search_summary', 'argument_generation', 'rebuttal', 'judge', 'vision_analysis'
 ])
 export const saveModelRoutingPolicySchema = z.object({
   task: modelRoutingTaskSchema,

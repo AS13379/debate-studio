@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { ModelProfileDto, ModelRoutingPolicyDto, ModelRoutingTaskDto } from '../../../shared/ipc-contract'
 
 const tasks: Array<[ModelRoutingTaskDto, string, string]> = [
+  ['debate_planning', '辩题规划', '创建前生成双方立场与研究方向'],
   ['research', '研究', '资料整理与研究计划'],
   ['search_summary', '搜索摘要', '压缩搜索结果与网页摘要'],
   ['argument_generation', '正式论证', '开篇、自由辩论与总结'],

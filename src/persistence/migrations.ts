@@ -655,6 +655,51 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_asset_files_media_type ON asset_files(media_type);
       CREATE INDEX idx_usage_records_model ON usage_records(model_profile_id, created_at DESC);
     `
+  },
+  {
+    version: 14,
+    name: 'debate_planner_records_and_routing',
+    sql: `
+      DROP INDEX IF EXISTS idx_routing_model_profile;
+      ALTER TABLE model_routing_policies RENAME TO model_routing_policies_v13;
+
+      CREATE TABLE model_routing_policies (
+        task TEXT PRIMARY KEY CHECK (task IN (
+          'debate_planning', 'research', 'search_summary', 'argument_generation',
+          'rebuttal', 'judge', 'vision_analysis'
+        )),
+        model_profile_id TEXT NOT NULL REFERENCES model_profiles(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT INTO model_routing_policies (task, model_profile_id, created_at, updated_at)
+      SELECT task, model_profile_id, created_at, updated_at FROM model_routing_policies_v13;
+      DROP TABLE model_routing_policies_v13;
+      CREATE INDEX idx_routing_model_profile ON model_routing_policies(model_profile_id);
+
+      CREATE TABLE debate_plans (
+        id TEXT PRIMARY KEY,
+        debate_id TEXT NOT NULL UNIQUE REFERENCES debates(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+        mode TEXT NOT NULL CHECK (mode IN ('auto', 'assist')),
+        topic TEXT NOT NULL,
+        background TEXT NOT NULL,
+        affirmative_position TEXT NOT NULL,
+        negative_position TEXT NOT NULL,
+        key_questions_json TEXT NOT NULL,
+        research_directions_json TEXT NOT NULL,
+        evidence_suggestions_json TEXT NOT NULL,
+        prompt_version TEXT NOT NULL,
+        model_profile_id TEXT REFERENCES model_profiles(id) ON DELETE SET NULL,
+        model_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        confirmed_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_debate_plans_created ON debate_plans(created_at DESC);
+      CREATE INDEX idx_debate_plans_model ON debate_plans(model_profile_id, created_at DESC);
+    `
   }
 ]
 
