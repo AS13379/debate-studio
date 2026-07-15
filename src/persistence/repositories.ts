@@ -36,6 +36,75 @@ export interface DebateRecord {
   updatedAt: string
 }
 
+export type DebateHistoryStatus = 'active' | 'archived' | 'deleted'
+export type DebateHistorySort = 'created-desc' | 'created-asc' | 'updated-desc' | 'updated-asc'
+
+export interface DebateMetadataRecord {
+  debateId: string
+  customTitle?: string
+  favorite: boolean
+  status: DebateHistoryStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DebateTagRecord {
+  id: string
+  debateId: string
+  tag: string
+}
+
+export interface DebateHistoryListQuery {
+  search?: string
+  sort: DebateHistorySort
+  favoriteOnly: boolean
+  tag?: string
+  status: DebateHistoryStatus | 'all'
+}
+
+export interface DebateHistoryListRecord {
+  debateId: string
+  sessionId: string
+  topic: string
+  customTitle?: string
+  favorite: boolean
+  historyStatus: DebateHistoryStatus
+  runStatus: string
+  currentStage: string
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DebateHistoryModelRecord {
+  role: string
+  participantDisplayName: string
+  modelProfileId: string
+  modelId: string
+  modelDisplayName: string
+  providerDisplayName: string
+}
+
+export interface DebateHistoryDetailRecord extends DebateHistoryListRecord {
+  background?: string
+  affirmativePosition?: string
+  negativePosition?: string
+  freeDebateRounds: number
+  models: DebateHistoryModelRecord[]
+  researchStatus: string
+  researchSessionCount: number
+  completedResearchSessionCount: number
+  researchIndexCount: number
+  evidenceCount: number
+  turnCount: number
+  eventCount: number
+  finalAdjudication?: {
+    turnId: string
+    content: string
+    completedAt?: string
+  }
+}
+
 export interface SessionRecord {
   id: string
   debateId: string
@@ -89,6 +158,16 @@ export interface EntityRepository<T extends { id: string }> {
 export interface DebateRepository extends EntityRepository<DebateRecord> {
   list(): PersistenceResult<DebateRecord[]>
   delete(id: string): PersistenceResult<boolean>
+}
+export interface DebateHistoryRepository {
+  list(query: DebateHistoryListQuery): PersistenceResult<DebateHistoryListRecord[]>
+  getDetail(debateId: string): PersistenceResult<DebateHistoryDetailRecord | undefined>
+  getMetadata(debateId: string): PersistenceResult<DebateMetadataRecord | undefined>
+  rename(debateId: string, customTitle: string, updatedAt: string): PersistenceResult<boolean>
+  setFavorite(debateId: string, favorite: boolean, updatedAt: string): PersistenceResult<boolean>
+  addTag(record: DebateTagRecord, updatedAt: string): PersistenceResult<void>
+  removeTag(debateId: string, tag: string, updatedAt: string): PersistenceResult<boolean>
+  setStatus(debateId: string, status: DebateHistoryStatus, updatedAt: string): PersistenceResult<boolean>
 }
 export interface SessionRepository {
   create(record: SessionRecord): PersistenceResult<void>
@@ -207,6 +286,7 @@ export interface RepositoryCollection {
   participants: DebateParticipantRepository
   sessions: SessionRepository
   debates: DebateRepository
+  debateHistory: DebateHistoryRepository
   turns: TurnRepository
   events: EventRepository
   usage: UsageRepository

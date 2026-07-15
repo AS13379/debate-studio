@@ -67,6 +67,20 @@ export const saveParticipantBindingsSchema = z.object({
 }).strict()
 
 export const idInputSchema = z.object({ id: idSchema }).strict()
+export const historyListQuerySchema = z.object({
+  search: z.string().trim().max(500).optional(),
+  sort: z.enum(['created-desc', 'created-asc', 'updated-desc', 'updated-asc']).optional(),
+  favoriteOnly: z.boolean().optional(),
+  tag: z.string().trim().max(50).optional(),
+  status: z.enum(['active', 'archived', 'deleted', 'all']).optional()
+}).strict().default({})
+export const renameDebateSchema = z.object({
+  id: idSchema,
+  customTitle: z.string().trim().min(1).max(200)
+}).strict()
+export const toggleFavoriteSchema = z.object({ id: idSchema, favorite: z.boolean() }).strict()
+export const debateTagSchema = z.object({ id: idSchema, tag: z.string().trim().min(1).max(50) }).strict()
+export const deleteDebateSchema = z.object({ id: idSchema, confirmed: z.boolean() }).strict()
 export const deleteProviderConnectionSchema = z.object({
   id: idSchema,
   deleteCredential: z.boolean()

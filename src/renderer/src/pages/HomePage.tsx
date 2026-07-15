@@ -1,22 +1,34 @@
-import type { DebateSummaryDto } from '../../../shared/ipc-contract'
+import type { DebateHistoryListQueryDto, DebateHistorySummaryDto } from '../../../shared/ipc-contract'
 
 export interface HomePageProps {
-  debates: DebateSummaryDto[]
+  debates: DebateHistorySummaryDto[]
+  query?: DebateHistoryListQueryDto
   loading: boolean
   error?: string
+  onQueryChange?(query: DebateHistoryListQueryDto): void
   onCreate(): void
   onCreateDemo(): void
-  onOpen(debate: DebateSummaryDto): void
+  onOpen(debate: DebateHistorySummaryDto): void
+  onOpenHistory?(debate: DebateHistorySummaryDto): void
 }
 
-export function HomePage({ debates, loading, error, onCreate, onCreateDemo, onOpen }: HomePageProps) {
+export function HomePage({
+  debates, query = {}, loading, error, onQueryChange = () => undefined, onCreate, onCreateDemo, onOpen,
+  onOpenHistory = onOpen
+}: HomePageProps) {
+  const availableTags = [...new Set([
+    ...debates.flatMap((debate) => debate.tags),
+    ...(query.tag ? [query.tag] : [])
+  ])].sort((left, right) => left.localeCompare(right, 'zh-CN'))
+  const status = query.status ?? 'active'
+
   return (
     <section className="page-stack" aria-labelledby="home-title">
       <header className="page-header">
         <div>
           <p className="eyebrow">本地辩论工作台</p>
-          <h1 id="home-title">辩论列表</h1>
-          <p className="page-description">配置角色模型，运行辩论，并在本机保留完整过程。</p>
+          <h1 id="home-title">辩论历史</h1>
+          <p className="page-description">长期保存、整理和查找辩论；删除记录也可以恢复。</p>
         </div>
         <div className="header-actions">
           <button className="button secondary" onClick={onCreate}>新建辩论</button>
@@ -24,33 +36,114 @@ export function HomePage({ debates, loading, error, onCreate, onCreateDemo, onOp
         </div>
       </header>
 
+      <div className="panel history-toolbar" aria-label="历史筛选">
+        <label className="field history-search">
+          搜索
+          <input
+            type="search"
+            placeholder="搜索自定义名称或辩题"
+            value={query.search ?? ''}
+            onChange={(event) => onQueryChange({ ...query, search: event.target.value })}
+          />
+        </label>
+        <label className="field">
+          时间排序
+          <select value={query.sort ?? 'updated-desc'} onChange={(event) => onQueryChange({
+            ...query, sort: event.target.value as NonNullable<DebateHistoryListQueryDto['sort']>
+          })}>
+            <option value="updated-desc">最近更新</option>
+            <option value="updated-asc">最早更新</option>
+            <option value="created-desc">最新创建</option>
+            <option value="created-asc">最早创建</option>
+          </select>
+        </label>
+        <label className="field">
+          标签
+          <select value={query.tag ?? ''} onChange={(event) => onQueryChange({ ...query, tag: event.target.value || undefined })}>
+            <option value="">全部标签</option>
+            {availableTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+          </select>
+        </label>
+        <label className="checkbox-field history-favorite-filter">
+          <input
+            type="checkbox"
+            checked={query.favoriteOnly ?? false}
+            onChange={(event) => onQueryChange({ ...query, favoriteOnly: event.target.checked })}
+          />
+          只看收藏
+        </label>
+      </div>
+
+      <div className="history-status-tabs" role="tablist" aria-label="历史状态">
+        {([
+          ['active', '当前记录'], ['archived', '已归档'], ['deleted', '回收站']
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            role="tab"
+            aria-selected={status === value}
+            className={status === value ? 'active' : ''}
+            onClick={() => onQueryChange({ ...query, status: value, tag: undefined })}
+          >{label}</button>
+        ))}
+      </div>
+
       {error && <div className="notice error" role="alert">{error}</div>}
       {loading && <div className="panel muted">正在读取本地辩论…</div>}
       {!loading && debates.length === 0 && (
         <div className="empty-state">
           <div className="empty-icon">辩</div>
-          <h2>还没有辩论</h2>
-          <p>先创建一个不访问网络的 Mock 示例，立即体验完整流程。</p>
-          <button className="button primary" onClick={onCreateDemo}>创建 Mock 示例辩论</button>
+          <h2>{emptyTitle(status, query)}</h2>
+          <p>{emptyDescription(status, query)}</p>
+          {status === 'active' && !query.search && !query.favoriteOnly && !query.tag && (
+            <button className="button primary" onClick={onCreateDemo}>创建 Mock 示例辩论</button>
+          )}
         </div>
       )}
       {debates.length > 0 && (
         <div className="debate-grid">
           {debates.map((debate) => (
-            <article className="debate-card" key={debate.id}>
+            <article className={`debate-card history-${debate.historyStatus}`} key={debate.id}>
               <div className="card-topline">
                 <span className={`status-pill status-${debate.status}`}>{statusLabel(debate.status)}</span>
-                <time>{new Date(debate.createdAt).toLocaleString('zh-CN')}</time>
+                <span className="history-favorite" aria-label={debate.favorite ? '已收藏' : '未收藏'}>{debate.favorite ? '★' : '☆'}</span>
               </div>
-              <h2>{debate.topic}</h2>
-              <p>当前阶段：{stageLabel(debate.currentStage)}</p>
-              <button className="button secondary" onClick={() => onOpen(debate)}>继续查看或运行</button>
+              <h2>{debate.displayTitle}</h2>
+              {debate.customTitle && <p className="history-topic">原辩题：{debate.topic}</p>}
+              <div className="history-card-facts">
+                <span>当前阶段：{stageLabel(debate.currentStage)}</span>
+                <span>创建：{formatDate(debate.createdAt)}</span>
+                <span>更新：{formatDate(debate.updatedAt)}</span>
+              </div>
+              {debate.tags.length > 0 && <div className="tag-list">{debate.tags.map((tag) => <span className="tag-pill" key={tag}>{tag}</span>)}</div>}
+              <div className="compact-actions history-card-actions">
+                {debate.historyStatus === 'active' && <button className="button secondary" onClick={() => onOpen(debate)}>继续查看或运行</button>}
+                <button className="button ghost" onClick={() => onOpenHistory(debate)}>详情与管理</button>
+              </div>
             </article>
           ))}
         </div>
       )}
     </section>
   )
+}
+
+function emptyTitle(status: string, query: DebateHistoryListQueryDto): string {
+  if (query.search || query.favoriteOnly || query.tag) return '没有符合筛选条件的辩论'
+  if (status === 'archived') return '还没有归档记录'
+  if (status === 'deleted') return '回收站是空的'
+  return '还没有辩论'
+}
+
+function emptyDescription(status: string, query: DebateHistoryListQueryDto): string {
+  if (query.search || query.favoriteOnly || query.tag) return '换一个关键词或调整筛选条件试试。'
+  if (status === 'archived') return '归档的辩论会显示在这里，并且可以随时恢复。'
+  if (status === 'deleted') return '软删除的辩论会显示在这里，关联数据不会立即丢失。'
+  return '先创建一个不访问网络的 Mock 示例，立即体验完整流程。'
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString('zh-CN')
 }
 
 export function statusLabel(status: string): string {

@@ -34,7 +34,7 @@ describe('SQLite persistence foundation', () => {
 
     expect(result.value.database.path.startsWith(appDataDirectory)).toBe(true)
     expect(existsSync(result.value.database.path)).toBe(true)
-    expect(result.value.migrations.currentVersion()).toEqual({ ok: true, value: 9 })
+    expect(result.value.migrations.currentVersion()).toEqual({ ok: true, value: 10 })
 
     const tables = result.value.database.all<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
@@ -58,6 +58,8 @@ describe('SQLite persistence foundation', () => {
         'fetched_web_pages',
         'research_tool_calls',
         'research_loop_states'
+        , 'debate_metadata'
+        , 'debate_tags'
       ])
     )
     expect(result.value.database.close().ok).toBe(true)
@@ -69,7 +71,7 @@ describe('SQLite persistence foundation', () => {
     if (!databaseResult.ok) return
 
     const migration: Migration = {
-      version: 10,
+      version: 11,
       name: 'test_upgrade',
       sql: 'CREATE TABLE migration_probe (id TEXT PRIMARY KEY);'
     }
@@ -77,13 +79,35 @@ describe('SQLite persistence foundation', () => {
 
     expect(manager.migrate()).toMatchObject({
       ok: true,
-      value: { fromVersion: 0, toVersion: 10, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }
+      value: { fromVersion: 0, toVersion: 11, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] }
     })
     expect(manager.migrate()).toMatchObject({
       ok: true,
-      value: { fromVersion: 10, toVersion: 10, appliedVersions: [] }
+      value: { fromVersion: 11, toVersion: 11, appliedVersions: [] }
     })
     databaseResult.value.close()
+  })
+
+  it('backfills history metadata when upgrading an existing version 9 database', () => {
+    const databaseResult = Database.open({ appDataDirectory: temporaryDirectory() })
+    expect(databaseResult.ok).toBe(true)
+    if (!databaseResult.ok) return
+    const database = databaseResult.value
+    const legacyMigrations = DEFAULT_MIGRATIONS.filter((migration) => migration.version <= 9)
+    expect(new MigrationManager(database, legacyMigrations).migrate()).toMatchObject({ ok: true, value: { toVersion: 9 } })
+    expect(database.run(
+      `INSERT INTO debates (id, topic, status, created_at, updated_at, free_debate_rounds)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      'legacy-debate', '旧数据库辩题', 'draft', '2026-07-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z', 1
+    ).ok).toBe(true)
+
+    expect(new MigrationManager(database).migrate()).toMatchObject({
+      ok: true, value: { fromVersion: 9, toVersion: 10, appliedVersions: [10] }
+    })
+    expect(database.get<{ status: string; favorite: number }>(
+      'SELECT status, favorite FROM debate_metadata WHERE debate_id = ?', 'legacy-debate'
+    )).toEqual({ ok: true, value: { status: 'active', favorite: 0 } })
+    database.close()
   })
 
   it('reads and writes through the settings repository', () => {

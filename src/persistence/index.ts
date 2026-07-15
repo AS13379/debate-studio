@@ -9,6 +9,15 @@ export type { Migration, MigrationResult } from './migrations'
 export type {
   DebateRecord,
   DebateRepository,
+  DebateHistoryDetailRecord,
+  DebateHistoryListQuery,
+  DebateHistoryListRecord,
+  DebateHistoryModelRecord,
+  DebateHistoryRepository,
+  DebateHistorySort,
+  DebateHistoryStatus,
+  DebateMetadataRecord,
+  DebateTagRecord,
   DebateParticipantRepository,
   EntityRepository,
   EventRecord,
@@ -27,6 +36,7 @@ export type {
   UsageRepository
 } from './repositories'
 export { SQLiteResearchRepository } from './sqlite-research-repository'
+export { SQLiteDebateHistoryRepository } from './sqlite-debate-history-repository'
 export { SQLiteSearchProviderConnectionRepository } from './sqlite-search-provider-connection-repository'
 export { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-repository'
 export { SQLiteModelProfileRepository, SQLiteProviderConnectionRepository } from './sqlite-provider-repositories'

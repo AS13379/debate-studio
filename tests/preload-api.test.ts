@@ -27,13 +27,13 @@ describe('preload DebateStudioApi', () => {
     const api = createDebateStudioApi(new RecordingIpcRenderer())
 
     expect(Object.keys(api).sort()).toEqual([
-      'addResearchAsset', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
-      'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
-      'exportDiagnosticReport', 'getAppVersion', 'getDebate', 'getErrorDetail', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebates',
+      'addResearchAsset', 'addTag', 'archiveDebate', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
+      'deleteDebate', 'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
+      'exportDiagnosticReport', 'getAppVersion', 'getDebate', 'getDebateDetail', 'getErrorDetail', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebates',
       'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
-      'pauseDebate', 'publishResearchEvidence', 'reportRendererError', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
+      'pauseDebate', 'publishResearchEvidence', 'removeTag', 'renameDebate', 'reportRendererError', 'restoreDebate', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
       'saveParticipantBindings', 'saveProviderConnection', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection',
-      'startDebate', 'stopDebate', 'testConnection', 'testSearchConnection', 'updateEvidenceStatus'
+      'startDebate', 'stopDebate', 'testConnection', 'testSearchConnection', 'toggleFavorite', 'updateEvidenceStatus'
     ].sort())
     expect(api).not.toHaveProperty('invoke')
     expect(api).not.toHaveProperty('getCredential')

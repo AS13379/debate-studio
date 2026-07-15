@@ -502,6 +502,45 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_fetched_web_pages_debate ON fetched_web_pages(debate_session_id);
       CREATE INDEX idx_source_evaluations_debate ON source_evaluations(debate_session_id);
     `
+  },
+  {
+    version: 10,
+    name: 'debate_history_management',
+    sql: `
+      CREATE TABLE debate_metadata (
+        debate_id TEXT PRIMARY KEY REFERENCES debates(id) ON DELETE CASCADE,
+        custom_title TEXT,
+        favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'deleted')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE debate_tags (
+        id TEXT PRIMARY KEY,
+        debate_id TEXT NOT NULL REFERENCES debates(id) ON DELETE CASCADE,
+        tag TEXT NOT NULL COLLATE NOCASE,
+        UNIQUE (debate_id, tag)
+      );
+
+      INSERT INTO debate_metadata (debate_id, custom_title, favorite, status, created_at, updated_at)
+      SELECT id, NULL, 0, 'active', created_at, updated_at FROM debates;
+
+      CREATE TRIGGER debates_create_history_metadata
+      AFTER INSERT ON debates
+      BEGIN
+        INSERT OR IGNORE INTO debate_metadata
+          (debate_id, custom_title, favorite, status, created_at, updated_at)
+        VALUES (NEW.id, NULL, 0, 'active', NEW.created_at, NEW.updated_at);
+      END;
+
+      CREATE INDEX idx_debate_metadata_status_updated
+        ON debate_metadata(status, updated_at DESC);
+      CREATE INDEX idx_debate_metadata_favorite
+        ON debate_metadata(favorite, updated_at DESC);
+      CREATE INDEX idx_debate_tags_tag
+        ON debate_tags(tag COLLATE NOCASE);
+    `
   }
 ]
 

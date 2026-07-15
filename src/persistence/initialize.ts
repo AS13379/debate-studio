@@ -14,6 +14,7 @@ import { SQLiteSessionRepository } from './sqlite-session-repository'
 import { SQLiteSettingsRepository } from './sqlite-settings-repository'
 import { SQLiteResearchRepository } from './sqlite-research-repository'
 import { SQLiteSearchProviderConnectionRepository } from './sqlite-search-provider-connection-repository'
+import { SQLiteDebateHistoryRepository } from './sqlite-debate-history-repository'
 
 export interface PersistenceContext {
   database: Database
@@ -45,6 +46,7 @@ export function initializePersistence(options: DatabaseOptions): PersistenceResu
         participants: new SQLiteDebateParticipantRepository(database),
         sessions: new SQLiteSessionRepository(database),
         debates: new SQLiteDebateRepository(database),
+        debateHistory: new SQLiteDebateHistoryRepository(database),
         turns: new SQLiteTurnRepository(database),
         events: new SQLiteEventRepository(database),
         usage: new SQLiteUsageRepository(database),

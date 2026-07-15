@@ -439,12 +439,6 @@ export class DebateConfigurationApplication {
     return { ok: true, value: this.detailDto(debate.value, session, participants.value) }
   }
 
-  deleteDebate(id: string): ConfigurationResultDto<boolean> {
-    const deleted = this.dependencies.persistence.repositories.debates.delete(id)
-    if (!deleted.ok) return this.persistenceError(deleted.error)
-    return deleted.value ? { ok: true, value: true } : this.notFound('Debate', id)
-  }
-
   listDebateTurns(sessionId: string): ConfigurationResultDto<DebateTurnDto[]> {
     const turns = this.dependencies.persistence.repositories.turns.listBySession(sessionId)
     return turns.ok

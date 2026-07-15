@@ -55,6 +55,7 @@ app.whenReady().then(() => {
   disposeIpc = registerDebateIpc({
     ipcMain,
     configuration: desktopApplication.configuration,
+    history: desktopApplication.history,
     run: desktopApplication.run,
     research: desktopApplication.research,
     diagnostics: desktopApplication.diagnostics,

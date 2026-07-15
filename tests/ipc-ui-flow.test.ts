@@ -106,6 +106,7 @@ function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()
   const dispose = registerDebateIpc({
     ipcMain: ipc,
     configuration: application.configuration,
+    history: application.history,
     run: application.run,
     research: application.research,
     diagnostics: application.diagnostics,
@@ -184,6 +185,34 @@ describe('typed IPC UI flow', () => {
     expect(JSON.stringify(invalid)).not.toContain(secret)
     dispose()
     expect(ipc.handlers.size).toBe(0)
+  })
+
+  it('validates and executes history management only through narrow IPC commands', async () => {
+    const app = createApplication(temporaryDirectory())
+    const { ipc, dispose } = register(app)
+    const demo = await ipc.invoke<{ ok: true; value: { id: string } }>(IPC_CHANNELS.createMockDemoDebate)
+    const secret = 'sk-history-ipc-must-not-pass'
+
+    const invalid = await ipc.invoke<{ ok: false; error: { code: string } }>(IPC_CHANNELS.renameDebate, {
+      id: demo.value.id, customTitle: '非法越界名称', apiKey: secret
+    })
+    expect(invalid).toMatchObject({ ok: false, error: { code: 'IPC_VALIDATION_FAILED' } })
+
+    expect(await ipc.invoke(IPC_CHANNELS.renameDebate, { id: demo.value.id, customTitle: 'IPC 历史案例' })).toMatchObject({ ok: true })
+    expect(await ipc.invoke(IPC_CHANNELS.toggleFavorite, { id: demo.value.id, favorite: true })).toMatchObject({ ok: true })
+    expect(await ipc.invoke(IPC_CHANNELS.addTag, { id: demo.value.id, tag: 'IPC' })).toMatchObject({ ok: true })
+    const listed = await ipc.invoke<{ ok: true; value: Array<{ displayTitle: string; favorite: boolean; tags: string[] }> }>(
+      IPC_CHANNELS.listDebates, { search: 'IPC 历史', favoriteOnly: true, tag: 'IPC', status: 'active' }
+    )
+    expect(listed).toMatchObject({ ok: true, value: [{ displayTitle: 'IPC 历史案例', favorite: true, tags: ['IPC'] }] })
+
+    expect(await ipc.invoke(IPC_CHANNELS.archiveDebate, { id: demo.value.id })).toMatchObject({ ok: true, value: { historyStatus: 'archived' } })
+    expect(await ipc.invoke(IPC_CHANNELS.restoreDebate, { id: demo.value.id })).toMatchObject({ ok: true, value: { historyStatus: 'active' } })
+    expect(await ipc.invoke(IPC_CHANNELS.deleteDebate, { id: demo.value.id, confirmed: false })).toMatchObject({ ok: false, error: { code: 'DELETE_CONFIRMATION_REQUIRED' } })
+    expect(await ipc.invoke(IPC_CHANNELS.deleteDebate, { id: demo.value.id, confirmed: true })).toMatchObject({ ok: true, value: { historyStatus: 'deleted' } })
+    expect(JSON.stringify(listed)).not.toContain(secret)
+    expect(JSON.stringify(listed)).not.toContain('credentialRef')
+    dispose()
   })
 
   it('returns only credential status over IPC when saving an API Key', async () => {

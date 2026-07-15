@@ -1,26 +1,29 @@
 import { useEffect, useState } from 'react'
 
-import type { DebateDetailDto, DebateSummaryDto } from '../../shared/ipc-contract'
+import type { DebateDetailDto, DebateHistoryListQueryDto, DebateHistorySummaryDto } from '../../shared/ipc-contract'
 import { HomePage } from './pages/HomePage'
 import { LiveDebatePage } from './pages/LiveDebatePage'
 import { NewDebatePage } from './pages/NewDebatePage'
 import { ProviderManagementPage } from './pages/ProviderManagementPage'
 import { DiagnosticsPage } from './pages/DiagnosticsPage'
+import { DebateHistoryPage } from './pages/DebateHistoryPage'
 
-type Page = 'home' | 'new' | 'models' | 'diagnostics' | 'live'
+type Page = 'home' | 'new' | 'models' | 'diagnostics' | 'live' | 'history'
 
 export function App() {
   const storedDebateId = localStorage.getItem('debate-studio:last-debate') ?? undefined
-  const [page, setPage] = useState<Page>(storedDebateId ? 'live' : 'home')
+  const [page, setPage] = useState<Page>('home')
   const [selectedDebateId, setSelectedDebateId] = useState<string | undefined>(storedDebateId)
-  const [debates, setDebates] = useState<DebateSummaryDto[]>([])
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string>()
+  const [debates, setDebates] = useState<DebateHistorySummaryDto[]>([])
+  const [historyQuery, setHistoryQuery] = useState<DebateHistoryListQueryDto>({ status: 'active', sort: 'updated-desc' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [version, setVersion] = useState('')
 
-  const loadDebates = async (): Promise<void> => {
+  const loadDebates = async (query = historyQuery): Promise<void> => {
     setLoading(true)
-    const result = await window.debateStudio.listDebates()
+    const result = await window.debateStudio.listDebates(query)
     if (result.ok) {
       setDebates(result.value)
       setError(undefined)
@@ -29,11 +32,24 @@ export function App() {
   }
 
   useEffect(() => {
-    void loadDebates()
     void window.debateStudio.getAppVersion().then(setVersion)
+    if (storedDebateId) {
+      void window.debateStudio.getDebateDetail({ id: storedDebateId }).then((result) => {
+        if (result.ok && result.value.historyStatus === 'active') setPage('live')
+        else {
+          localStorage.removeItem('debate-studio:last-debate')
+          setSelectedDebateId(undefined)
+        }
+      })
+    }
   }, [])
 
-  const openDebate = (debate: Pick<DebateSummaryDto, 'id'> | DebateDetailDto): void => {
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void loadDebates(historyQuery), 160)
+    return () => window.clearTimeout(timeout)
+  }, [historyQuery])
+
+  const openDebate = (debate: Pick<DebateHistorySummaryDto, 'id'> | DebateDetailDto): void => {
     localStorage.setItem('debate-studio:last-debate', debate.id)
     setSelectedDebateId(debate.id)
     setPage('live')
@@ -42,8 +58,14 @@ export function App() {
   const goHome = (): void => {
     localStorage.removeItem('debate-studio:last-debate')
     setSelectedDebateId(undefined)
+    setSelectedHistoryId(undefined)
     setPage('home')
     void loadDebates()
+  }
+
+  const openHistory = (debate: DebateHistorySummaryDto): void => {
+    setSelectedHistoryId(debate.id)
+    setPage('history')
   }
 
   const createDemo = async (): Promise<void> => {
@@ -70,16 +92,25 @@ export function App() {
         {page === 'home' && (
           <HomePage
             debates={debates}
+            query={historyQuery}
             loading={loading}
             error={error}
+            onQueryChange={setHistoryQuery}
             onCreate={() => setPage('new')}
             onCreateDemo={() => void createDemo()}
             onOpen={openDebate}
+            onOpenHistory={openHistory}
           />
         )}
         {page === 'new' && <NewDebatePage onBack={goHome} onCreated={openDebate} onOpenModels={() => setPage('models')} />}
         {page === 'models' && <ProviderManagementPage />}
         {page === 'diagnostics' && <DiagnosticsPage />}
+        {page === 'history' && selectedHistoryId && <DebateHistoryPage
+          debateId={selectedHistoryId}
+          onBack={goHome}
+          onChanged={() => void loadDebates()}
+          onOpenDebate={(id) => openDebate({ id })}
+        />}
         {page === 'live' && selectedDebateId && (
           <LiveDebatePage debateId={selectedDebateId} onBack={goHome} onOpenModels={() => setPage('models')} />
         )}

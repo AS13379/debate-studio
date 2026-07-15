@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod'
 
 import type {
-  DebateConfigurationApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ResearchApplication
+  DebateConfigurationApplication, DebateHistoryApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ResearchApplication
 } from '../application'
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
@@ -21,10 +21,14 @@ import {
   createDebateSchema,
   credentialInputSchema,
   deleteProviderConnectionSchema,
+  deleteDebateSchema,
+  debateTagSchema,
+  historyListQuerySchema,
   idInputSchema,
   publishEvidenceSchema,
   researchRuntimeSettingsSchema,
   rendererErrorSchema,
+  renameDebateSchema,
   researchToolDecisionSchema,
   runMockSearchSchema,
   saveSearchProviderConnectionSchema,
@@ -33,6 +37,7 @@ import {
   saveParticipantBindingsSchema,
   saveProviderConnectionSchema,
   sessionInputSchema,
+  toggleFavoriteSchema,
   updateEvidenceStatusSchema
 } from '../shared/ipc-schemas'
 
@@ -44,6 +49,7 @@ export interface IpcMainLike {
 export interface DebateIpcDependencies {
   ipcMain: IpcMainLike
   configuration: DebateConfigurationApplication
+  history: DebateHistoryApplication
   run: DebateRunApplication
   research?: ResearchApplication
   diagnostics: DiagnosticsApplication
@@ -80,8 +86,16 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.stopDebate, validated(sessionInputSchema, async (input) => mapRunResult(await run.stop(input.sessionId))))
   ipcMain.handle(IPC_CHANNELS.retryFailedTurn, validated(sessionInputSchema, async (input) => mapRunResult(await run.retryFailedTurn(input.sessionId))))
   ipcMain.handle(IPC_CHANNELS.getRunState, validated(sessionInputSchema, (input) => mapRunResult(run.getRunState(input.sessionId))))
-  ipcMain.handle(IPC_CHANNELS.listDebates, () => configuration.listDebates())
+  ipcMain.handle(IPC_CHANNELS.listDebates, validated(historyListQuerySchema, (input) => dependencies.history.listDebates(input)))
   ipcMain.handle(IPC_CHANNELS.getDebate, validated(idInputSchema, (input) => configuration.getDebate(input.id)))
+  ipcMain.handle(IPC_CHANNELS.getDebateDetail, validated(idInputSchema, (input) => dependencies.history.getDebateDetail(input.id)))
+  ipcMain.handle(IPC_CHANNELS.renameDebate, validated(renameDebateSchema, (input) => dependencies.history.renameDebate(input.id, input.customTitle)))
+  ipcMain.handle(IPC_CHANNELS.toggleFavorite, validated(toggleFavoriteSchema, (input) => dependencies.history.toggleFavorite(input.id, input.favorite)))
+  ipcMain.handle(IPC_CHANNELS.addTag, validated(debateTagSchema, (input) => dependencies.history.addTag(input.id, input.tag)))
+  ipcMain.handle(IPC_CHANNELS.removeTag, validated(debateTagSchema, (input) => dependencies.history.removeTag(input.id, input.tag)))
+  ipcMain.handle(IPC_CHANNELS.archiveDebate, validated(idInputSchema, (input) => dependencies.history.archiveDebate(input.id)))
+  ipcMain.handle(IPC_CHANNELS.restoreDebate, validated(idInputSchema, (input) => dependencies.history.restoreDebate(input.id)))
+  ipcMain.handle(IPC_CHANNELS.deleteDebate, validated(deleteDebateSchema, (input) => dependencies.history.deleteDebate(input.id, input.confirmed)))
   ipcMain.handle(IPC_CHANNELS.listDebateTurns, validated(sessionInputSchema, (input) => configuration.listDebateTurns(input.sessionId)))
   ipcMain.handle(IPC_CHANNELS.loadDebateSetup, validated(sessionInputSchema, (input) => configuration.loadDebateSetup(input.sessionId)))
   ipcMain.handle(IPC_CHANNELS.loadResearchWorkspace, validated(sessionInputSchema, (input) => research?.loadWorkspace(input.sessionId) ?? researchUnavailable()))

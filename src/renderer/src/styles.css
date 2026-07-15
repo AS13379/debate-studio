@@ -53,6 +53,50 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .debate-card { padding: 22px; }
 .debate-card h2 { min-height: 56px; margin: 18px 0 10px; font-size: 20px; line-height: 1.4; }
 .debate-card p { color: #737781; }
+.history-toolbar { display: grid; grid-template-columns: minmax(260px, 1.5fr) minmax(150px, .7fr) minmax(150px, .7fr) auto; gap: 14px; align-items: end; padding: 17px 19px; }
+.history-search { min-width: 0; }
+.history-favorite-filter { display: flex; gap: 8px; padding-bottom: 10px; color: #555966; white-space: nowrap; }
+.history-status-tabs { display: inline-flex; width: fit-content; padding: 4px; background: #e9eaee; border-radius: 10px; }
+.history-status-tabs button { padding: 8px 15px; color: #666a74; background: transparent; border: 0; border-radius: 7px; }
+.history-status-tabs button.active { color: #39304f; background: #fff; box-shadow: 0 2px 8px rgba(25,28,36,.09); font-weight: 700; }
+.history-favorite { color: #d09132; font-size: 22px; line-height: 1; }
+.history-topic { min-height: auto !important; margin: -5px 0 12px !important; font-size: 12px; }
+.history-card-facts { display: flex; flex-direction: column; gap: 5px; color: #737781; font-size: 12px; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+.tag-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; color: #5a4ea3; background: #efedff; border: 1px solid #ddd8ff; border-radius: 999px; font-size: 12px; font-weight: 650; }
+.tag-pill.removable { padding-right: 4px; }
+.tag-pill button { display: grid; width: 20px; height: 20px; padding: 0; place-items: center; color: #7166b1; background: transparent; border: 0; border-radius: 50%; }
+.tag-pill button:hover { background: rgba(98,81,214,.12); }
+.history-card-actions { margin-top: 18px; }
+.history-archived { opacity: .88; }
+.history-deleted { border-style: dashed; }
+.history-detail-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, .6fr); gap: 16px; }
+.history-summary-panel, .history-count-panel, .history-editor-panel, .history-research-summary { display: flex; flex-direction: column; gap: 18px; }
+.history-fact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 22px; margin: 0; }
+.history-fact-grid div { min-width: 0; }
+.history-fact-grid dt { color: #858994; font-size: 11px; font-weight: 700; }
+.history-fact-grid dd { margin: 5px 0 0; overflow-wrap: anywhere; line-height: 1.5; }
+.history-count-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.history-count-grid > div { display: flex; flex-direction: column; gap: 3px; padding: 13px; background: #f6f5fc; border-radius: 9px; }
+.history-count-grid b { color: #5b4dcc; font-size: 24px; }
+.history-count-grid span { color: #7c808a; font-size: 11px; }
+.history-rename-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+.history-tag-editor { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; align-items: center; }
+.history-tag-editor .tag-list { margin: 0; }
+.history-tag-editor form { display: flex; gap: 8px; }
+.history-tag-editor input { min-width: 230px; padding: 9px 11px; color: inherit; background: #fbfbfc; border: 1px solid #d8dae1; border-radius: 9px; }
+.history-model-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.history-model-grid article { display: flex; flex-direction: column; gap: 5px; padding: 14px; background: #f7f7f9; border: 1px solid #e4e5e9; border-radius: 9px; }
+.history-model-grid article span, .history-model-grid article small { color: #7d818b; font-size: 11px; }
+.history-model-grid code { color: #6251d6; overflow-wrap: anywhere; }
+.history-research-summary p { margin: 0; color: #656a75; }
+.history-danger-zone { display: flex; justify-content: space-between; gap: 22px; align-items: center; border-color: #edcbd1; }
+.history-danger-zone p { margin: 6px 0 0; color: #787c86; font-size: 13px; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 28px; background: rgba(19,20,24,.55); backdrop-filter: blur(6px); }
+.delete-confirmation { width: min(580px, 100%); padding: 26px; background: #fff; border: 1px solid #e3e4e8; border-radius: 15px; box-shadow: 0 24px 80px rgba(0,0,0,.25); }
+.delete-confirmation h2 { margin: 7px 0 11px; }
+.delete-confirmation > p:not(.eyebrow), .delete-confirmation li { color: #626670; line-height: 1.6; }
+.delete-confirmation .form-actions { justify-content: flex-end; margin-top: 20px; }
 .card-topline { display: flex; justify-content: space-between; align-items: center; color: #8b8e97; font-size: 12px; }
 .status-pill, .turn-status { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 999px; color: #4e5260; background: #eceef2; font-size: 12px; font-weight: 700; }
 .status-running, .status-streaming { color: #1b6b54; background: #dff7ed; }
@@ -347,10 +391,23 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .log-list { border-color: #383b44; }
   .log-row { border-color: #343740; }
   .log-level { background: #343740; }
+  .history-status-tabs { background: #292c33; }
+  .history-status-tabs button { color: #a8abb4; }
+  .history-status-tabs button.active { color: #f0f1f4; background: #3a3d45; }
+  .history-favorite-filter { color: #d9dbe1; }
+  .tag-pill { color: #c7c0f7; background: #2b2740; border-color: #4a4466; }
+  .tag-pill button { color: #c7c0f7; }
+  .history-count-grid > div, .history-model-grid article { background: #1b1d22; border-color: #383b44; }
+  .history-count-grid span, .history-fact-grid dt, .history-research-summary p { color: #a8abb4; }
+  .history-tag-editor input { color: #f0f1f4; background: #1b1d22; border-color: #41444d; }
+  .delete-confirmation { color: #eff0f3; background: #22242a; border-color: #41444d; }
+  .delete-confirmation > p:not(.eyebrow), .delete-confirmation li { color: #c0c2c9; }
 }
 
 @media (max-width: 1100px) {
   .private-research-grid { grid-template-columns: 1fr; }
   .research-preset-selector { grid-template-columns: 1fr; }
   .diagnostics-grid { grid-template-columns: 1fr; }
+  .history-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .history-detail-grid { grid-template-columns: 1fr; }
 }

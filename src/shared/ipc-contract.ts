@@ -34,6 +34,16 @@ import type {
   LogEntryDto,
   RendererErrorInputDto
 } from './diagnostics-dtos'
+import type {
+  DebateHistoryDetailDto,
+  DebateHistoryListQueryDto,
+  DebateHistoryResultDto,
+  DebateHistorySummaryDto,
+  DebateTagInputDto,
+  DeleteDebateInputDto,
+  RenameDebateInputDto,
+  ToggleFavoriteInputDto
+} from './history-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
@@ -59,6 +69,14 @@ export const IPC_CHANNELS = {
   getRunState: 'run:get-state',
   listDebates: 'query:list-debates',
   getDebate: 'query:get-debate',
+  getDebateDetail: 'history:get-debate-detail',
+  renameDebate: 'history:rename-debate',
+  toggleFavorite: 'history:toggle-favorite',
+  addTag: 'history:add-tag',
+  removeTag: 'history:remove-tag',
+  archiveDebate: 'history:archive-debate',
+  restoreDebate: 'history:restore-debate',
+  deleteDebate: 'history:delete-debate',
   listDebateTurns: 'query:list-debate-turns',
   loadDebateSetup: 'query:load-debate-setup',
   loadResearchWorkspace: 'research:load-workspace',
@@ -149,8 +167,16 @@ export interface DebateStudioApi {
   stopDebate(input: { sessionId: string }): Promise<RunCommandResultDto>
   retryFailedTurn(input: { sessionId: string }): Promise<RunCommandResultDto>
   getRunState(input: { sessionId: string }): Promise<RunCommandResultDto>
-  listDebates(): Promise<ConfigurationResultDto<DebateSummaryDto[]>>
+  listDebates(input?: DebateHistoryListQueryDto): Promise<DebateHistoryResultDto<DebateHistorySummaryDto[]>>
   getDebate(input: { id: string }): Promise<ConfigurationResultDto<DebateDetailDto>>
+  getDebateDetail(input: { id: string }): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
+  renameDebate(input: RenameDebateInputDto): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
+  toggleFavorite(input: ToggleFavoriteInputDto): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
+  addTag(input: DebateTagInputDto): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
+  removeTag(input: DebateTagInputDto): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
+  archiveDebate(input: { id: string }): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
+  restoreDebate(input: { id: string }): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
+  deleteDebate(input: DeleteDebateInputDto): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
   listDebateTurns(input: { sessionId: string }): Promise<ConfigurationResultDto<DebateTurnDto[]>>
   loadDebateSetup(input: { sessionId: string }): Promise<ConfigurationResultDto<DebateSetupDto>>
   loadResearchWorkspace(input: { sessionId: string }): Promise<ResearchResultDto<ResearchWorkspaceDto>>
@@ -223,3 +249,16 @@ export type {
   LogLevelDto,
   RendererErrorInputDto
 } from './diagnostics-dtos'
+export type {
+  DebateHistoryDetailDto,
+  DebateHistoryListQueryDto,
+  DebateHistoryModelDto,
+  DebateHistoryResultDto,
+  DebateHistorySortDto,
+  DebateHistoryStatusDto,
+  DebateHistorySummaryDto,
+  DebateTagInputDto,
+  DeleteDebateInputDto,
+  RenameDebateInputDto,
+  ToggleFavoriteInputDto
+} from './history-dtos'

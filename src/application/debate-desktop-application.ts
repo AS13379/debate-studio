@@ -25,6 +25,7 @@ import {
 import { DebateRunPersistence } from './debate-run-persistence'
 import { composeDebateSetupApplication } from './debate-setup-application'
 import { DiagnosticsApplication } from './diagnostics-application'
+import { DebateHistoryApplication } from './debate-history-application'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -41,6 +42,7 @@ export class DebateDesktopApplication {
     readonly run: DebateRunApplication,
     readonly research: ResearchApplication,
     readonly diagnostics: DiagnosticsApplication,
+    readonly history: DebateHistoryApplication,
     readonly logger: StructuredLogger,
     readonly errorCenter: ErrorCenter
   ) {}
@@ -138,8 +140,9 @@ export function initializeDebateDesktopApplication(
       logger,
       now: options.now
     })
+    const history = new DebateHistoryApplication({ persistence, logger, now: options.now })
     logger.info('Debate Studio 应用组合完成', { source: 'application' })
-    return { ok: true, value: new DebateDesktopApplication(configuration, run, research, diagnostics, logger, errorCenter) }
+    return { ok: true, value: new DebateDesktopApplication(configuration, run, research, diagnostics, history, logger, errorCenter) }
   } catch (cause) {
     logger.error('Debate Studio 应用组合失败', { source: 'application' })
     errorCenter.capture(cause, { source: 'application', severity: 'critical' })
