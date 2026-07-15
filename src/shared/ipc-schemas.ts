@@ -67,6 +67,7 @@ export const saveParticipantBindingsSchema = z.object({
 }).strict()
 
 export const idInputSchema = z.object({ id: idSchema }).strict()
+export const assetInputSchema = z.object({ assetId: idSchema }).strict()
 export const historyListQuerySchema = z.object({
   search: z.string().trim().max(500).optional(),
   sort: z.enum(['created-desc', 'created-asc', 'updated-desc', 'updated-asc']).optional(),
@@ -103,6 +104,39 @@ export const connectionTestInputSchema = z.object({
   modelProfileId: idSchema.optional()
 }).strict()
 
+export const onboardingProviderSchema = z.object({
+  providerId: idSchema,
+  displayName: z.string().trim().min(1).max(200),
+  baseUrl: z.string().trim().url().max(2_000),
+  modelId: z.string().trim().min(1).max(300),
+  modelDisplayName: z.string().trim().min(1).max(200),
+  apiKey: z.string().min(1).max(16_384),
+  contextWindow: z.number().int().positive().max(10_000_000).optional(),
+  maxOutputTokens: z.number().int().positive().max(10_000_000).optional(),
+  capabilities: modelCapabilitiesSchema
+}).strict()
+
+export const onboardingDefaultsSchema = z.object({
+  affirmative: idSchema,
+  negative: idSchema,
+  moderator: idSchema
+}).strict()
+
+export const modelRoutingTaskSchema = z.enum([
+  'research', 'search_summary', 'argument_generation', 'rebuttal', 'judge', 'vision_analysis'
+])
+export const saveModelRoutingPolicySchema = z.object({
+  task: modelRoutingTaskSchema,
+  modelProfileId: idSchema
+}).strict()
+
+export const saveProviderPricingSchema = z.object({
+  modelProfileId: idSchema,
+  inputPricePerMillion: z.number().finite().min(0).max(1_000_000),
+  outputPricePerMillion: z.number().finite().min(0).max(1_000_000),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/)
+}).strict()
+
 const researchVisibilitySchema = z.enum([
   'public', 'affirmative-private', 'negative-private', 'moderator-private'
 ])
@@ -132,6 +166,13 @@ export const addResearchAssetSchema = z.discriminatedUnion('kind', [
     fileName: z.string().trim().min(1).max(500),
     mimeType: z.string().trim().regex(/^image\//).max(100),
     bytes: z.array(z.number().int().min(0).max(255)).min(1).max(10 * 1024 * 1024)
+  }).strict(),
+  z.object({
+    ...researchAssetBase,
+    kind: z.literal('pdf'),
+    fileName: z.string().trim().min(1).max(500),
+    mimeType: z.literal('application/pdf'),
+    bytes: z.array(z.number().int().min(0).max(255)).min(1).max(25 * 1024 * 1024)
   }).strict()
 ])
 

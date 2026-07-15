@@ -86,6 +86,25 @@ describe('OpenAIChatAdapter', () => {
     })
   })
 
+  it('keeps provider-reported token usage without estimating missing values', async () => {
+    const transport = new MockHttpTransport({
+      response: {
+        status: 200,
+        body: {
+          choices: [{ message: { role: 'assistant', content: '带用量的响应。' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 }
+        }
+      }
+    })
+
+    await expect(new OpenAIChatAdapter(transport).complete(request())).resolves.toMatchObject({
+      usage: { inputTokens: 120, outputTokens: 30, totalTokens: 150 }
+    })
+
+    const withoutUsage = await new OpenAIChatAdapter(new MockHttpTransport()).complete(request())
+    expect(withoutUsage.usage).toBeUndefined()
+  })
+
   it('maps native function tools and parses tool calls', async () => {
     const transport = new MockHttpTransport({ response: { status: 200, body: {
       choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
@@ -172,6 +191,24 @@ describe('OpenAIChatAdapter', () => {
       response: { requestId: 'request-openai', content: '第一段，第二段', finishReason: 'stop' }
     })
     expect((transport.requests[0].body as OpenAIChatRequestBody).stream).toBe(true)
+  })
+
+  it('keeps usage from the final stream chunk', async () => {
+    const transport = new MockHttpTransport({
+      streamEvents: [
+        { type: 'data', data: { choices: [{ delta: { content: '流式内容' } }] } },
+        { type: 'data', data: { choices: [], usage: { prompt_tokens: 80, completion_tokens: 20, total_tokens: 100 } } },
+        { type: 'done' }
+      ]
+    })
+    const events: UnifiedStreamEvent[] = []
+
+    for await (const event of new OpenAIChatAdapter(transport).stream(request())) events.push(event)
+
+    expect(events.at(-1)).toMatchObject({
+      type: 'completed',
+      response: { usage: { inputTokens: 80, outputTokens: 20, totalTokens: 100 } }
+    })
   })
 
   it('keeps emitted deltas and converts an interrupted SSE stream into a recoverable error', async () => {

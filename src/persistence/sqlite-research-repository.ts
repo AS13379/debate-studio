@@ -150,10 +150,15 @@ export class SQLiteResearchRepository implements ResearchRepository {
         url = excluded.url, summary = excluded.summary, local_path = excluded.local_path,
         mime_type = excluded.mime_type, source_name = excluded.source_name, source_date = excluded.source_date`,
       asset.id, asset.debateSessionId, asset.researchSessionId ?? null, asset.ownerParticipantId,
-      asset.visibility, asset.kind, asset.title, asset.textContent ?? null, asset.url ?? null,
+      asset.visibility, asset.kind === 'pdf' ? 'image' : asset.kind, asset.title, asset.textContent ?? null, asset.url ?? null,
       asset.summary ?? null, asset.localPath ?? null, asset.mimeType ?? null, asset.sourceName ?? null,
       asset.sourceDate ?? null, asset.createdBy, asset.isOriginal ? 1 : 0, asset.createdAt
     ))
+  }
+
+  deleteAsset(id: string): PersistenceResult<boolean> {
+    const result = this.database.run('DELETE FROM research_assets WHERE id = ?', id)
+    return result.ok ? { ok: true, value: Number(result.value.changes) > 0 } : result
   }
 
   findAssetById(id: string): PersistenceResult<ResearchAsset | undefined> {

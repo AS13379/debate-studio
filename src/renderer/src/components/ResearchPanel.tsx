@@ -132,7 +132,7 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
                 onSaved={reload}
               />
             )}
-            <AssetList assets={workspace.publicAssets} />
+            <AssetList assets={workspace.publicAssets} onAnalyze={(assetId) => act(() => window.debateStudio.analyzeImageAsset({ assetId }))} />
           </div>
         </details>
 
@@ -143,7 +143,7 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
             disabled={busy} onError={onError} onSaved={reload}
             onPublish={(assetId) => act(() => window.debateStudio.publishResearchEvidence({
               sessionId: detail.sessionId, assetId, changedBy: participants.affirmative!.id
-            }))}
+            }))} onAnalyze={(assetId) => act(() => window.debateStudio.analyzeImageAsset({ assetId }))}
           />}
           {participants.negative && <RoleWorkspace
             title="反方研究" role="negative" workspace={workspace.negative}
@@ -151,7 +151,7 @@ export function ResearchPanel({ detail, refreshKey, onError }: ResearchPanelProp
             disabled={busy} onError={onError} onSaved={reload}
             onPublish={(assetId) => act(() => window.debateStudio.publishResearchEvidence({
               sessionId: detail.sessionId, assetId, changedBy: participants.negative!.id
-            }))}
+            }))} onAnalyze={(assetId) => act(() => window.debateStudio.analyzeImageAsset({ assetId }))}
           />}
         </div>
 
@@ -208,7 +208,7 @@ export function ModeratorResearchToolSection({ workspace, onDecision }: {
   </details>
 }
 
-function RoleWorkspace({ title, role, workspace, sessionId, participantId, disabled, onError, onSaved, onPublish }: {
+function RoleWorkspace({ title, role, workspace, sessionId, participantId, disabled, onError, onSaved, onPublish, onAnalyze }: {
   title: string
   role: 'affirmative' | 'negative'
   workspace: RoleResearchWorkspaceDto
@@ -218,6 +218,7 @@ function RoleWorkspace({ title, role, workspace, sessionId, participantId, disab
   onError(message: string): void
   onSaved(): Promise<void>
   onPublish(assetId: string): Promise<void>
+  onAnalyze(assetId: string): Promise<void>
 }) {
   const [query, setQuery] = useState('')
   const search = async (): Promise<void> => {
@@ -247,7 +248,7 @@ function RoleWorkspace({ title, role, workspace, sessionId, participantId, disab
         <details className="research-subsection"><summary>手动添加或搜索资料</summary><div className="research-subsection-body">
           <div className="mock-search-row"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="输入 Mock 搜索词（不访问网络）" /><button className="button secondary" disabled={disabled || !query.trim()} onClick={() => void search()}>Mock 搜索</button></div>
           <AssetComposer label="添加本方资料" sessionId={sessionId} ownerParticipantId={participantId} visibility={`${role}-private`} disabled={disabled} onError={onError} onSaved={onSaved} />
-          <AssetList assets={workspace.assets} onPublish={onPublish} />
+          <AssetList assets={workspace.assets} onPublish={onPublish} onAnalyze={onAnalyze} />
         </div></details>
       </div>
     </details>
@@ -282,11 +283,12 @@ function ResearchList({ title, values }: { title: string; values: string[] }) {
   return <details className="research-list"><summary><b>{title}</b><span>{values.length}</span></summary>{values.length ? <ul>{values.map((value, index) => <li key={`${index}-${value.slice(0, 20)}`}>{value}</li>)}</ul> : <span>暂无</span>}</details>
 }
 
-function AssetList({ assets, onPublish }: { assets: ResearchAssetDto[]; onPublish?(assetId: string): Promise<void> }) {
+function AssetList({ assets, onPublish, onAnalyze }: { assets: ResearchAssetDto[]; onPublish?(assetId: string): Promise<void>; onAnalyze?(assetId: string): Promise<void> }) {
   if (!assets.length) return null
   return <div className="asset-list">{assets.map((asset) => <div className="asset-row" key={asset.id}>
-    <div><strong>{asset.title}</strong><span>{asset.kind === 'image' ? '图片' : asset.kind === 'url' ? 'URL 元数据' : '文本'} · {asset.summary || asset.textContent?.slice(0, 80) || asset.url || '已保存'}</span>{asset.capabilityWarningZh && <small>{asset.capabilityWarningZh}</small>}</div>
-    {onPublish && <button className="button secondary" onClick={() => void onPublish(asset.id)}>发布证据</button>}
+    {asset.thumbnailDataUrl && <img className="asset-thumbnail" src={asset.thumbnailDataUrl} alt={asset.title} />}
+    <div><strong>{asset.title}</strong><span>{asset.kind === 'image' ? '图片' : asset.kind === 'pdf' ? `PDF · ${asset.fileMetadata?.pageCount ?? '未知'} 页` : asset.kind === 'url' ? 'URL 元数据' : '文本'} · {asset.fileMetadata ? formatFileSize(asset.fileMetadata.fileSize) : asset.summary || asset.textContent?.slice(0, 80) || asset.url || '已保存'}</span>{asset.fileMetadata?.analysisStatus && asset.kind === 'image' && <small>分析状态：{analysisStatusLabel(asset.fileMetadata.analysisStatus)}{asset.fileMetadata.analysisModelProfileId ? ` · 模型 ${asset.fileMetadata.analysisModelProfileId}` : ''}</small>}{asset.capabilityWarningZh && <small>{asset.capabilityWarningZh}</small>}</div>
+    <div className="compact-actions">{onAnalyze && asset.kind === 'image' && <button className="button secondary" onClick={() => void onAnalyze(asset.id)}>分析图片</button>}{onPublish && <button className="button secondary" onClick={() => void onPublish(asset.id)}>发布证据</button>}</div>
   </div>)}</div>
 }
 
@@ -299,7 +301,7 @@ function AssetComposer({ label, sessionId, ownerParticipantId, visibility, disab
   onError(message: string): void
   onSaved(): Promise<void>
 }) {
-  const [kind, setKind] = useState<'text' | 'url' | 'image'>('text')
+  const [kind, setKind] = useState<'text' | 'url' | 'image' | 'pdf'>('text')
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [file, setFile] = useState<File>()
@@ -309,19 +311,22 @@ function AssetComposer({ label, sessionId, ownerParticipantId, visibility, disab
       ? { ...common, kind, textContent: content }
       : kind === 'url'
         ? { ...common, kind, url: content }
-        : { ...common, kind, fileName: file?.name || '', mimeType: file?.type || '', bytes: file ? [...new Uint8Array(await file.arrayBuffer())] : [] }
+        : { ...common, kind, fileName: file?.name || '', mimeType: kind === 'pdf' ? 'application/pdf' : file?.type || '', bytes: file ? [...new Uint8Array(await file.arrayBuffer())] : [] }
     const result = await window.debateStudio.addResearchAsset(input)
     if (!result.ok) onError(result.error.descriptionZh)
     else { setTitle(''); setContent(''); setFile(undefined); await onSaved() }
   }
   return <div className="asset-composer">
     <strong>{label}</strong>
-    <select value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="text">粘贴文本</option><option value="url">URL 与人工摘要</option><option value="image">上传图片</option></select>
+    <select value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setFile(undefined) }}><option value="text">粘贴文本</option><option value="url">URL 与人工摘要</option><option value="image">上传图片</option><option value="pdf">上传 PDF（不做 OCR）</option></select>
     <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="资料标题" />
-    {kind === 'image' ? <input type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0])} /> : <textarea rows={3} value={content} onChange={(event) => setContent(event.target.value)} placeholder={kind === 'url' ? '网页 URL（本次不抓取正文）' : '粘贴资料文本'} />}
-    <button className="button secondary" disabled={disabled || !title.trim() || (kind === 'image' ? !file : !content.trim())} onClick={() => void save()}>保存资料</button>
+    {kind === 'image' || kind === 'pdf' ? <input type="file" accept={kind === 'pdf' ? 'application/pdf' : 'image/*'} onChange={(event) => setFile(event.target.files?.[0])} /> : <textarea rows={3} value={content} onChange={(event) => setContent(event.target.value)} placeholder={kind === 'url' ? '网页 URL（本次不抓取正文）' : '粘贴资料文本'} />}
+    <button className="button secondary" disabled={disabled || !title.trim() || (kind === 'image' || kind === 'pdf' ? !file : !content.trim())} onClick={() => void save()}>保存资料</button>
   </div>
 }
+
+function formatFileSize(bytes: number): string { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB` }
+function analysisStatusLabel(status: string): string { return ({ 'not-requested': '未分析', pending: '分析中', completed: '已完成', failed: '失败' } as Record<string, string>)[status] ?? status }
 
 function EvidenceStatusEditor({ value, disabled, onSave }: { value: string; disabled: boolean; onSave(status: 'unverified' | 'supported' | 'disputed' | 'outdated' | 'inaccessible' | 'misleading' | 'rejected'): Promise<void> }) {
   const [status, setStatus] = useState(value as Parameters<typeof onSave>[0])

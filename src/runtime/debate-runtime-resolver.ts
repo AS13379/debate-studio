@@ -2,8 +2,11 @@ import type { DebateParticipantRole } from '../participant-config'
 import { AdapterRegistry } from '../providers'
 import type { LoadedDebateSetup, LoadedParticipantSetup } from '../setup-loading'
 import type { DebateRuntimeConfig, RuntimeParticipant, RuntimeResolveError, RuntimeResolveResult } from './types'
+import { MODEL_ROUTING_TASKS, type ModelRoutingService } from '../model-routing'
 
 export class DebateRuntimeResolver {
+  constructor(private readonly routing?: Pick<ModelRoutingService, 'resolve'>) {}
+
   resolve(setup: LoadedDebateSetup, adapterRegistry: AdapterRegistry): RuntimeResolveResult {
     const errors: RuntimeResolveError[] = []
     const affirmative = this.resolveParticipant('affirmative', setup.affirmative, adapterRegistry, errors, true)
@@ -20,9 +23,20 @@ export class DebateRuntimeResolver {
       affirmative,
       negative,
       moderator,
-      judge
+      judge,
+      routes: this.resolveRoutes()
     }
     return { ok: true, config }
+  }
+
+  private resolveRoutes(): DebateRuntimeConfig['routes'] {
+    if (!this.routing) return undefined
+    const routes: NonNullable<DebateRuntimeConfig['routes']> = {}
+    for (const task of MODEL_ROUTING_TASKS) {
+      const result = this.routing.resolve(task)
+      if (result.ok) routes[task] = result.route
+    }
+    return routes
   }
 
   private resolveParticipant(

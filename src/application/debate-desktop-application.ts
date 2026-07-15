@@ -33,6 +33,10 @@ import { DiagnosticsApplication } from './diagnostics-application'
 import { DebateHistoryApplication } from './debate-history-application'
 import { ExportApplication } from './export-application'
 import { DataManagementApplication } from './data-management-application'
+import { OnboardingApplication } from './onboarding-application'
+import { ModelRoutingApplication } from './model-routing-application'
+import { CostApplication } from './cost-application'
+import { VisionAnalysisService } from '../assets'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -43,6 +47,7 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
   systemInfo?: Record<string, string>
   performanceMetrics?: PerformanceMetricsCollector
   onDatabaseRestoreCompleted?(): void
+  createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined
 }
 
 export class DebateDesktopApplication {
@@ -54,6 +59,9 @@ export class DebateDesktopApplication {
     readonly dataManagement: DataManagementApplication,
     readonly history: DebateHistoryApplication,
     readonly exports: ExportApplication,
+    readonly onboarding: OnboardingApplication,
+    readonly modelRouting: ModelRoutingApplication,
+    readonly costs: CostApplication,
     readonly logger: StructuredLogger,
     readonly errorCenter: ErrorCenter,
     private readonly closeApplication: () => Promise<PersistenceResult<void>>
@@ -134,6 +142,14 @@ export function initializeDebateDesktopApplication(
       setupApplication,
       now: options.now
     })
+    const onboarding = new OnboardingApplication({
+      persistence,
+      configuration,
+      modelRouting: setupApplication.modelRouting,
+      now: options.now
+    })
+    const modelRouting = new ModelRoutingApplication(persistence, setupApplication.modelRouting, configuration)
+    const costs = new CostApplication(persistence, { now: options.now })
     const runPersistence = new DebateRunPersistence({
       repositories: persistence.repositories,
       streamWriteThrottleMs: options.streamWriteThrottleMs
@@ -151,6 +167,12 @@ export function initializeDebateDesktopApplication(
       approvalController,
       now: options.now,
       logger
+      , createImageThumbnail: options.createImageThumbnail,
+      visionAnalysisService: new VisionAnalysisService({
+        persistence,
+        routing: setupApplication.modelRouting,
+        now: options.now
+      })
     })
     const diagnostics = new DiagnosticsApplication({
       appDataDirectory: options.appDataDirectory,
@@ -186,7 +208,8 @@ export function initializeDebateDesktopApplication(
     return {
       ok: true,
       value: new DebateDesktopApplication(
-        configuration, run, research, diagnostics, dataManagement, history, exports, logger, errorCenter, closeApplication
+        configuration, run, research, diagnostics, dataManagement, history, exports,
+        onboarding, modelRouting, costs, logger, errorCenter, closeApplication
       )
     }
   } catch (cause) {

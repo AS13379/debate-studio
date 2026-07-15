@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, safeStorage } from 'electron'
 import { join } from 'node:path'
 import {
   initializeDebateDesktopApplication,
@@ -15,12 +15,12 @@ let disposeIpc: (() => void) | undefined
 let shutdownStarted = false
 let readyToQuit = false
 
+app.setPath('userData', resolveAppDataDirectory(app.getPath('appData')))
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 if (!hasSingleInstanceLock) {
   app.quit()
 } else {
-  app.setPath('userData', resolveAppDataDirectory(app.getPath('appData')))
   app.on('second-instance', () => {
     const window = BrowserWindow.getAllWindows()[0]
     if (!window) return
@@ -56,6 +56,13 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     appDataDirectory,
     credentialStore,
     appVersion: app.getVersion(),
+    createImageThumbnail: (bytes) => {
+      const image = nativeImage.createFromBuffer(Buffer.from(bytes))
+      if (image.isEmpty()) return undefined
+      const size = image.getSize()
+      const width = Math.min(360, size.width)
+      return image.resize({ width, quality: 'good' }).toPNG()
+    },
     onDatabaseRestoreCompleted: () => {
       setTimeout(() => {
         app.relaunch()
@@ -77,6 +84,9 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
   disposeIpc = registerDebateIpc({
     ipcMain,
     configuration: desktopApplication.configuration,
+    onboarding: desktopApplication.onboarding,
+    modelRouting: desktopApplication.modelRouting,
+    costs: desktopApplication.costs,
     history: desktopApplication.history,
     run: desktopApplication.run,
     research: desktopApplication.research,

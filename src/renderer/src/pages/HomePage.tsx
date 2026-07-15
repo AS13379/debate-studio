@@ -14,12 +14,14 @@ export interface HomePageProps {
   onOpen(debate: DebateHistorySummaryDto): void
   onOpenHistory?(debate: DebateHistorySummaryDto): void
   onExport?(debate: DebateHistorySummaryDto): void
+  needsModelSetup?: boolean
+  onOpenOnboarding?(): void
 }
 
 export function HomePage({
   debates, query = {}, loading, error, onQueryChange = () => undefined, onCreate, onCreateDemo, onOpen,
   onOpenHistory = onOpen, onExport = onOpenHistory, onOpenModels = () => undefined,
-  hasMore = false, onLoadMore = () => undefined
+  hasMore = false, onLoadMore = () => undefined, needsModelSetup = false, onOpenOnboarding = onOpenModels
 }: HomePageProps) {
   const availableTags = [...new Set([
     ...debates.flatMap((debate) => debate.tags),
@@ -40,6 +42,8 @@ export function HomePage({
           <button className="button primary" onClick={onCreateDemo}>创建 Mock 示例辩论</button>
         </div>
       </header>
+
+      {needsModelSetup && <div className="panel model-setup-prompt"><div><strong>还没有配置真实 AI 服务</strong><span>Mock 辩论仍可使用；准备好后可用引导安全保存 API Key。</span></div><button className="button primary" onClick={onOpenOnboarding}>开始配置 AI 服务</button></div>}
 
       <div className="panel history-toolbar" aria-label="历史筛选">
         <label className="field history-search">

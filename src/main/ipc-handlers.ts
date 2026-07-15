@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod'
 
 import type {
-  DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ResearchApplication
+  CostApplication, DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ModelRoutingApplication, OnboardingApplication, ResearchApplication
 } from '../application'
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
@@ -15,6 +15,7 @@ import {
 } from '../shared/ipc-contract'
 import {
   addResearchAssetSchema,
+  assetInputSchema,
   challengeEvidenceSchema,
   cancelExportSchema,
   debateTurnPageSchema,
@@ -45,6 +46,10 @@ import {
   sessionInputSchema,
   toggleFavoriteSchema,
   updateEvidenceStatusSchema
+  , onboardingProviderSchema
+  , onboardingDefaultsSchema
+  , saveModelRoutingPolicySchema
+  , saveProviderPricingSchema
 } from '../shared/ipc-schemas'
 
 export interface IpcMainLike {
@@ -55,6 +60,9 @@ export interface IpcMainLike {
 export interface DebateIpcDependencies {
   ipcMain: IpcMainLike
   configuration: DebateConfigurationApplication
+  onboarding?: OnboardingApplication
+  modelRouting?: ModelRoutingApplication
+  costs?: CostApplication
   history: DebateHistoryApplication
   run: DebateRunApplication
   research?: ResearchApplication
@@ -74,6 +82,19 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   const rawIpcMain = dependencies.ipcMain
   const ipcMain = observedIpcMain(dependencies)
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => dependencies.getAppVersion())
+  ipcMain.handle(IPC_CHANNELS.getOnboardingState, () => dependencies.onboarding?.getState() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.saveOnboardingProvider, validated(onboardingProviderSchema, (input) => dependencies.onboarding?.saveProvider(input) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.testOnboardingConnection, validated(connectionTestInputSchema, (input) => dependencies.onboarding?.testConnection(input.connectionId, input.modelProfileId) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.saveOnboardingDefaults, validated(onboardingDefaultsSchema, (input) => dependencies.onboarding?.saveDefaultModels(input) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.createOnboardingDemo, () => dependencies.onboarding?.createDemo() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.skipOnboarding, () => dependencies.onboarding?.skip() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.reopenOnboarding, () => dependencies.onboarding?.reopen() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.listModelRoutingPolicies, () => dependencies.modelRouting?.listPolicies() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.saveModelRoutingPolicy, validated(saveModelRoutingPolicySchema, (input) => dependencies.modelRouting?.savePolicy(input.task, input.modelProfileId) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.createDefaultModelRouting, () => dependencies.modelRouting?.createDefaults() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.listProviderPricing, () => dependencies.costs?.listPricing() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.saveProviderPricing, validated(saveProviderPricingSchema, (input) => dependencies.costs?.savePricing(input) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.getCostSummary, () => dependencies.costs?.getSummary() ?? workbenchUnavailable())
   ipcMain.handle(IPC_CHANNELS.listProviderConnections, () => configuration.listProviderConnections())
   ipcMain.handle(IPC_CHANNELS.listProviderPresets, () => configuration.listProviderPresets())
   ipcMain.handle(IPC_CHANNELS.saveProviderConnection, validated(saveProviderConnectionSchema, (input) => configuration.saveProviderConnection(input)))
@@ -109,6 +130,7 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.loadDebateSetup, validated(sessionInputSchema, (input) => configuration.loadDebateSetup(input.sessionId)))
   ipcMain.handle(IPC_CHANNELS.loadResearchWorkspace, validated(sessionInputSchema, (input) => research?.loadWorkspace(input.sessionId) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.addResearchAsset, validated(addResearchAssetSchema, (input) => research?.addAsset(input) ?? researchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.analyzeImageAsset, validated(assetInputSchema, (input) => research?.analyzeImageAsset(input.assetId) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.publishResearchEvidence, validated(publishEvidenceSchema, (input) => research?.publishEvidence(input) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.challengeEvidence, validated(challengeEvidenceSchema, (input) => research?.challengeEvidence(input) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.updateEvidenceStatus, validated(updateEvidenceStatusSchema, (input) => research?.updateEvidenceStatus(input) ?? researchUnavailable()))
@@ -226,6 +248,18 @@ function researchUnavailable(): ConfigurationResultDto<never> {
       code: 'RESEARCH_APPLICATION_UNAVAILABLE',
       titleZh: '研究服务不可用',
       descriptionZh: '研究应用层尚未完成组合，操作未执行。',
+      retryable: false
+    }
+  }
+}
+
+function workbenchUnavailable(): ConfigurationResultDto<never> {
+  return {
+    ok: false,
+    error: {
+      code: 'WORKBENCH_APPLICATION_UNAVAILABLE',
+      titleZh: '工作台服务不可用',
+      descriptionZh: '本地工作台应用层尚未完成组合，操作未执行。',
       retryable: false
     }
   }

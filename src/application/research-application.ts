@@ -1,10 +1,11 @@
-import { chmodSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
-import { basename, extname, join } from 'node:path'
+import { readFileSync, unlinkSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 import type { DebateParticipantRole } from '../participant-config'
 import type { PersistenceContext, PersistenceError } from '../persistence'
 import type { LoggerLike } from '../observability'
+import { AssetProcessor, type VisionAnalysisService } from '../assets'
 import {
   EVIDENCE_STATUSES,
   MockSearchTool,
@@ -47,6 +48,9 @@ export interface ResearchApplicationDependencies {
   createId?: () => string
   now?: () => Date
   logger?: LoggerLike
+  createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined
+  assetProcessor?: AssetProcessor
+  visionAnalysisService?: VisionAnalysisService
 }
 
 export class ResearchApplication {
@@ -55,12 +59,17 @@ export class ResearchApplication {
   private readonly searchTool: SearchTool
   private readonly visibilityPolicy = new ResearchVisibilityPolicy()
   private readonly approvalController: ResearchApprovalController
+  private readonly assetProcessor: AssetProcessor
 
   constructor(private readonly dependencies: ResearchApplicationDependencies) {
     this.createId = dependencies.createId ?? randomUUID
     this.now = dependencies.now ?? (() => new Date())
     this.searchTool = dependencies.searchTool ?? new MockSearchTool()
     this.approvalController = dependencies.approvalController ?? new ResearchApprovalController()
+    this.assetProcessor = dependencies.assetProcessor ?? new AssetProcessor({
+      directory: join(dependencies.appDataDirectory, 'assets', 'research'),
+      createImageThumbnail: dependencies.createImageThumbnail
+    })
   }
 
   loadWorkspace(sessionId: string): ResearchResultDto<ResearchWorkspaceDto> {
@@ -224,6 +233,11 @@ export class ResearchApplication {
     return accepted ? { ok: true, value: true } : this.invalid('待确认工具调用不存在', '该工具调用已经结束、被取消或不属于当前进程。')
   }
 
+  async analyzeImageAsset(assetId: string) {
+    if (!this.dependencies.visionAnalysisService) return this.invalid('视觉分析不可用', 'VisionAnalysisService 尚未完成组合。')
+    return this.dependencies.visionAnalysisService.analyze(assetId)
+  }
+
   addAsset(input: AddResearchAssetInput): ResearchResultDto<ResearchAssetDto> {
     const checked = this.validateAssetInput(input)
     if (!checked.ok) return checked
@@ -231,27 +245,27 @@ export class ResearchApplication {
     const researchSession = this.ensureResearchSession(input.sessionId, input.ownerParticipantId, role)
     if (!researchSession.ok) return researchSession
 
-    let localPath: string | undefined
-    if (input.kind === 'image') {
-      try {
-        const directory = join(this.dependencies.appDataDirectory, 'assets', 'research', input.sessionId)
-        mkdirSync(directory, { recursive: true, mode: 0o700 })
-        chmodSync(directory, 0o700)
-        const extension = extname(input.fileName || '') || this.extensionForMime(input.mimeType || '')
-        localPath = join(directory, `${this.createId()}${extension}`)
-        writeFileSync(localPath, Uint8Array.from(input.bytes || []), { flag: 'wx', mode: 0o600 })
-      } catch (cause) {
-        return this.invalid('图片保存失败', cause instanceof Error ? cause.message : '无法写入应用资产目录。', true)
-      }
-    }
+    const assetId = this.createId()
+    const createdAt = this.timestamp()
+    const processed = input.kind === 'image' || input.kind === 'pdf'
+      ? this.assetProcessor.process({
+          assetId,
+          fileName: input.fileName ?? '',
+          mimeType: input.mimeType ?? '',
+          bytes: Uint8Array.from(input.bytes ?? []),
+          createdAt
+        })
+      : undefined
+    if (processed && !processed.ok) return { ok: false, error: processed.error }
+    const localPath = processed?.ok ? processed.value.localPath : undefined
 
     const asset: ResearchAsset = {
-      id: this.createId(), debateSessionId: input.sessionId, researchSessionId: researchSession.value.id,
+      id: assetId, debateSessionId: input.sessionId, researchSessionId: researchSession.value.id,
       ownerParticipantId: input.ownerParticipantId, visibility: input.visibility, kind: input.kind,
       title: input.title.trim(), textContent: input.textContent?.trim() || undefined,
       url: input.url?.trim() || undefined, summary: input.summary?.trim() || undefined,
       localPath, mimeType: input.mimeType, sourceName: input.fileName ? basename(input.fileName) : undefined,
-      createdBy: input.ownerParticipantId, isOriginal: true, createdAt: this.timestamp()
+      createdBy: input.ownerParticipantId, isOriginal: true, createdAt
     }
     const saved = this.dependencies.persistence.repositories.research.saveAsset(asset)
     if (!saved.ok) {
@@ -259,6 +273,14 @@ export class ResearchApplication {
         try { unlinkSync(localPath) } catch { /* Failed database writes must not hide their primary error. */ }
       }
       return this.persistenceError(saved.error)
+    }
+    if (processed?.ok) {
+      const metadata = this.dependencies.persistence.repositories.assetFiles.save(processed.value.metadata)
+      if (!metadata.ok) {
+        this.dependencies.persistence.repositories.research.deleteAsset(asset.id)
+        this.removeAssetFiles(processed.value.localPath, processed.value.metadata.thumbnailPath)
+        return this.persistenceError(metadata.error)
+      }
     }
 
     if (input.kind === 'url') {
@@ -408,6 +430,10 @@ export class ResearchApplication {
       if (!input.mimeType?.startsWith('image/') || !input.bytes?.length) return this.invalid('图片文件无效', '请选择有效图片文件。')
       if (input.bytes.length > 10 * 1024 * 1024) return this.invalid('图片过大', '图片大小不能超过 10 MB。')
     }
+    if (input.kind === 'pdf') {
+      if (input.mimeType !== 'application/pdf' || !input.bytes?.length) return this.invalid('PDF 文件无效', '请选择有效 PDF 文件。')
+      if (input.bytes.length > 25 * 1024 * 1024) return this.invalid('PDF 过大', 'PDF 大小不能超过 25 MB。')
+    }
     return { ok: true, value: { role } }
   }
 
@@ -457,15 +483,38 @@ export class ResearchApplication {
 
   private assetDto(asset: ResearchAsset): ResearchAssetDto {
     const { localPath, ...safe } = asset
-    return { ...safe, hasLocalFile: Boolean(localPath) }
+    const metadata = this.dependencies.persistence.repositories.assetFiles.findByAssetId(asset.id)
+    const fileMetadata = metadata.ok ? metadata.value : undefined
+    const thumbnailDataUrl = fileMetadata?.thumbnailPath ? this.thumbnailDataUrl(fileMetadata.thumbnailPath) : undefined
+    const { thumbnailPath: _thumbnailPath, ...safeMetadata } = fileMetadata ?? {}
+    return {
+      ...safe,
+      kind: fileMetadata?.mediaType ?? safe.kind,
+      hasLocalFile: Boolean(localPath),
+      fileMetadata: fileMetadata ? safeMetadata as ResearchAssetDto['fileMetadata'] : undefined,
+      thumbnailDataUrl
+    }
   }
 
   private privateVisibility(role: ResearchOwnerRole): PrivateResearchVisibility {
     return `${role}-private` as PrivateResearchVisibility
   }
 
-  private extensionForMime(mimeType: string): string {
-    return ({ 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' } as Record<string, string>)[mimeType] || '.img'
+  private thumbnailDataUrl(path: string): string | undefined {
+    try {
+      const bytes = readFileSync(path)
+      if (bytes.byteLength > 2 * 1024 * 1024) return undefined
+      return `data:image/png;base64,${bytes.toString('base64')}`
+    } catch {
+      return undefined
+    }
+  }
+
+  private removeAssetFiles(localPath: string, thumbnailPath?: string): void {
+    for (const path of [localPath, thumbnailPath]) {
+      if (!path) continue
+      try { unlinkSync(path) } catch { /* Best-effort rollback. */ }
+    }
   }
 
   private persistenceError(error: PersistenceError): ResearchResultDto<never> {

@@ -142,7 +142,14 @@ export class TurnRunner {
 
       const turn = engineResult.events.find((event) => event.type === 'turnCompleted')?.turn
       if (!turn) throw new Error('DebateEngine did not return a completed turn.')
-      return { turn, streamEvents }
+      return {
+        turn: {
+          ...turn,
+          usage: completedEvent.response.usage,
+          runtimeModel: completedEvent.response.runtimeMetadata
+        },
+        streamEvents
+      }
     } finally {
       if (this.activeRun?.turnId === turnId) this.activeRun = undefined
     }

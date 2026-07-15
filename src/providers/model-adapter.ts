@@ -56,6 +56,14 @@ export interface UnifiedResponse {
   content: string
   finishReason: 'stop' | 'tool_calls'
   toolCalls?: UnifiedToolCall[]
+  usage?: {
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+  }
+  runtimeMetadata?: Pick<UnifiedRuntimeMetadata, 'modelProfileId' | 'providerConnectionId' | 'providerId'> & {
+    modelId?: string
+  }
 }
 
 export interface UnifiedError {

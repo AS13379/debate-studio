@@ -197,6 +197,36 @@ describe('RuntimeTurnExecutor and TurnRunnerFactory', () => {
     expect(negative.requests[0].modelId).toBe('model-negative')
   })
 
+  it('uses the task routing policy model for a research stage while preserving the debate role', async () => {
+    const roleAdapter = new RecordingAdapter('role adapter')
+    const researchAdapter = new RecordingAdapter('research adapter')
+    const config = runtimeConfig({ affirmative: roleAdapter })
+    const researchParticipant = runtimeParticipant('affirmative', researchAdapter)
+    researchParticipant.modelProfile = {
+      ...researchParticipant.modelProfile,
+      id: 'profile-routed-research',
+      modelId: 'model-routed-research'
+    }
+    config.routes = {
+      research: {
+        task: 'research',
+        modelProfile: researchParticipant.modelProfile,
+        providerConnection: researchParticipant.providerConnection,
+        adapter: researchAdapter
+      }
+    }
+
+    const result = await factoryBundle(config).turnRunner.startTurn(engineAt('affirmative_research'))
+
+    expect(result.turn.status).toBe('completed')
+    expect(roleAdapter.requests).toHaveLength(0)
+    expect(researchAdapter.requests).toHaveLength(1)
+    expect(researchAdapter.requests[0]).toMatchObject({
+      modelId: 'model-routed-research',
+      runtimeMetadata: { role: 'affirmative', modelProfileId: 'profile-routed-research' }
+    })
+  })
+
   it('returns a structured error when the current role is missing', async () => {
     const bundle = factoryBundle(runtimeConfig({}, false))
 

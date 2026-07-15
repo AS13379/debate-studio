@@ -2,6 +2,9 @@ import type { PersistenceResult } from './errors'
 import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { DebateParticipantConfig } from '../participant-config'
 import type { DebateTurnFailure } from '../domain'
+import type { AssetFileRecord } from '../assets'
+import type { ProviderPricing } from '../cost'
+import type { ModelRoutingPolicy, ModelRoutingTask } from '../model-routing'
 import type {
   EvidenceReferenceIssue,
   EvidenceStatus,
@@ -159,6 +162,9 @@ export interface UsageRecord {
   estimatedCost?: number
   costIsEstimated: boolean
   durationMs?: number
+  modelProfileId?: string
+  providerConnectionId?: string
+  modelId?: string
   createdAt: string
 }
 
@@ -226,6 +232,28 @@ export interface UsageRepository {
   findById(id: string): PersistenceResult<UsageRecord | undefined>
   create(record: UsageRecord): PersistenceResult<void>
   listBySession(sessionId: string): PersistenceResult<UsageRecord[]>
+  listAll(): PersistenceResult<UsageRecord[]>
+}
+
+export interface ModelRoutingPolicyRepository {
+  findByTask(task: ModelRoutingTask): PersistenceResult<ModelRoutingPolicy | undefined>
+  list(): PersistenceResult<ModelRoutingPolicy[]>
+  save(policy: ModelRoutingPolicy): PersistenceResult<void>
+  delete(task: ModelRoutingTask): PersistenceResult<boolean>
+}
+
+export interface ProviderPricingRepository {
+  findByModelProfile(modelProfileId: string): PersistenceResult<ProviderPricing | undefined>
+  list(): PersistenceResult<ProviderPricing[]>
+  save(pricing: ProviderPricing): PersistenceResult<void>
+  delete(id: string): PersistenceResult<boolean>
+}
+
+export interface AssetFileRepository {
+  findByAssetId(assetId: string): PersistenceResult<AssetFileRecord | undefined>
+  listByAssets(assetIds: string[]): PersistenceResult<AssetFileRecord[]>
+  save(record: AssetFileRecord): PersistenceResult<void>
+  updateAnalysis(assetId: string, status: AssetFileRecord['analysisStatus'], modelProfileId: string | undefined, updatedAt: string): PersistenceResult<boolean>
 }
 
 export interface ExportRepository {
@@ -282,6 +310,7 @@ export interface ResearchRepository {
   findSourceById(id: string): PersistenceResult<ResearchSource | undefined>
   listSources(debateSessionId: string): PersistenceResult<ResearchSource[]>
   saveAsset(asset: ResearchAsset): PersistenceResult<void>
+  deleteAsset(id: string): PersistenceResult<boolean>
   findAssetById(id: string): PersistenceResult<ResearchAsset | undefined>
   listAssets(debateSessionId: string): PersistenceResult<ResearchAsset[]>
   saveNote(note: ResearchNote): PersistenceResult<void>
@@ -332,6 +361,9 @@ export interface RepositoryCollection {
   turns: TurnRepository
   events: EventRepository
   usage: UsageRepository
+  modelRoutingPolicies: ModelRoutingPolicyRepository
+  providerPricing: ProviderPricingRepository
+  assetFiles: AssetFileRepository
   exports: ExportRepository
   research: ResearchRepository
   searchProviderConnections: SearchProviderConnectionRepository

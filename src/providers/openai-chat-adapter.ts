@@ -74,7 +74,8 @@ export class OpenAIChatAdapter implements ModelAdapter {
         requestId: request.requestId,
         content,
         finishReason: toolCalls.length ? 'tool_calls' : 'stop',
-        toolCalls: toolCalls.length ? toolCalls : undefined
+        toolCalls: toolCalls.length ? toolCalls : undefined,
+        usage: this.responseUsage(response.body)
       }
     } catch (cause) {
       if (cause instanceof ModelAdapterError) throw cause
@@ -94,6 +95,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
     }
 
     let content = ''
+    let usage: UnifiedResponse['usage']
     try {
       for await (const event of this.transport.stream(transportRequest)) {
         if (event.type === 'error') {
@@ -106,6 +108,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
         }
         if (event.type === 'done') break
 
+        usage = this.responseUsage(event.data) ?? usage
         const delta = this.streamDelta(event)
         if (!delta) continue
         content += delta
@@ -131,7 +134,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
 
     yield {
       type: 'completed',
-      response: { requestId: request.requestId, content, finishReason: 'stop' }
+      response: { requestId: request.requestId, content, finishReason: 'stop', usage }
     }
   }
 
@@ -223,6 +226,16 @@ export class OpenAIChatAdapter implements ModelAdapter {
   private responseFinishReason(body: unknown): string | undefined {
     const choice = this.firstChoice(body)
     return choice && typeof choice.finish_reason === 'string' ? choice.finish_reason : undefined
+  }
+
+  private responseUsage(body: unknown): UnifiedResponse['usage'] {
+    if (!this.isRecord(body) || !this.isRecord(body.usage)) return undefined
+    const inputTokens = typeof body.usage.prompt_tokens === 'number' ? body.usage.prompt_tokens : undefined
+    const outputTokens = typeof body.usage.completion_tokens === 'number' ? body.usage.completion_tokens : undefined
+    const totalTokens = typeof body.usage.total_tokens === 'number' ? body.usage.total_tokens : undefined
+    return inputTokens === undefined && outputTokens === undefined && totalTokens === undefined
+      ? undefined
+      : { inputTokens, outputTokens, totalTokens }
   }
 
   private hasReasoningContent(body: unknown): boolean {

@@ -159,6 +159,12 @@ export class DebateRunPersistence {
       id: this.createId(),
       sessionId: turn.sessionId,
       turnId: turn.id,
+      inputTokens: turn.usage?.inputTokens,
+      outputTokens: turn.usage?.outputTokens,
+      totalTokens: turn.usage?.totalTokens,
+      modelProfileId: turn.runtimeModel?.modelProfileId,
+      providerConnectionId: turn.runtimeModel?.providerConnectionId,
+      modelId: turn.runtimeModel?.modelId,
       costIsEstimated: true,
       durationMs: Number.isFinite(durationMs) ? durationMs : undefined,
       createdAt: completedAt

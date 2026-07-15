@@ -82,6 +82,16 @@ export interface DebateTurn {
   retryOfTurnId?: string
   error?: string
   failure?: DebateTurnFailure
+  usage?: {
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+  }
+  runtimeModel?: {
+    modelProfileId?: string
+    providerConnectionId?: string
+    modelId?: string
+  }
   createdAt: string
 }
 

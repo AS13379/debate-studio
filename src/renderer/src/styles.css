@@ -372,6 +372,44 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .renderer-failure .panel { max-width: 560px; padding: 30px; }
 .renderer-failure h1 { margin: 7px 0 10px; }
 .renderer-failure p { margin: 0 0 20px; color: #666b75; line-height: 1.65; }
+.model-setup-prompt { display: flex; justify-content: space-between; gap: 20px; align-items: center; border-color: #cfc8ff; background: linear-gradient(135deg, #f5f2ff, #fff); }
+.model-setup-prompt > div { display: flex; flex-direction: column; gap: 5px; }
+.model-setup-prompt span { color: #6e7180; font-size: 13px; }
+.onboarding-backdrop { z-index: 50; }
+.onboarding-wizard { width: min(720px, 100%); max-height: calc(100vh - 48px); padding: 28px; overflow: auto; color: #292b32; background: #fff; border: 1px solid #dfdfe6; border-radius: 20px; box-shadow: 0 30px 100px rgba(0,0,0,.32); }
+.onboarding-wizard > header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
+.onboarding-wizard h1 { margin: 5px 0 0; font-size: 30px; }
+.onboarding-progress { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 22px 0 28px; }
+.onboarding-progress span { height: 6px; background: #e8e8ee; border-radius: 999px; }
+.onboarding-progress span.active { background: linear-gradient(90deg, #6554da, #a496ff); }
+.onboarding-copy { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 30px 18px; text-align: center; }
+.onboarding-copy h2 { margin: 4px 0 0; font-size: 24px; }
+.onboarding-copy p { max-width: 540px; margin: 0 0 8px; color: #686c77; line-height: 1.7; }
+.onboarding-symbol { display: grid; width: 62px; height: 62px; place-items: center; color: #fff; background: #6758db; border-radius: 18px; font-size: 24px; font-weight: 800; }
+.onboarding-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.onboarding-form > .field:nth-of-type(1), .onboarding-form > .field:nth-of-type(4), .onboarding-form > p, .onboarding-form > button, .onboarding-form > .checkbox-field { grid-column: 1 / -1; }
+.onboarding-recommendation { display: flex; flex-direction: column; gap: 4px; padding: 14px; color: #60587b; background: #f3f0ff; border-radius: 10px; }
+.onboarding-recommendation span, .onboarding-recommendation small { font-size: 12px; }
+.routing-table { padding: 0; overflow: hidden; }
+.routing-row { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.4fr) 110px; gap: 18px; align-items: center; padding: 17px 20px; border-top: 1px solid #e7e7ec; }
+.routing-row:first-child { border-top: 0; }
+.routing-row > div { display: flex; flex-direction: column; gap: 4px; }
+.routing-row > div span { color: #797d88; font-size: 12px; }
+.routing-row select { width: 100%; padding: 10px; color: inherit; background: #fbfbfc; border: 1px solid #d8dae1; border-radius: 9px; }
+.routing-head { color: #797d88; background: #f7f7f9; font-size: 12px; }
+.cost-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.cost-kpis article { display: flex; flex-direction: column; gap: 7px; padding: 18px; background: #fff; border: 1px solid #e1e2e7; border-radius: 12px; }
+.cost-kpis span { color: #858994; font-size: 12px; }
+.cost-kpis b { font-size: 24px; }
+.pricing-list, .cost-ranking { display: flex; flex-direction: column; gap: 9px; margin-top: 15px; }
+.pricing-row { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(160px, .8fr) minmax(160px, .8fr) auto; gap: 10px; align-items: center; padding: 13px; background: #f7f7f9; border-radius: 9px; }
+.pricing-row > div, .cost-ranking > div { display: flex; flex-direction: column; gap: 4px; }
+.pricing-row span, .pricing-row > div span, .cost-ranking span:last-child { color: #7e828c; font-size: 12px; }
+.pricing-row input { min-width: 0; padding: 9px; border: 1px solid #d8dae1; border-radius: 8px; }
+.cost-ranking > div { flex-direction: row; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #ececf0; }
+.asset-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto !important; }
+.asset-row > .compact-actions { flex-direction: row; }
+.asset-thumbnail { width: 76px; height: 58px; object-fit: cover; border: 1px solid #dddde4; border-radius: 8px; }
 
 @media (prefers-color-scheme: dark) {
   :root { color: #f0f1f4; background: #15161a; }
@@ -446,6 +484,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .private-badge { color: #ead29c; background: #382e1c; }
   .delete-confirmation { color: #eff0f3; background: #22242a; border-color: #41444d; }
   .delete-confirmation > p:not(.eyebrow), .delete-confirmation li { color: #c0c2c9; }
+  .model-setup-prompt { background: linear-gradient(135deg, #29243d, #22242a); border-color: #4f466e; }
+  .onboarding-wizard { color: #eff0f3; background: #22242a; border-color: #41444d; }
+  .onboarding-copy p, .model-setup-prompt span { color: #b0b2bc; }
+  .onboarding-recommendation { color: #c8c0ff; background: #2a2640; }
+  .routing-row { border-color: #343740; }
+  .routing-head, .pricing-row { background: #1b1d22; }
+  .routing-row select, .pricing-row input { color: #f0f1f4; background: #1b1d22; border-color: #41444d; }
+  .cost-kpis article { background: #22242a; border-color: #343740; }
 }
 
 @media (max-width: 1100px) {
@@ -455,6 +501,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .history-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .history-detail-grid { grid-template-columns: 1fr; }
   .performance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cost-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pricing-row { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 820px) {
@@ -470,4 +518,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .history-fact-grid { grid-template-columns: 1fr; }
   .history-danger-zone, .control-bar { align-items: stretch; flex-direction: column; }
   .debate-grid { grid-template-columns: 1fr; }
+  .onboarding-form { grid-template-columns: 1fr; }
+  .onboarding-form > * { grid-column: 1 !important; }
+  .routing-row { grid-template-columns: 1fr; }
+  .cost-kpis { grid-template-columns: 1fr; }
 }

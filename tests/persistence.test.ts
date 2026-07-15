@@ -34,7 +34,7 @@ describe('SQLite persistence foundation', () => {
 
     expect(result.value.database.path.startsWith(appDataDirectory)).toBe(true)
     expect(existsSync(result.value.database.path)).toBe(true)
-    expect(result.value.migrations.currentVersion()).toEqual({ ok: true, value: 12 })
+    expect(result.value.migrations.currentVersion()).toEqual({ ok: true, value: 13 })
 
     const tables = result.value.database.all<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
@@ -61,6 +61,9 @@ describe('SQLite persistence foundation', () => {
         , 'debate_metadata'
         , 'debate_tags'
         , 'export_records'
+        , 'model_routing_policies'
+        , 'provider_pricing'
+        , 'asset_files'
       ])
     )
     expect(result.value.database.close().ok).toBe(true)
@@ -72,7 +75,7 @@ describe('SQLite persistence foundation', () => {
     if (!databaseResult.ok) return
 
     const migration: Migration = {
-      version: 13,
+      version: 14,
       name: 'test_upgrade',
       sql: 'CREATE TABLE migration_probe (id TEXT PRIMARY KEY);'
     }
@@ -80,11 +83,11 @@ describe('SQLite persistence foundation', () => {
 
     expect(manager.migrate()).toMatchObject({
       ok: true,
-      value: { fromVersion: 0, toVersion: 13, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] }
+      value: { fromVersion: 0, toVersion: 14, appliedVersions: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] }
     })
     expect(manager.migrate()).toMatchObject({
       ok: true,
-      value: { fromVersion: 13, toVersion: 13, appliedVersions: [] }
+      value: { fromVersion: 14, toVersion: 14, appliedVersions: [] }
     })
     databaseResult.value.close()
   })
@@ -103,7 +106,7 @@ describe('SQLite persistence foundation', () => {
     ).ok).toBe(true)
 
     expect(new MigrationManager(database).migrate()).toMatchObject({
-      ok: true, value: { fromVersion: 9, toVersion: 12, appliedVersions: [10, 11, 12] }
+      ok: true, value: { fromVersion: 9, toVersion: 13, appliedVersions: [10, 11, 12, 13] }
     })
     expect(database.get<{ status: string; favorite: number }>(
       'SELECT status, favorite FROM debate_metadata WHERE debate_id = ?', 'legacy-debate'

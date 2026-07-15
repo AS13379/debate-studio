@@ -18,6 +18,7 @@ import type {
   SearchSession,
   SourceEvaluation
 } from '../research/types'
+import type { AssetFileRecord } from '../assets/types'
 
 export interface ResearchErrorDto {
   code: string
@@ -31,6 +32,8 @@ export type ResearchResultDto<T> = { ok: true; value: T } | { ok: false; error: 
 export type ResearchAssetDto = Omit<ResearchAsset, 'localPath'> & {
   hasLocalFile: boolean
   capabilityWarningZh?: string
+  fileMetadata?: Omit<AssetFileRecord, 'thumbnailPath'>
+  thumbnailDataUrl?: string
 }
 
 export interface RoleResearchWorkspaceDto {
@@ -64,7 +67,7 @@ export interface AddResearchAssetInput {
   sessionId: string
   ownerParticipantId: string
   visibility: ResearchVisibility
-  kind: 'text' | 'url' | 'image'
+  kind: 'text' | 'url' | 'image' | 'pdf'
   title: string
   textContent?: string
   url?: string

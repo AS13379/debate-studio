@@ -62,9 +62,33 @@ import type {
   RestoreDatabaseBackupInputDto,
   RestoreDatabaseBackupResultDto
 } from './data-management-dtos'
+import type {
+  CostSummaryDto,
+  ModelRoutingPolicyDto,
+  ModelRoutingTaskDto,
+  OnboardingProviderInputDto,
+  OnboardingProviderResultDto,
+  OnboardingStateDto,
+  ProviderPricingDto,
+  SaveProviderPricingInputDto,
+  WorkbenchResultDto
+} from './workbench-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
+  getOnboardingState: 'workbench:get-onboarding-state',
+  saveOnboardingProvider: 'workbench:save-onboarding-provider',
+  testOnboardingConnection: 'workbench:test-onboarding-connection',
+  saveOnboardingDefaults: 'workbench:save-onboarding-defaults',
+  createOnboardingDemo: 'workbench:create-onboarding-demo',
+  skipOnboarding: 'workbench:skip-onboarding',
+  reopenOnboarding: 'workbench:reopen-onboarding',
+  listModelRoutingPolicies: 'workbench:list-routing-policies',
+  saveModelRoutingPolicy: 'workbench:save-routing-policy',
+  createDefaultModelRouting: 'workbench:create-default-routing',
+  listProviderPricing: 'workbench:list-provider-pricing',
+  saveProviderPricing: 'workbench:save-provider-pricing',
+  getCostSummary: 'workbench:get-cost-summary',
   listProviderConnections: 'configuration:list-provider-connections',
   listProviderPresets: 'configuration:list-provider-presets',
   saveProviderConnection: 'configuration:save-provider-connection',
@@ -100,6 +124,7 @@ export const IPC_CHANNELS = {
   loadDebateSetup: 'query:load-debate-setup',
   loadResearchWorkspace: 'research:load-workspace',
   addResearchAsset: 'research:add-asset',
+  analyzeImageAsset: 'research:analyze-image-asset',
   publishResearchEvidence: 'research:publish-evidence',
   challengeEvidence: 'research:challenge-evidence',
   updateEvidenceStatus: 'research:update-evidence-status',
@@ -176,6 +201,19 @@ export type RunEventDto =
 
 export interface DebateStudioApi {
   getAppVersion(): Promise<string>
+  getOnboardingState(): Promise<WorkbenchResultDto<OnboardingStateDto>>
+  saveOnboardingProvider(input: OnboardingProviderInputDto): Promise<WorkbenchResultDto<OnboardingProviderResultDto>>
+  testOnboardingConnection(input: { connectionId: string; modelProfileId?: string }): Promise<ConfigurationResultDto<ConnectionTestDto>>
+  saveOnboardingDefaults(input: { affirmative: string; negative: string; moderator: string }): Promise<WorkbenchResultDto<boolean>>
+  createOnboardingDemo(): Promise<WorkbenchResultDto<{ debateId: string; sessionId: string }>>
+  skipOnboarding(): Promise<WorkbenchResultDto<boolean>>
+  reopenOnboarding(): Promise<WorkbenchResultDto<boolean>>
+  listModelRoutingPolicies(): Promise<WorkbenchResultDto<ModelRoutingPolicyDto[]>>
+  saveModelRoutingPolicy(input: { task: ModelRoutingTaskDto; modelProfileId: string }): Promise<WorkbenchResultDto<ModelRoutingPolicyDto>>
+  createDefaultModelRouting(): Promise<WorkbenchResultDto<boolean>>
+  listProviderPricing(): Promise<WorkbenchResultDto<ProviderPricingDto[]>>
+  saveProviderPricing(input: SaveProviderPricingInputDto): Promise<WorkbenchResultDto<ProviderPricingDto>>
+  getCostSummary(): Promise<WorkbenchResultDto<CostSummaryDto>>
   listProviderConnections(): Promise<ConfigurationResultDto<ProviderConnectionDto[]>>
   listProviderPresets(): Promise<ConfigurationResultDto<ProviderPresetDto[]>>
   saveProviderConnection(input: SaveProviderConnectionInput): Promise<ConfigurationResultDto<ProviderConnectionDto>>
@@ -211,6 +249,7 @@ export interface DebateStudioApi {
   loadDebateSetup(input: { sessionId: string }): Promise<ConfigurationResultDto<DebateSetupDto>>
   loadResearchWorkspace(input: { sessionId: string }): Promise<ResearchResultDto<ResearchWorkspaceDto>>
   addResearchAsset(input: AddResearchAssetInput): Promise<ResearchResultDto<ResearchAssetDto>>
+  analyzeImageAsset(input: { assetId: string }): Promise<ResearchResultDto<{ noteId: string; modelProfileId: string; modelDisplayName: string; summary: string }>>
   publishResearchEvidence(input: PublishEvidenceInput): Promise<ResearchResultDto<{ evidenceId: string; publicCode: string }>>
   challengeEvidence(input: ChallengeEvidenceInput): Promise<ResearchResultDto<boolean>>
   updateEvidenceStatus(input: UpdateEvidenceStatusInput): Promise<ResearchResultDto<boolean>>
@@ -251,6 +290,19 @@ export type {
   RestoreDatabaseBackupInputDto,
   RestoreDatabaseBackupResultDto
 } from './data-management-dtos'
+
+export type {
+  CostSummaryDto,
+  ModelRoutingPolicyDto,
+  ModelRoutingTaskDto,
+  OnboardingProviderInputDto,
+  OnboardingProviderRecommendationDto,
+  OnboardingProviderResultDto,
+  OnboardingStateDto,
+  ProviderPricingDto,
+  SaveProviderPricingInputDto,
+  WorkbenchResultDto
+} from './workbench-dtos'
 
 export type {
   ConfigurationResultDto,

@@ -1,65 +1,62 @@
 # 系统架构
 
-## 设计原则
+## 目标与边界
 
-- 主进程拥有密钥、网络、SQLite 和文件访问；渲染进程不直接访问 Node 或密钥。
-- 以协议适配器而非厂商适配器为主；ProviderPreset 只是默认配置。
-- 领域引擎不依赖 React、Electron 或具体模型协议，便于 Vitest 覆盖。
-- 状态转换由显式状态机完成，副作用由执行器处理。
+Debate Studio 是单机 Electron 应用。架构优先保证本地数据所有权、安全边界、可恢复的长任务和可测试性，不引入服务端、账号、云同步、RBAC、消息队列或微服务。
 
-## 分层与数据流
+## 进程边界
 
 ```text
-React renderer (Zustand UI state)
-  -> typed preload API / Zod-validated IPC
-Electron main
-  -> application services (session, turn, export, credential)
-  -> DebateEngine + Protocol Router + Adapter Registry
-  -> SQLite repositories / Keychain-or-local CredentialStore / local assets
-  -> provider HTTP endpoints (only after first phase implementation)
+React Renderer
+  → typed preload whitelist
+  → Zod-validated IPC
+Electron Main
+  → Application services
+  → Domain / Runtime / Research / Export
+  → Repositories / Adapters / CredentialStore / AssetProcessor
 ```
 
-`DebateEngine` 只产生命令结果和下一状态；`TurnRunner` 根据当前参与者创建 `UnifiedRequest`，消费流事件，持久化 `DebateTurn`，并把事件发布给 UI。停止、失败、重试、跳过等用户命令均先持久化，再由引擎决定合法状态转换。
+- Renderer 只接触 DTO；不能导入 `node:*`、Electron 主进程 API、Repository 或 CredentialStore。
+- preload 只暴露 `DebateStudioApi` 中的白名单调用与可取消事件订阅。
+- Main 拥有 SQLite、网络、文件和加密凭据访问权。
+- `contextIsolation: true`，`nodeIntegration: false`。
 
-## 主要模块
-
-| 模块 | 职责 | 第一阶段 |
-| --- | --- | --- |
-| `domain` | 类型、状态机、规则、错误分类 | 实现 |
-| `providers` | 协议适配器、流解析、能力校验 | Mock + OpenAI Chat |
-| `persistence` | SQLite schema、仓储、迁移 | 实现 |
-| `security` | 凭据存取与脱敏 | 接口与基础实现 |
-| `assets` | 文本/图片导入和元数据 | 文本、图片 |
-| `research` | 三层研究模型及隔离规则 | 类型与持久化边界；不自动搜索 |
-| `export` | JSON / Markdown 安全导出 | 实现 |
-| `main` / `preload` | Electron 生命周期和受限 IPC | 实现 |
-| `renderer` | 页面路由与基础操作界面 | 框架，不追求精细视觉 |
-
-## 推荐目录结构
+## 核心运行链路
 
 ```text
-src/
-  main/                 Electron main、IPC handlers
-  preload/              窄接口 bridge
-  renderer/             React routes、components、Zustand stores
-  domain/               types、debate state machine、services
-  providers/            adapters、protocol router、normalizers
-  persistence/          SQLite client、migrations、repositories
-  security/             CredentialStore implementations
-  assets/               local asset import and validation
-  export/               JSON and Markdown exporters
-  shared/               IPC contracts and utilities
-tests/                  unit and integration tests
-docs/                   product and architecture decisions
+sessionId
+  → DebateSetupLoader / Validator
+  → DebateRuntimeResolver
+  → ModelRoutingPolicy (按任务可选覆盖角色模型)
+  → TurnRunnerFactory / RuntimeTurnExecutor
+  → PromptBuilder
+  → ModelAdapter
+  → SessionRunner events
+  → SQLite Turn / Event / Usage
 ```
 
-## 存储与恢复
+角色决定立场与可见研究上下文；路由策略决定 `research`、`search_summary`、`argument_generation`、`rebuttal`、`judge` 和 `vision_analysis` 使用哪个 ModelProfile。没有策略时回退到角色绑定模型，保持旧配置兼容。
 
-SQLite 保存非敏感业务数据：连接元数据（不含 Key）、模型配置、会话、参与者、轮次、研究数据、证据、快照、用量、错误和设置。每一流式增量可节流更新轮次文本；完成、失败、取消、暂停时强制落盘。凭据只通过 `credentialRef` 与连接关联。
+## 模块职责
 
-应用启动时，未完成的轮次显示为“已中断”；用户可重试、跳过或结束，不自动重发网络请求。
+| 模块 | 职责 |
+| --- | --- |
+| `domain` | 辩论类型与显式状态机，不依赖 Electron/React/SQLite |
+| `execution` | TurnRunner、SessionRunner 与取消/重试语义 |
+| `runtime` | 配置解析、Prompt 构造前的模型路由、Adapter 调用 |
+| `model-routing` | 按任务持久化和解析 ModelProfile |
+| `providers` | Mock/OpenAI Compatible Adapter、HTTP/SSE 与错误标准化 |
+| `research` | 搜索工具循环、可见性隔离、来源与证据 |
+| `persistence` | SQLite migrations 与唯一数据访问入口 |
+| `security` | CredentialStore 和递归脱敏 |
+| `assets` | 图片/PDF 校验、存储、缩略图与 Vision 边界 |
+| `cost` | 仅基于已知 Usage 和用户定价计算成本 |
+| `application` | 用例编排和 Renderer DTO |
+| `main` / `preload` | Electron 生命周期与窄 IPC |
+| `renderer` | React 页面与显示状态 |
 
-## 不做的架构
+## 恢复语义
 
-不引入服务端、消息队列、事件总线、微服务、RBAC、远程审计、向量数据库或通用工作流编排器。这些均不能改善单机个人工具的第一阶段核心体验。
+Turn 开始立即落库，流式文本节流写入，完成/失败/取消时强制保存。应用重启把 `running`/`streaming` 标记为 `interrupted`，保留部分文本但不自动重发模型请求。搜索和网页读取通过 operation key 避免重启后重复执行。
 
+数据库升级前自动备份；migration 失败时恢复备份。凭据库不在 SQLite 备份中，因此恢复业务数据不会覆盖系统加密凭据。

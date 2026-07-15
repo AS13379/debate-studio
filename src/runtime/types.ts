@@ -2,6 +2,7 @@ import type { DebateParticipantConfig, DebateParticipantRole } from '../particip
 import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { SessionRecord } from '../persistence'
 import type { ModelAdapter, UnifiedError, UnifiedMessage, UnifiedRequest, UnifiedResponse, UnifiedStreamEvent } from '../providers'
+import type { ModelRoutingTask, ResolvedModelRoute } from '../model-routing'
 
 export interface RuntimeParticipant {
   role: DebateParticipantRole
@@ -17,6 +18,7 @@ export interface DebateRuntimeConfig {
   negative: RuntimeParticipant
   moderator: RuntimeParticipant
   judge?: RuntimeParticipant
+  routes?: Partial<Record<ModelRoutingTask, ResolvedModelRoute>>
 }
 
 export type RuntimeResolveErrorCode =

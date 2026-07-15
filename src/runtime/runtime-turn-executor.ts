@@ -1,4 +1,6 @@
 import type { DebateParticipantRole } from '../participant-config'
+import type { DebateStage } from '../domain'
+import type { ModelRoutingTask } from '../model-routing'
 import {
   ModelAdapterError,
   type ModelAdapter,
@@ -24,8 +26,15 @@ export class RuntimeTurnExecutor implements ModelAdapter {
 
   prepareRequest(request: UnifiedRequest, stream: boolean): RuntimeTurnPreparationResult {
     const role = request.runtimeMetadata.role
-    const participant = this.participantFor(role)
-    if (!participant) return { ok: false, error: this.missingRoleError(role) }
+    const roleParticipant = this.participantFor(role)
+    if (!roleParticipant) return { ok: false, error: this.missingRoleError(role) }
+    const route = this.runtimeConfig.routes?.[this.taskFor(request.stage)]
+    const participant: RuntimeParticipant = route ? {
+      ...roleParticipant,
+      modelProfile: route.modelProfile,
+      providerConnection: route.providerConnection,
+      adapter: route.adapter
+    } : roleParticipant
 
     const runtimeRequest: UnifiedRequest = {
       ...request,
@@ -69,9 +78,9 @@ export class RuntimeTurnExecutor implements ModelAdapter {
     }
     if (!prepared.ok) throw new ModelAdapterError(prepared.error)
     if (this.researchExecutor?.shouldHandle(prepared.request, prepared.participant)) {
-      return this.researchExecutor.complete(prepared.request, prepared.participant)
+      return this.withRuntimeMetadata(await this.researchExecutor.complete(prepared.request, prepared.participant), prepared)
     }
-    return prepared.participant.adapter.complete(prepared.request)
+    return this.withRuntimeMetadata(await prepared.participant.adapter.complete(prepared.request), prepared)
   }
 
   async *stream(request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> {
@@ -89,14 +98,42 @@ export class RuntimeTurnExecutor implements ModelAdapter {
       return
     }
     if (this.researchExecutor?.shouldHandle(prepared.request, prepared.participant)) {
-      yield* this.researchExecutor.stream(prepared.request, prepared.participant)
+      for await (const event of this.researchExecutor.stream(prepared.request, prepared.participant)) {
+        yield event.type === 'completed'
+          ? { ...event, response: this.withRuntimeMetadata(event.response, prepared) }
+          : event
+      }
       return
     }
-    yield* prepared.participant.adapter.stream(prepared.request)
+    for await (const event of prepared.participant.adapter.stream(prepared.request)) {
+      yield event.type === 'completed'
+        ? { ...event, response: this.withRuntimeMetadata(event.response, prepared) }
+        : event
+    }
+  }
+
+  private withRuntimeMetadata(response: UnifiedResponse, prepared: Extract<RuntimeTurnPreparationResult, { ok: true }>): UnifiedResponse {
+    return {
+      ...response,
+      runtimeMetadata: {
+        modelProfileId: prepared.participant.modelProfile.id,
+        providerConnectionId: prepared.participant.providerConnection.id,
+        providerId: prepared.participant.providerConnection.providerId,
+        modelId: prepared.participant.modelProfile.modelId
+      }
+    }
   }
 
   private participantFor(role: DebateParticipantRole): RuntimeParticipant | undefined {
     return this.runtimeConfig[role]
+  }
+
+  private taskFor(stage: Exclude<DebateStage, 'draft' | 'completed'>): ModelRoutingTask {
+    if (stage === 'affirmative_research' || stage === 'negative_research' || stage === 'affirmative_planning' || stage === 'negative_planning') return 'research'
+    if (stage === 'public_pool' || stage === 'moderating') return 'search_summary'
+    if (stage === 'rebuttal' || stage === 'cross_examination') return 'rebuttal'
+    if (stage === 'adjudication') return 'judge'
+    return 'argument_generation'
   }
 
   private missingRoleError(role: DebateParticipantRole): RuntimeTurnExecutionError {

@@ -4,6 +4,15 @@ dist-electron/
 out/
 release/
 *.log
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.jsonl
+credentials.bin
+diagnostics/
+exports/
+backups/
 *.tsbuildinfo
 .DS_Store
 .env

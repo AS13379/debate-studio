@@ -604,6 +604,57 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_research_sources_visibility_created ON research_sources(debate_session_id, visibility, created_at DESC);
       CREATE INDEX idx_published_evidence_created ON published_evidence(debate_session_id, created_at DESC);
     `
+  },
+  {
+    version: 13,
+    name: 'local_workbench_routing_cost_and_assets',
+    sql: `
+      CREATE TABLE model_routing_policies (
+        task TEXT PRIMARY KEY CHECK (task IN (
+          'research', 'search_summary', 'argument_generation', 'rebuttal', 'judge', 'vision_analysis'
+        )),
+        model_profile_id TEXT NOT NULL REFERENCES model_profiles(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE provider_pricing (
+        id TEXT PRIMARY KEY,
+        model_profile_id TEXT NOT NULL REFERENCES model_profiles(id) ON DELETE CASCADE,
+        model_id TEXT NOT NULL,
+        input_price_per_million REAL NOT NULL CHECK (input_price_per_million >= 0),
+        output_price_per_million REAL NOT NULL CHECK (output_price_per_million >= 0),
+        currency TEXT NOT NULL DEFAULT 'USD',
+        updated_at TEXT NOT NULL,
+        UNIQUE (model_profile_id)
+      );
+
+      CREATE TABLE asset_files (
+        asset_id TEXT PRIMARY KEY REFERENCES research_assets(id) ON DELETE CASCADE,
+        media_type TEXT NOT NULL CHECK (media_type IN ('image', 'pdf')),
+        mime_type TEXT NOT NULL,
+        file_size INTEGER NOT NULL CHECK (file_size >= 0),
+        page_count INTEGER,
+        width INTEGER,
+        height INTEGER,
+        thumbnail_path TEXT,
+        analysis_status TEXT NOT NULL DEFAULT 'not-requested' CHECK (
+          analysis_status IN ('not-requested', 'pending', 'completed', 'failed')
+        ),
+        analysis_model_profile_id TEXT REFERENCES model_profiles(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      ALTER TABLE usage_records ADD COLUMN model_profile_id TEXT REFERENCES model_profiles(id) ON DELETE SET NULL;
+      ALTER TABLE usage_records ADD COLUMN provider_connection_id TEXT REFERENCES provider_connections(id) ON DELETE SET NULL;
+      ALTER TABLE usage_records ADD COLUMN model_id TEXT;
+
+      CREATE INDEX idx_routing_model_profile ON model_routing_policies(model_profile_id);
+      CREATE INDEX idx_provider_pricing_model ON provider_pricing(model_id);
+      CREATE INDEX idx_asset_files_media_type ON asset_files(media_type);
+      CREATE INDEX idx_usage_records_model ON usage_records(model_profile_id, created_at DESC);
+    `
   }
 ]
 

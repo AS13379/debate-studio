@@ -30,6 +30,7 @@ import {
   type RuntimeResearchExecutor
 } from '../runtime'
 import { DebatePromptBuilder, ResearchContextReader } from '../research'
+import { ModelRoutingService } from '../model-routing'
 
 export interface DebateSetupApplicationOptions extends DatabaseOptions {
   getCapabilityRequirements?: (sessionId: string) => DebateCapabilityRequirements | undefined
@@ -38,6 +39,7 @@ export interface DebateSetupApplicationOptions extends DatabaseOptions {
   mockAdapter?: ModelAdapter
   fetchTimeoutMs?: number
   researchExecutor?: RuntimeResearchExecutor
+  now?: () => Date
 }
 
 export class DebateSetupApplication {
@@ -45,6 +47,7 @@ export class DebateSetupApplication {
   private readonly loader: DebateSetupLoader
   private readonly preparationService: DebateRuntimePreparationService
   private closed = false
+  readonly modelRouting: ModelRoutingService
 
   constructor(
     private readonly persistence: PersistenceContext,
@@ -67,9 +70,16 @@ export class DebateSetupApplication {
       },
       validator: this.validator
     })
+    this.modelRouting = new ModelRoutingService({
+      policies: persistence.repositories.modelRoutingPolicies,
+      modelProfiles: persistence.repositories.modelProfiles,
+      providerConnections: persistence.repositories.providerConnections,
+      adapterRegistry,
+      now: options.now
+    })
     this.preparationService = new DebateRuntimePreparationService({
       loader: { load: (sessionId) => this.loadDebateSetup(sessionId) },
-      resolver: new DebateRuntimeResolver(),
+      resolver: new DebateRuntimeResolver(this.modelRouting),
       turnRunnerFactory: new TurnRunnerFactory(new DebatePromptBuilder(new ResearchContextReader(
         persistence.repositories.debates,
         persistence.repositories.research

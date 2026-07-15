@@ -20,6 +20,11 @@ import { SQLiteResearchRepository } from './sqlite-research-repository'
 import { SQLiteSearchProviderConnectionRepository } from './sqlite-search-provider-connection-repository'
 import { SQLiteDebateHistoryRepository } from './sqlite-debate-history-repository'
 import { SQLiteExportRepository } from './sqlite-export-repository'
+import {
+  SQLiteAssetFileRepository,
+  SQLiteModelRoutingPolicyRepository,
+  SQLiteProviderPricingRepository
+} from './sqlite-workbench-repositories'
 
 export interface PersistenceContext {
   database: Database
@@ -90,6 +95,9 @@ export function initializePersistence(options: PersistenceOptions): PersistenceR
         turns: new SQLiteTurnRepository(database),
         events: new SQLiteEventRepository(database),
         usage: new SQLiteUsageRepository(database),
+        modelRoutingPolicies: new SQLiteModelRoutingPolicyRepository(database),
+        providerPricing: new SQLiteProviderPricingRepository(database),
+        assetFiles: new SQLiteAssetFileRepository(database),
         exports: new SQLiteExportRepository(database),
         research: new SQLiteResearchRepository(database),
         searchProviderConnections: new SQLiteSearchProviderConnectionRepository(database)

@@ -31,7 +31,7 @@ describe('Release Candidate database lifecycle', () => {
     expect(initialized.ok).toBe(true)
     if (!initialized.ok) return
 
-    expect(initialized.value.migrations.currentVersion()).toEqual({ ok: true, value: 12 })
+    expect(initialized.value.migrations.currentVersion()).toEqual({ ok: true, value: 13 })
     expect(initialized.value.repositories.settings.set('release-probe', { ready: true })).toMatchObject({ ok: true })
     expect(initialized.value.repositories.settings.get('release-probe')).toEqual({ ok: true, value: { ready: true } })
     expect(initialized.value.backups.listBackups()).toEqual({ ok: true, value: [] })
@@ -41,14 +41,14 @@ describe('Release Candidate database lifecycle', () => {
   })
 
   for (const legacyVersion of [1, 5, 10, 12]) {
-    it(`upgrades schema v${legacyVersion} to v12 without losing supported records`, () => {
+    it(`upgrades schema v${legacyVersion} to v13 without losing supported records`, () => {
       const directory = temporaryDirectory()
       seedLegacyDatabase(directory, legacyVersion)
 
       const upgraded = initializePersistence({ appDataDirectory: directory })
       expect(upgraded.ok).toBe(true)
       if (!upgraded.ok) return
-      expect(upgraded.value.migrations.currentVersion()).toEqual({ ok: true, value: 12 })
+      expect(upgraded.value.migrations.currentVersion()).toEqual({ ok: true, value: 13 })
       expect(upgraded.value.database.get<{ topic: string }>('SELECT topic FROM debates WHERE id = ?', 'legacy-debate')).toEqual({
         ok: true, value: { topic: `v${legacyVersion} 保留辩题` }
       })
@@ -69,7 +69,7 @@ describe('Release Candidate database lifecycle', () => {
 
       const backups = upgraded.value.backups.listBackups()
       expect(backups.ok).toBe(true)
-      if (backups.ok) expect(backups.value.filter((item) => item.reason === 'pre-migration')).toHaveLength(legacyVersion < 12 ? 1 : 0)
+      if (backups.ok) expect(backups.value.filter((item) => item.reason === 'pre-migration')).toHaveLength(legacyVersion < 13 ? 1 : 0)
       upgraded.value.database.close()
     })
   }
@@ -78,7 +78,7 @@ describe('Release Candidate database lifecycle', () => {
     const directory = temporaryDirectory()
     seedLegacyDatabase(directory, 5)
     const failingMigration: Migration = {
-      version: 13,
+      version: 14,
       name: 'intentional_release_probe_failure',
       sql: 'CREATE TABLE should_rollback (id TEXT); INVALID SQL;'
     }
@@ -106,7 +106,7 @@ describe('Release Candidate database lifecycle', () => {
     expect(initialized.ok).toBe(true)
     if (!initialized.ok) return
     expect(initialized.value.repositories.settings.set('restore-probe', { value: 'before' }).ok).toBe(true)
-    const backup = initialized.value.backups.createBackup('manual', 12)
+    const backup = initialized.value.backups.createBackup('manual', 13)
     expect(backup.ok).toBe(true)
     if (!backup.ok) return
     expect(statSync(backup.value.filePath).mode & 0o777).toBe(0o600)
@@ -200,6 +200,7 @@ describe('Release Candidate packaging configuration', () => {
     const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string; scripts: Record<string, string> }
     const configuration = readFileSync(join(root, 'electron-builder.yml'), 'utf8')
     const entitlements = readFileSync(join(root, 'build', 'entitlements.mac.plist'), 'utf8')
+    const releaseWorkflow = readFileSync(join(root, '.github', 'workflows', 'macos-arm64-release.yml'), 'utf8')
 
     expect(packageJson.version).toBe('0.1.0-rc.1')
     expect(packageJson.scripts['release:mac:arm64']).toContain('electron-builder --mac dmg --arm64')
@@ -211,7 +212,15 @@ describe('Release Candidate packaging configuration', () => {
     expect(entitlements).not.toContain('com.apple.security.app-sandbox')
     expect(readFileSync(join(root, 'scripts', 'build-macos-signed.mjs'), 'utf8')).toContain('CSC_NAME')
     expect(readFileSync(join(root, 'scripts', 'notarize-macos.mjs'), 'utf8')).toContain('APPLE_NOTARY_KEYCHAIN_PROFILE')
-    expect(readFileSync(join(root, 'src', 'main', 'index.ts'), 'utf8')).toContain('requestSingleInstanceLock')
+    const mainSource = readFileSync(join(root, 'src', 'main', 'index.ts'), 'utf8')
+    expect(mainSource).toContain('requestSingleInstanceLock')
+    expect(mainSource.indexOf("app.setPath('userData'")).toBeLessThan(mainSource.indexOf('requestSingleInstanceLock'))
+    expect(releaseWorkflow).toContain('runs-on: macos-14')
+    expect(releaseWorkflow).toContain('uses: actions/setup-node@v7')
+    expect(releaseWorkflow).toContain('npm run release:mac:arm64')
+    expect(releaseWorkflow).toContain('uses: actions/upload-artifact@v6')
+    expect(readFileSync(join(root, 'LICENSE'), 'utf8')).toContain('MIT License')
+    expect(readFileSync(join(root, 'README.md'), 'utf8')).toContain('Debate Studio')
   })
 })
 

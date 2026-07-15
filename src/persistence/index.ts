@@ -21,6 +21,7 @@ export type {
   DebateMetadataRecord,
   DebateTagRecord,
   DebateParticipantRepository,
+  AssetFileRepository,
   EntityRepository,
   EventRecord,
   EventRepository,
@@ -29,6 +30,8 @@ export type {
   ExportStatus,
   ExportType,
   ModelProfileRepository,
+  ModelRoutingPolicyRepository,
+  ProviderPricingRepository,
   ProviderConnectionRepository,
   ResearchRepository,
   SearchProviderConnectionRepository,
@@ -49,6 +52,11 @@ export { SQLiteDebateHistoryRepository } from './sqlite-debate-history-repositor
 export { SQLiteSearchProviderConnectionRepository } from './sqlite-search-provider-connection-repository'
 export { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-repository'
 export { SQLiteModelProfileRepository, SQLiteProviderConnectionRepository } from './sqlite-provider-repositories'
+export {
+  SQLiteAssetFileRepository,
+  SQLiteModelRoutingPolicyRepository,
+  SQLiteProviderPricingRepository
+} from './sqlite-workbench-repositories'
 export { SQLiteSessionRepository } from './sqlite-session-repository'
 export { SQLiteSettingsRepository } from './sqlite-settings-repository'
 export {

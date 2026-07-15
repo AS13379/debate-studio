@@ -1,15 +1,18 @@
 import { lazy, Profiler, Suspense, useEffect, useRef, useState } from 'react'
 
-import type { DebateDetailDto, DebateHistoryListQueryDto, DebateHistorySummaryDto } from '../../shared/ipc-contract'
+import type { DebateDetailDto, DebateHistoryListQueryDto, DebateHistorySummaryDto, OnboardingStateDto } from '../../shared/ipc-contract'
 import { HomePage } from './pages/HomePage'
+import { OnboardingWizard } from './components/OnboardingWizard'
 
 const LiveDebatePage = lazy(() => import('./pages/LiveDebatePage').then((module) => ({ default: module.LiveDebatePage })))
 const NewDebatePage = lazy(() => import('./pages/NewDebatePage').then((module) => ({ default: module.NewDebatePage })))
 const ProviderManagementPage = lazy(() => import('./pages/ProviderManagementPage').then((module) => ({ default: module.ProviderManagementPage })))
 const DiagnosticsPage = lazy(() => import('./pages/DiagnosticsPage').then((module) => ({ default: module.DiagnosticsPage })))
 const DebateHistoryPage = lazy(() => import('./pages/DebateHistoryPage').then((module) => ({ default: module.DebateHistoryPage })))
+const ModelRoutingPage = lazy(() => import('./pages/ModelRoutingPage').then((module) => ({ default: module.ModelRoutingPage })))
+const CostStatisticsPage = lazy(() => import('./pages/CostStatisticsPage').then((module) => ({ default: module.CostStatisticsPage })))
 
-type Page = 'home' | 'new' | 'models' | 'diagnostics' | 'live' | 'history'
+type Page = 'home' | 'new' | 'models' | 'routing' | 'costs' | 'diagnostics' | 'live' | 'history'
 
 export function App() {
   const storedDebateId = localStorage.getItem('debate-studio:last-debate') ?? undefined
@@ -22,6 +25,8 @@ export function App() {
   const [historyHasMore, setHistoryHasMore] = useState(false)
   const [error, setError] = useState<string>()
   const [version, setVersion] = useState('')
+  const [onboarding, setOnboarding] = useState<OnboardingStateDto>()
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const lastPerformanceReportAt = useRef(0)
 
   const reportRender = (_id: string, _phase: string, actualDuration: number): void => {
@@ -47,6 +52,11 @@ export function App() {
 
   useEffect(() => {
     void window.debateStudio.getAppVersion().then(setVersion)
+    void window.debateStudio.getOnboardingState().then((result) => {
+      if (!result.ok) return
+      setOnboarding(result.value)
+      setShowOnboarding(result.value.status === 'pending')
+    })
     if (storedDebateId) {
       void window.debateStudio.getDebateDetail({ id: storedDebateId }).then((result) => {
         if (result.ok && result.value.historyStatus === 'active') setPage('live')
@@ -89,6 +99,12 @@ export function App() {
     else openDebate(result.value)
   }
 
+  const reopenOnboarding = async (): Promise<void> => {
+    await window.debateStudio.reopenOnboarding()
+    const result = await window.debateStudio.getOnboardingState()
+    if (result.ok) { setOnboarding(result.value); setShowOnboarding(true) }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -98,7 +114,10 @@ export function App() {
           <button className={page === 'home' ? 'active' : ''} onClick={goHome}>辩论列表</button>
           <button className={page === 'new' ? 'active' : ''} onClick={() => setPage('new')}>新建辩论</button>
           <button className={page === 'models' ? 'active' : ''} onClick={() => setPage('models')}>模型与平台</button>
+          <button className={page === 'routing' ? 'active' : ''} onClick={() => setPage('routing')}>模型策略</button>
+          <button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}>成本统计</button>
           <button className={page === 'diagnostics' ? 'active' : ''} onClick={() => setPage('diagnostics')}>诊断与日志</button>
+          <button onClick={() => void reopenOnboarding()}>首次引导</button>
         </nav>
         <span className="app-version">v{version || '…'}</span>
       </aside>
@@ -118,6 +137,8 @@ export function App() {
             onCreate={() => setPage('new')}
             onCreateDemo={() => void createDemo()}
             onOpenModels={() => setPage('models')}
+            needsModelSetup={onboarding?.needsModelSetup ?? false}
+            onOpenOnboarding={() => void reopenOnboarding()}
             onOpen={openDebate}
             onOpenHistory={openHistory}
             onExport={openHistory}
@@ -125,6 +146,8 @@ export function App() {
         )}
         {page === 'new' && <NewDebatePage onBack={goHome} onCreated={openDebate} onOpenModels={() => setPage('models')} />}
         {page === 'models' && <ProviderManagementPage />}
+        {page === 'routing' && <ModelRoutingPage />}
+        {page === 'costs' && <CostStatisticsPage />}
         {page === 'diagnostics' && <DiagnosticsPage />}
         {page === 'history' && selectedHistoryId && <DebateHistoryPage
           debateId={selectedHistoryId}
@@ -139,6 +162,11 @@ export function App() {
         </Suspense>
         </Profiler>
       </main>
+      {showOnboarding && onboarding && <OnboardingWizard
+        state={onboarding}
+        onClose={() => { setShowOnboarding(false); void window.debateStudio.getOnboardingState().then((result) => result.ok && setOnboarding(result.value)) }}
+        onCreated={(debateId) => { setShowOnboarding(false); openDebate({ id: debateId }) }}
+      />}
     </div>
   )
 }

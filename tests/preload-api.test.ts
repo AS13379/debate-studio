@@ -27,13 +27,13 @@ describe('preload DebateStudioApi', () => {
     const api = createDebateStudioApi(new RecordingIpcRenderer())
 
     expect(Object.keys(api).sort()).toEqual([
-      'addResearchAsset', 'addTag', 'archiveDebate', 'cancelExport', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDatabaseBackup', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
+      'addResearchAsset', 'addTag', 'analyzeImageAsset', 'archiveDebate', 'cancelExport', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDatabaseBackup', 'createDebate', 'createDefaultModelRouting', 'createMockDemoDebate', 'createOnboardingDemo', 'decideResearchToolCall', 'deleteCredential',
       'deleteDebate', 'deleteExport', 'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
-      'exportDiagnosticReport', 'exportHtml', 'exportMarkdown', 'getAppVersion', 'getDataManagementState', 'getDebate', 'getDebateDetail', 'getErrorDetail', 'getPerformanceSnapshot', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebateTurnsPage', 'listDebates',
-      'listExports', 'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
-      'pauseDebate', 'publishResearchEvidence', 'removeTag', 'renameDebate', 'reportRendererError', 'reportRendererPerformance', 'restoreDatabaseBackup', 'restoreDebate', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
-      'saveParticipantBindings', 'saveProviderConnection', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection',
-      'startDebate', 'stopDebate', 'testConnection', 'testSearchConnection', 'toggleFavorite', 'updateEvidenceStatus'
+      'exportDiagnosticReport', 'exportHtml', 'exportMarkdown', 'getAppVersion', 'getCostSummary', 'getDataManagementState', 'getDebate', 'getDebateDetail', 'getErrorDetail', 'getOnboardingState', 'getPerformanceSnapshot', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebateTurnsPage', 'listDebates',
+      'listExports', 'listModelProfiles', 'listModelRoutingPolicies', 'listProviderConnections', 'listProviderPresets', 'listProviderPricing', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
+      'pauseDebate', 'publishResearchEvidence', 'removeTag', 'renameDebate', 'reopenOnboarding', 'reportRendererError', 'reportRendererPerformance', 'restoreDatabaseBackup', 'restoreDebate', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile', 'saveModelRoutingPolicy', 'saveOnboardingDefaults', 'saveOnboardingProvider',
+      'saveParticipantBindings', 'saveProviderConnection', 'saveProviderPricing', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection',
+      'skipOnboarding', 'startDebate', 'stopDebate', 'testConnection', 'testOnboardingConnection', 'testSearchConnection', 'toggleFavorite', 'updateEvidenceStatus'
     ].sort())
     expect(api).not.toHaveProperty('invoke')
     expect(api).not.toHaveProperty('getCredential')

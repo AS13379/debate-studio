@@ -63,6 +63,9 @@ interface UsageRow {
   estimated_cost: number | null
   cost_is_estimated: number
   duration_ms: number | null
+  model_profile_id: string | null
+  provider_connection_id: string | null
+  model_id: string | null
   created_at: string
 }
 
@@ -354,8 +357,8 @@ export class SQLiteUsageRepository implements UsageRepository {
     const result = this.database.run(
       `INSERT INTO usage_records
        (id, session_id, turn_id, input_tokens, output_tokens, total_tokens,
-        estimated_cost, cost_is_estimated, duration_ms, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        estimated_cost, cost_is_estimated, duration_ms, model_profile_id, provider_connection_id, model_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       record.id,
       record.sessionId,
       record.turnId ?? null,
@@ -365,6 +368,9 @@ export class SQLiteUsageRepository implements UsageRepository {
       record.estimatedCost ?? null,
       record.costIsEstimated ? 1 : 0,
       record.durationMs ?? null,
+      record.modelProfileId ?? null,
+      record.providerConnectionId ?? null,
+      record.modelId ?? null,
       record.createdAt
     )
     return result.ok ? { ok: true, value: undefined } : result
@@ -378,9 +384,15 @@ export class SQLiteUsageRepository implements UsageRepository {
     return result.ok ? { ok: true, value: result.value.map((row) => this.mapRow(row)) } : result
   }
 
+  listAll(): PersistenceResult<UsageRecord[]> {
+    const result = this.database.all<UsageRow>(`${this.selectSql()} ORDER BY created_at, rowid`)
+    return result.ok ? { ok: true, value: result.value.map((row) => this.mapRow(row)) } : result
+  }
+
   private selectSql(): string {
     return `SELECT id, session_id, turn_id, input_tokens, output_tokens, total_tokens,
-      estimated_cost, cost_is_estimated, duration_ms, created_at FROM usage_records`
+      estimated_cost, cost_is_estimated, duration_ms, model_profile_id,
+      provider_connection_id, model_id, created_at FROM usage_records`
   }
 
   private mapRow(row: UsageRow): UsageRecord {
@@ -394,6 +406,9 @@ export class SQLiteUsageRepository implements UsageRepository {
       estimatedCost: row.estimated_cost ?? undefined,
       costIsEstimated: row.cost_is_estimated === 1,
       durationMs: row.duration_ms ?? undefined,
+      modelProfileId: row.model_profile_id ?? undefined,
+      providerConnectionId: row.provider_connection_id ?? undefined,
+      modelId: row.model_id ?? undefined,
       createdAt: row.created_at
     }
   }

@@ -1,0 +1,52 @@
+name: macOS arm64 release
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          package-manager-cache: true
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify source
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Build unsigned arm64 DMG
+        run: npm run release:mac:arm64
+
+      - name: Verify packaged artifact
+        run: npm run release:check
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: Debate-Studio-macOS-arm64
+          path: release/Debate-Studio-*-arm64.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach DMG to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" release/Debate-Studio-*-arm64.dmg --clobber

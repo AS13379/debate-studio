@@ -157,7 +157,7 @@ export interface ResearchLoopState {
   updatedAt: string
 }
 
-export type ResearchAssetKind = 'text' | 'url' | 'image'
+export type ResearchAssetKind = 'text' | 'url' | 'image' | 'pdf'
 
 export interface ResearchAsset extends OwnedResearchRecord {
   researchSessionId?: string
