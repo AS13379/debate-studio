@@ -23,13 +23,27 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .brand-mark img { display: block; width: 56px; height: 56px; filter: drop-shadow(0 8px 16px rgba(59,47,143,.28)); }
 .brand-copy { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
 .brand-copy span, .app-version { color: #aeb1bb; font-size: 12px; }
-.sidebar nav { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; margin-top: 26px; }
+.sidebar nav { grid-column: 1 / -1; display: flex; min-height: 0; flex-direction: column; gap: 18px; margin-top: 26px; }
+.sidebar-nav-group { display: flex; flex-direction: column; gap: 6px; }
+.sidebar-nav-settings { margin-top: auto; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08); }
+.sidebar-nav-label { padding: 0 12px 5px; color: #777b85; font-size: 10px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
 .sidebar nav button { padding: 11px 12px; color: #d7d9df; text-align: left; border: 0; border-radius: 9px; background: transparent; }
 .sidebar nav button:hover, .sidebar nav button.active { color: #fff; background: rgba(255,255,255,.1); }
 .app-version { grid-column: 1 / -1; align-self: end; padding-left: 12px; }
 .content-area { min-width: 0; padding: 40px clamp(28px, 5vw, 72px) 72px; }
 .page-loading { max-width: 1180px; margin: 0 auto; }
 .page-stack { display: flex; flex-direction: column; gap: 22px; max-width: 1180px; margin: 0 auto; }
+.settings-page { gap: 20px; }
+.settings-tabs { position: sticky; top: 14px; z-index: 4; display: flex; width: fit-content; max-width: 100%; gap: 4px; padding: 5px; overflow-x: auto; background: rgba(233,234,238,.92); border: 1px solid #dedfe5; border-radius: 12px; box-shadow: 0 8px 24px rgba(25,28,36,.07); backdrop-filter: blur(14px); }
+.settings-tabs button { flex: 0 0 auto; padding: 9px 14px; color: #666a74; white-space: nowrap; background: transparent; border: 0; border-radius: 8px; font-weight: 650; }
+.settings-tabs button:hover { color: #403785; background: rgba(255,255,255,.55); }
+.settings-tabs button.active { color: #39304f; background: #fff; box-shadow: 0 2px 9px rgba(25,28,36,.1); }
+.settings-tab-content > .page-stack { max-width: none; margin: 0; }
+.settings-tab-content > .page-stack > .page-header .eyebrow { display: none; }
+.settings-tab-content > .page-stack > .page-header h1 { font-size: clamp(25px, 3vw, 34px); }
+.onboarding-settings-panel { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 28px; }
+.onboarding-settings-panel h2 { margin: 7px 0 8px; }
+.onboarding-settings-panel p { max-width: 660px; margin: 0; color: #6c707a; line-height: 1.65; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
 .page-header.compact { align-items: center; }
 .page-header h1 { margin: 4px 0 8px; font-size: clamp(28px, 3.5vw, 44px); letter-spacing: -.035em; }
@@ -496,6 +510,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .routing-head, .pricing-row { background: #1b1d22; }
   .routing-row select, .pricing-row input { color: #f0f1f4; background: #1b1d22; border-color: #41444d; }
   .cost-kpis article { background: #22242a; border-color: #343740; }
+  .settings-tabs { background: rgba(41,44,51,.92); border-color: #41444d; box-shadow: none; }
+  .settings-tabs button { color: #a8abb4; }
+  .settings-tabs button:hover { color: #ddd9fa; background: rgba(255,255,255,.06); }
+  .settings-tabs button.active { color: #f0f1f4; background: #3a3d45; }
+  .onboarding-settings-panel p { color: #a8abb4; }
 }
 
 @media (max-width: 1100px) {
@@ -513,6 +532,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .app-shell { display: block; }
   .sidebar { position: sticky; z-index: 10; height: auto; padding: 12px 16px; grid-template-columns: 56px 1fr; grid-template-rows: auto auto; }
   .sidebar nav { margin-top: 5px; flex-direction: row; overflow-x: auto; }
+  .sidebar-nav-group { flex-direction: row; }
+  .sidebar-nav-settings { margin: 0 0 0 auto; padding: 0 0 0 8px; border-top: 0; border-left: 1px solid rgba(255,255,255,.08); }
+  .sidebar-nav-label { display: none; }
   .sidebar nav button { flex: 0 0 auto; white-space: nowrap; }
   .app-version { display: none; }
   .content-area { padding: 24px 18px 48px; }
@@ -526,4 +548,5 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .onboarding-form > * { grid-column: 1 !important; }
   .routing-row { grid-template-columns: 1fr; }
   .cost-kpis { grid-template-columns: 1fr; }
+  .onboarding-settings-panel { align-items: stretch; flex-direction: column; }
 }

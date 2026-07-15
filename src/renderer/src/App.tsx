@@ -1,19 +1,17 @@
 import { lazy, Profiler, Suspense, useEffect, useRef, useState } from 'react'
 
 import type { DebateDetailDto, DebateHistoryListQueryDto, DebateHistorySummaryDto, OnboardingStateDto } from '../../shared/ipc-contract'
+import type { SettingsTab } from './pages/SettingsPage'
 import { HomePage } from './pages/HomePage'
 import { OnboardingWizard } from './components/OnboardingWizard'
 import brandIconUrl from '../../../build/icon.svg?url'
 
 const LiveDebatePage = lazy(() => import('./pages/LiveDebatePage').then((module) => ({ default: module.LiveDebatePage })))
 const NewDebatePage = lazy(() => import('./pages/NewDebatePage').then((module) => ({ default: module.NewDebatePage })))
-const ProviderManagementPage = lazy(() => import('./pages/ProviderManagementPage').then((module) => ({ default: module.ProviderManagementPage })))
-const DiagnosticsPage = lazy(() => import('./pages/DiagnosticsPage').then((module) => ({ default: module.DiagnosticsPage })))
 const DebateHistoryPage = lazy(() => import('./pages/DebateHistoryPage').then((module) => ({ default: module.DebateHistoryPage })))
-const ModelRoutingPage = lazy(() => import('./pages/ModelRoutingPage').then((module) => ({ default: module.ModelRoutingPage })))
-const CostStatisticsPage = lazy(() => import('./pages/CostStatisticsPage').then((module) => ({ default: module.CostStatisticsPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 
-type Page = 'home' | 'new' | 'models' | 'routing' | 'costs' | 'diagnostics' | 'live' | 'history'
+type Page = 'home' | 'new' | 'settings' | 'live' | 'history'
 
 export function App() {
   const storedDebateId = localStorage.getItem('debate-studio:last-debate') ?? undefined
@@ -28,6 +26,7 @@ export function App() {
   const [version, setVersion] = useState('')
   const [onboarding, setOnboarding] = useState<OnboardingStateDto>()
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('providers')
   const lastPerformanceReportAt = useRef(0)
 
   const reportRender = (_id: string, _phase: string, actualDuration: number): void => {
@@ -93,6 +92,11 @@ export function App() {
     setPage('history')
   }
 
+  const openSettings = (tab: SettingsTab = 'providers'): void => {
+    setSettingsTab(tab)
+    setPage('settings')
+  }
+
   const createDemo = async (): Promise<void> => {
     setError(undefined)
     const result = await window.debateStudio.createMockDemoDebate()
@@ -112,13 +116,15 @@ export function App() {
         <div className="brand-mark" aria-hidden="true"><img src={brandIconUrl} alt="" /></div>
         <div className="brand-copy"><strong>Debate Studio</strong><span>本地 AI 辩论</span></div>
         <nav aria-label="主导航">
-          <button className={page === 'home' ? 'active' : ''} onClick={goHome}>辩论列表</button>
-          <button className={page === 'new' ? 'active' : ''} onClick={() => setPage('new')}>新建辩论</button>
-          <button className={page === 'models' ? 'active' : ''} onClick={() => setPage('models')}>模型与平台</button>
-          <button className={page === 'routing' ? 'active' : ''} onClick={() => setPage('routing')}>模型策略</button>
-          <button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}>成本统计</button>
-          <button className={page === 'diagnostics' ? 'active' : ''} onClick={() => setPage('diagnostics')}>诊断与日志</button>
-          <button onClick={() => void reopenOnboarding()}>首次引导</button>
+          <div className="sidebar-nav-group">
+            <span className="sidebar-nav-label">工作台</span>
+            <button className={page === 'home' ? 'active' : ''} onClick={goHome}>辩论列表</button>
+            <button className={page === 'new' ? 'active' : ''} onClick={() => setPage('new')}>新建辩论</button>
+          </div>
+          <div className="sidebar-nav-group sidebar-nav-settings">
+            <span className="sidebar-nav-label">管理</span>
+            <button className={page === 'settings' ? 'active' : ''} onClick={() => openSettings()}>设置</button>
+          </div>
         </nav>
         <span className="app-version">v{version || '…'}</span>
       </aside>
@@ -137,7 +143,7 @@ export function App() {
             onLoadMore={() => void loadDebates(historyQuery, true)}
             onCreate={() => setPage('new')}
             onCreateDemo={() => void createDemo()}
-            onOpenModels={() => setPage('models')}
+            onOpenModels={() => openSettings('providers')}
             needsModelSetup={onboarding?.needsModelSetup ?? false}
             onOpenOnboarding={() => void reopenOnboarding()}
             onOpen={openDebate}
@@ -145,11 +151,8 @@ export function App() {
             onExport={openHistory}
           />
         )}
-        {page === 'new' && <NewDebatePage onBack={goHome} onCreated={openDebate} onOpenModels={() => setPage('models')} />}
-        {page === 'models' && <ProviderManagementPage />}
-        {page === 'routing' && <ModelRoutingPage />}
-        {page === 'costs' && <CostStatisticsPage />}
-        {page === 'diagnostics' && <DiagnosticsPage />}
+        {page === 'new' && <NewDebatePage onBack={goHome} onCreated={openDebate} onOpenModels={() => openSettings('providers')} />}
+        {page === 'settings' && <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab} onOpenOnboarding={() => void reopenOnboarding()} />}
         {page === 'history' && selectedHistoryId && <DebateHistoryPage
           debateId={selectedHistoryId}
           onBack={goHome}
@@ -157,7 +160,7 @@ export function App() {
           onOpenDebate={(id) => openDebate({ id })}
         />}
         {page === 'live' && selectedDebateId && (
-          <LiveDebatePage debateId={selectedDebateId} onBack={goHome} onOpenModels={() => setPage('models')} />
+          <LiveDebatePage debateId={selectedDebateId} onBack={goHome} onOpenModels={() => openSettings('providers')} />
         )}
         </>
         </Suspense>
