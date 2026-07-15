@@ -35,6 +35,9 @@ describe('debate export application', () => {
     expect(content).toContain('## 公开证据桌')
     expect(content).toContain('### 证据 A-S1')
     expect(content).toContain('## 正式辩论')
+    expect(content).toContain('## 裁判评分')
+    expect(content).toContain('## 赛后复盘')
+    expect(content).toContain('证据主线清楚')
     expect(content.indexOf('正方核心发言')).toBeLessThan(content.indexOf('反方核心发言'))
     expect(content).toContain('长文本结束')
     expect(content).not.toContain('正方秘密研究原文')
@@ -62,6 +65,8 @@ describe('debate export application', () => {
     expect(publicHtml).toContain('Content-Security-Policy')
     expect(publicHtml).toContain('@media(prefers-color-scheme:dark)')
     expect(publicHtml).toContain('<details class="card turn"')
+    expect(publicHtml).toContain('<h2>裁判评分</h2>')
+    expect(publicHtml).toContain('<h2>赛后复盘</h2>')
     expect(publicHtml).not.toMatch(/<script[\s>]/i)
     expect(publicHtml).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
     expect(publicHtml).not.toContain('正方秘密研究原文')
@@ -215,6 +220,33 @@ function seed(context: PersistenceContext): void {
     { id: 'history-1', debateSessionId: 'session-1', evidenceId: 'evidence-1', toStatus: 'unverified', changedBy: 'participant-a', note: '首次发布', createdAt: NOW }
   ))
   ok(repositories.research.changeEvidenceStatus('evidence-1', 'supported', { id: 'history-2', debateSessionId: 'session-1', evidenceId: 'evidence-1', fromStatus: 'unverified', toStatus: 'supported', changedBy: 'participant-m', note: '主持人确认', createdAt: '2026-07-15T10:04:00.000Z' }))
+  const scores = {
+    logicalCompleteness: { score: 8, reason: '逻辑完整。' },
+    evidenceQuality: { score: 8, reason: '证据有效。' },
+    rebuttalEffectiveness: { score: 8, reason: '反驳有效。' },
+    factualAccuracy: { score: 8, reason: '事实准确。' },
+    argumentDepth: { score: 8, reason: '论证深入。' },
+    clarity: { score: 8, reason: '表达清楚。' }
+  }
+  ok(repositories.debateQuality.saveEvaluation({
+    id: 'evaluation-1', debateId: 'debate-1', sessionId: 'session-1', evaluatorModelId: 'mock-debate',
+    promptTemplateId: 'prompt-judge', promptVersion: 1, createdAt: NOW,
+    evaluation: {
+      winner: 'affirmative', scores: { affirmative: scores, negative: scores },
+      strengths: { affirmative: ['证据主线清楚'], negative: ['风险分析明确'] },
+      weaknesses: { affirmative: ['边界可细化'], negative: ['回应不足'] },
+      keyTurningPoints: ['反驳阶段形成转折。'], evidenceUsage: { affirmative: '有效', negative: '一般' },
+      reasoningQuality: { affirmative: '清楚', negative: '基本清楚' }
+    }
+  }))
+  ok(repositories.debateQuality.saveReview({
+    id: 'review-1', debateId: 'debate-1', sessionId: 'session-1', reviewerModelId: 'mock-debate',
+    promptTemplateId: 'prompt-review', promptVersion: 1, createdAt: NOW,
+    review: {
+      summary: '正方依靠证据主线占优。', bestArguments: ['正方核心论证'], bestRebuttals: ['正方核心反驳'],
+      missedOpportunities: ['反方未继续追问'], evidenceAnalysis: ['证据使用有效'], improvementSuggestions: ['细化边界']
+    }
+  }))
 }
 
 function ok(result: PersistenceResult<unknown>): void {

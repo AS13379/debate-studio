@@ -137,6 +137,33 @@ describe('OpenAIChatAdapter', () => {
     expect(transport.requests[0].body).toMatchObject({ thinking: { type: 'disabled' } })
   })
 
+  it('maps image input only when a vision request explicitly contains image bytes', async () => {
+    const transport = new MockHttpTransport()
+    const visionRequest = request()
+    visionRequest.messages = [
+      { role: 'system', content: '只输出公开图片分析。' },
+      {
+        role: 'user',
+        content: '分析图片。',
+        imageInputs: [{ mimeType: 'image/png', base64: 'iVBORw0KGgo=' }]
+      }
+    ]
+    visionRequest.runtimeMetadata.purpose = 'vision-analysis'
+
+    await new OpenAIChatAdapter(transport).complete(visionRequest)
+
+    const body = transport.requests[0].body as OpenAIChatRequestBody
+    expect(body.messages[0]).toEqual({ role: 'system', content: '只输出公开图片分析。' })
+    expect(body.messages[1]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'text', text: '分析图片。' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' } }
+      ]
+    })
+    expect(JSON.stringify(body.messages[0])).not.toContain('image_url')
+  })
+
   it('classifies an empty length-limited response as a retryable output-limit error', async () => {
     const transport = new MockHttpTransport({ response: { status: 200, body: {
       choices: [{ message: { role: 'assistant', content: null }, finish_reason: 'length' }]

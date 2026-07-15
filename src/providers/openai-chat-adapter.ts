@@ -17,7 +17,10 @@ import { presentProviderFailure } from './provider-error-presentation'
 
 export interface OpenAIChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string
+  content: string | Array<
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } }
+  >
   name?: string
   tool_call_id?: string
   tool_calls?: Array<{
@@ -157,7 +160,15 @@ export class OpenAIChatAdapter implements ModelAdapter {
       model: request.modelId,
       messages: request.messages.map((message) => ({
         role: message.role,
-        content: message.content,
+        content: message.imageInputs?.length
+          ? [
+              { type: 'text' as const, text: message.content },
+              ...message.imageInputs.map((image) => ({
+                type: 'image_url' as const,
+                image_url: { url: `data:${image.mimeType};base64,${image.base64}` }
+              }))
+            ]
+          : message.content,
         name: message.name,
         tool_call_id: message.toolCallId,
         tool_calls: message.toolCalls?.map((call) => ({

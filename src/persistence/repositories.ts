@@ -6,6 +6,13 @@ import type { AssetFileRecord } from '../assets'
 import type { ProviderPricing } from '../cost'
 import type { ModelRoutingPolicy, ModelRoutingTask } from '../model-routing'
 import type { DebatePlan, DebatePlanProvenance, DebatePlanningMode } from '../debate-planner'
+import type { DebateEvaluationRecord, DebateReviewRecord } from '../debate-quality'
+import type {
+  PromptTask,
+  PromptTemplateRecord,
+  PromptUsageRecord,
+  PromptVersionRecord
+} from '../prompt-studio'
 import type {
   EvidenceReferenceIssue,
   EvidenceStatus,
@@ -364,6 +371,27 @@ export interface SearchProviderConnectionRepository {
   setDefault(id: string, updatedAt: string): PersistenceResult<boolean>
 }
 
+export interface DebateQualityRepository {
+  saveEvaluation(record: DebateEvaluationRecord): PersistenceResult<void>
+  findEvaluationByDebate(debateId: string): PersistenceResult<DebateEvaluationRecord | undefined>
+  findEvaluationBySession(sessionId: string): PersistenceResult<DebateEvaluationRecord | undefined>
+  listEvaluations(): PersistenceResult<DebateEvaluationRecord[]>
+  saveReview(record: DebateReviewRecord): PersistenceResult<void>
+  findReviewByDebate(debateId: string): PersistenceResult<DebateReviewRecord | undefined>
+  findReviewBySession(sessionId: string): PersistenceResult<DebateReviewRecord | undefined>
+}
+
+export interface PromptStudioRepository {
+  listTemplates(): PersistenceResult<PromptTemplateRecord[]>
+  findTemplateByTask(task: PromptTask): PersistenceResult<PromptTemplateRecord | undefined>
+  listVersions(templateId: string): PersistenceResult<PromptVersionRecord[]>
+  findVersion(templateId: string, version: number): PersistenceResult<PromptVersionRecord | undefined>
+  createVersion(version: PromptVersionRecord): PersistenceResult<void>
+  setActiveVersion(templateId: string, version: number, updatedAt: string): PersistenceResult<boolean>
+  createUsage(record: PromptUsageRecord): PersistenceResult<void>
+  listUsage(templateId?: string): PersistenceResult<PromptUsageRecord[]>
+}
+
 export interface RepositoryCollection {
   settings: SettingsRepository
   providerConnections: ProviderConnectionRepository
@@ -372,6 +400,8 @@ export interface RepositoryCollection {
   sessions: SessionRepository
   debates: DebateRepository
   debatePlans: DebatePlanRepository
+  debateQuality: DebateQualityRepository
+  promptStudio: PromptStudioRepository
   debateHistory: DebateHistoryRepository
   turns: TurnRepository
   events: EventRepository

@@ -23,6 +23,7 @@ import {
   type DebateSetupApplicationOptions
 } from './debate-setup-application'
 import { DebateRunPersistence } from './debate-run-persistence'
+import type { DebateQualityApplication } from './debate-quality-application'
 
 export type DebateRunStatus =
   | 'draft'
@@ -107,7 +108,8 @@ export class DebateRunApplication {
     private readonly persistence: PersistenceContext,
     private readonly setupApplication: DebateSetupApplication,
     private readonly runPersistence: DebateRunPersistence,
-    private readonly researchCoordinator?: ResearchRunCoordinator
+    private readonly researchCoordinator?: ResearchRunCoordinator,
+    private readonly qualityApplication?: DebateQualityApplication
   ) {}
 
   async start(sessionId: string): Promise<DebateRunCommandResult> {
@@ -334,7 +336,11 @@ export class DebateRunApplication {
     this.persistenceErrors.delete(sessionId)
     let drivePromise: Promise<SessionRunResult>
     try {
-      drivePromise = operation()
+      drivePromise = (async () => {
+        const result = await operation()
+        if (result.status === 'completed') await this.qualityApplication?.generateForCompletedSession(sessionId)
+        return result
+      })()
       handle.drivePromise = drivePromise
       await drivePromise
     } catch (cause) {

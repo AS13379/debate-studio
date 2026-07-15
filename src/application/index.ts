@@ -35,3 +35,5 @@ export type { OnboardingApplicationDependencies } from './onboarding-application
 export { ModelRoutingApplication } from './model-routing-application'
 export { CostApplication } from './cost-application'
 export { DebatePlanner } from '../debate-planner'
+export { DebateQualityApplication } from './debate-quality-application'
+export { PromptStudioApplication } from '../prompt-studio'

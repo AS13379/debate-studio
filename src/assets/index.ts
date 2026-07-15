@@ -8,7 +8,7 @@ export type {
   ProcessAssetResult,
   ProcessedAsset
 } from './types'
-export { MockVisionAdapter, VisionAnalysisService } from './vision-analysis'
+export { MockVisionAdapter, OpenAICompatibleVisionAdapter, VisionAnalysisService } from './vision-analysis'
 export type {
   VisionAdapter,
   VisionAnalysisRequest,

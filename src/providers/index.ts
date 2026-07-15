@@ -24,7 +24,7 @@ export type {
   HttpTransportResponse,
   HttpTransportStreamEvent
 } from './http-transport'
-export { MockAdapter } from './mock-adapter'
+export { MockAdapter, MockJudgeAdapter } from './mock-adapter'
 export type { MockAdapterOptions } from './mock-adapter'
 export { MockHttpTransport } from './mock-http-transport'
 export type { MockHttpTransportOptions } from './mock-http-transport'

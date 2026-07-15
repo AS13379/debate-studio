@@ -11,6 +11,7 @@ describe('settings page navigation', () => {
     expect(html).toContain('role="tablist"')
     expect(html).toContain('模型与平台')
     expect(html).toContain('模型策略')
+    expect(html).toContain('Prompt 实验室')
     expect(html).toContain('成本统计')
     expect(html).toContain('诊断与日志')
     expect(html).toContain('首次引导')

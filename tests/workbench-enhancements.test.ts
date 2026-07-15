@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { initializeDebateDesktopApplication, type DebateDesktopApplication } from '../src/application'
-import { AssetProcessor } from '../src/assets'
+import { AssetProcessor, MockVisionAdapter } from '../src/assets'
 import { CostCalculator } from '../src/cost'
 import { AdapterRegistry, MockAdapter, MockHttpTransport } from '../src/providers'
 import { MemoryCredentialStore } from '../src/security'
@@ -116,7 +116,8 @@ describe('local AI workbench enhancements', () => {
   })
 
   it('blocks non-vision models and analyzes only after capability routing succeeds', async () => {
-    const app = createApplication()
+    const visionAdapter = new MockVisionAdapter()
+    const app = createApplication({ visionAdapter })
     const demo = await app.configuration.createMockDemoDebate()
     if (!demo.ok) throw new Error(demo.error.descriptionZh)
     const owner = demo.value.participants.find((item) => item.role === 'affirmative')!
@@ -130,6 +131,7 @@ describe('local AI workbench enhancements', () => {
     const textProfile = profile.value.find((item) => item.id === owner.modelProfileId)!
     const rejected = await app.modelRouting.savePolicy('vision_analysis', textProfile.id)
     expect(rejected).toMatchObject({ ok: false, error: { code: 'VISION_UNSUPPORTED' } })
+    expect(visionAdapter.requests).toHaveLength(0)
 
     const visionProfile = app.configuration.saveModelProfile({
       connectionId: textProfile.connectionId, modelId: 'mock-vision', displayName: 'Mock Vision',
@@ -139,6 +141,14 @@ describe('local AI workbench enhancements', () => {
     expect((await app.modelRouting.savePolicy('vision_analysis', visionProfile.value.id)).ok).toBe(true)
     const analyzed = await app.research.analyzeImageAsset(asset.value.id)
     expect(analyzed).toMatchObject({ ok: true, value: { modelProfileId: visionProfile.value.id } })
+    expect(visionAdapter.requests).toHaveLength(1)
+    expect(visionAdapter.requests[0]).toMatchObject({
+      assetId: asset.value.id,
+      modelId: 'mock-vision',
+      mimeType: 'image/png',
+      sessionId: demo.value.sessionId,
+      participantRole: 'affirmative'
+    })
   })
 
   it('keeps AdapterRegistry and AssetProcessor test doubles local', () => {
@@ -152,14 +162,18 @@ describe('local AI workbench enhancements', () => {
   })
 })
 
-function createApplication(options: { createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined } = {}): DebateDesktopApplication {
+function createApplication(options: {
+  createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined
+  visionAdapter?: MockVisionAdapter
+} = {}): DebateDesktopApplication {
   const directory = temporaryDirectory()
   const result = initializeDebateDesktopApplication({
     appDataDirectory: directory,
     credentialStore: new MemoryCredentialStore(),
     openAITransport: new MockHttpTransport(),
     mockAdapter: new MockAdapter({ chunks: ['Mock'] }),
-    createImageThumbnail: options.createImageThumbnail
+    createImageThumbnail: options.createImageThumbnail,
+    visionAdapter: options.visionAdapter
   })
   if (!result.ok) throw new Error(result.error.message)
   applications.push(result.value)

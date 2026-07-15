@@ -31,6 +31,8 @@ export class HtmlDebateExporter implements DebateExporter {
         <p class="meta">${htmlEscape(turn.participantName)} · ${htmlEscape(formatTimestamp(turn.completedAt ?? turn.createdAt))} · ${htmlEscape(turn.status)}</p>
         <div class="content">${this.text(turn.content)}</div>
       </details>`).join('') || '<p class="muted">没有可导出的正式发言。</p>'
+    const quality = snapshot.evaluation ? this.quality(snapshot) : ''
+    const review = snapshot.review ? this.review(snapshot) : ''
 
     return `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -48,6 +50,7 @@ export class HtmlDebateExporter implements DebateExporter {
   ${snapshot.metadata.includePrivateResearch ? `<section class="private"><p class="privacy">本文件包含私有研究内容，请确认接收者和分享范围。</p><h2>私有研究资料</h2>${this.research(snapshot.privateResearch ?? [])}</section>` : ''}
   <section><h2>公开证据桌</h2>${evidence}</section>
   <section><h2>正式辩论</h2>${turns}</section>
+  ${quality}${review}
 </main></body></html>`
   }
 
@@ -65,6 +68,27 @@ export class HtmlDebateExporter implements DebateExporter {
   }
 
   private text(value: string): string { return htmlEscape(value).replace(/\r?\n/g, '<br>') }
+
+  private quality(snapshot: DebateExportSnapshot): string {
+    const record = snapshot.evaluation!
+    const evaluation = record.evaluation
+    const side = (role: 'affirmative' | 'negative') => `<article class="card"><h3>${htmlEscape(roleLabel(role))}</h3><ul>${Object.entries(evaluation.scores[role]).map(([dimension, score]) => `<li><strong>${htmlEscape(scoreLabel(dimension))}</strong> ${score.score}/10 · ${htmlEscape(score.reason)}</li>`).join('')}</ul><p><strong>亮点：</strong>${htmlEscape(evaluation.strengths[role].join('；'))}</p><p><strong>不足：</strong>${htmlEscape(evaluation.weaknesses[role].join('；'))}</p></article>`
+    return `<section><h2>裁判评分</h2><p class="topic">胜方：${htmlEscape(winnerLabel(evaluation.winner))}</p><p class="meta">评审模型 ${htmlEscape(record.evaluatorModelId)} · Prompt v${record.promptVersion}</p>${side('affirmative')}${side('negative')}<h3>关键转折</h3><ul>${evaluation.keyTurningPoints.map((item) => `<li>${htmlEscape(item)}</li>`).join('')}</ul></section>`
+  }
+
+  private review(snapshot: DebateExportSnapshot): string {
+    const review = snapshot.review!.review
+    const list = (title: string, values: string[]) => `<h3>${htmlEscape(title)}</h3><ul>${values.map((item) => `<li>${htmlEscape(item)}</li>`).join('')}</ul>`
+    return `<section><h2>赛后复盘</h2><div class="content">${this.text(review.summary)}</div>${list('最佳论证', review.bestArguments)}${list('最佳反驳', review.bestRebuttals)}${list('错失机会', review.missedOpportunities)}${list('证据分析', review.evidenceAnalysis)}${list('改进建议', review.improvementSuggestions)}</section>`
+  }
+}
+
+function winnerLabel(winner: string): string { return { affirmative: '正方', negative: '反方', draw: '平局' }[winner] ?? winner }
+function scoreLabel(dimension: string): string {
+  return {
+    logicalCompleteness: '逻辑完整性', evidenceQuality: '证据质量', rebuttalEffectiveness: '反驳有效性',
+    factualAccuracy: '事实准确性', argumentDepth: '论证深度', clarity: '表达清晰度'
+  }[dimension] ?? dimension
 }
 
 const CSS = `

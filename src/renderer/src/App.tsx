@@ -10,8 +10,9 @@ const LiveDebatePage = lazy(() => import('./pages/LiveDebatePage').then((module)
 const NewDebatePage = lazy(() => import('./pages/NewDebatePage').then((module) => ({ default: module.NewDebatePage })))
 const DebateHistoryPage = lazy(() => import('./pages/DebateHistoryPage').then((module) => ({ default: module.DebateHistoryPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
+const DebateQualityPage = lazy(() => import('./pages/DebateQualityPage').then((module) => ({ default: module.DebateQualityPage })))
 
-type Page = 'home' | 'new' | 'settings' | 'live' | 'history'
+type Page = 'home' | 'new' | 'quality' | 'settings' | 'live' | 'history'
 
 export function App() {
   const storedDebateId = localStorage.getItem('debate-studio:last-debate') ?? undefined
@@ -120,6 +121,7 @@ export function App() {
             <span className="sidebar-nav-label">工作台</span>
             <button className={page === 'home' ? 'active' : ''} onClick={goHome}>辩论列表</button>
             <button className={page === 'new' ? 'active' : ''} onClick={() => setPage('new')}>新建辩论</button>
+            <button className={page === 'quality' ? 'active' : ''} onClick={() => setPage('quality')}>质量分析</button>
           </div>
           <div className="sidebar-nav-group sidebar-nav-settings">
             <span className="sidebar-nav-label">管理</span>
@@ -152,6 +154,7 @@ export function App() {
           />
         )}
         {page === 'new' && <NewDebatePage onBack={goHome} onCreated={openDebate} onOpenModels={() => openSettings('providers')} />}
+        {page === 'quality' && <DebateQualityPage onOpenDebate={(id) => openDebate({ id })} />}
         {page === 'settings' && <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab} onOpenOnboarding={() => void reopenOnboarding()} />}
         {page === 'history' && selectedHistoryId && <DebateHistoryPage
           debateId={selectedHistoryId}

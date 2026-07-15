@@ -106,6 +106,8 @@ function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()
   const dispose = registerDebateIpc({
     ipcMain: ipc,
     configuration: application.configuration,
+    promptStudio: application.promptStudio,
+    quality: application.quality,
     history: application.history,
     run: application.run,
     research: application.research,
@@ -188,6 +190,13 @@ describe('typed IPC UI flow', () => {
       debateId: 'debate-1', exportOptions: { includePrivateResearch: false }, apiKey: secret
     })
     expect(invalidExport).toMatchObject({ ok: false, error: { code: 'IPC_VALIDATION_FAILED' } })
+    const promptTemplates = await ipc.invoke<{ ok: true; value: Array<{ template: { id: string } }> }>(IPC_CHANNELS.listPromptTemplates)
+    const invalidPrompt = await ipc.invoke<{ ok: false; error: { code: string } }>(IPC_CHANNELS.createPromptVersion, {
+      templateId: promptTemplates.value[0].template.id,
+      content: '合法 Prompt',
+      apiKey: secret
+    })
+    expect(invalidPrompt).toMatchObject({ ok: false, error: { code: 'IPC_VALIDATION_FAILED' } })
     expect(JSON.stringify(invalid)).not.toContain(secret)
     dispose()
     expect(ipc.handlers.size).toBe(0)
@@ -332,7 +341,7 @@ describe('typed IPC UI flow', () => {
     expect(paused).toMatchObject({ ok: true, state: { status: 'paused' } })
     expect(resumed).toMatchObject({ ok: true, state: { status: 'completed' } })
     expect(adapter.aborted).toBe(1)
-    expect(adapter.calls).toBe(21)
+    expect(adapter.calls).toBe(22)
     dispose()
   })
 

@@ -1,6 +1,7 @@
 import type { DebateParticipantRole } from '../participant-config'
 import type { DebateStage } from '../domain'
 import type { ModelRoutingTask } from '../model-routing'
+import type { PromptRuntime, PromptTask } from '../prompt-studio'
 import {
   ModelAdapterError,
   type ModelAdapter,
@@ -21,7 +22,8 @@ export class RuntimeTurnExecutor implements ModelAdapter {
   constructor(
     private readonly runtimeConfig: DebateRuntimeConfig,
     private readonly promptBuilder?: RuntimePromptBuilder,
-    private readonly researchExecutor?: RuntimeResearchExecutor
+    private readonly researchExecutor?: RuntimeResearchExecutor,
+    private readonly promptRuntime?: PromptRuntime
   ) {}
 
   prepareRequest(request: UnifiedRequest, stream: boolean): RuntimeTurnPreparationResult {
@@ -29,6 +31,7 @@ export class RuntimeTurnExecutor implements ModelAdapter {
     const roleParticipant = this.participantFor(role)
     if (!roleParticipant) return { ok: false, error: this.missingRoleError(role) }
     const route = this.runtimeConfig.routes?.[this.taskFor(request.stage)]
+    const promptTask = this.promptTaskFor(request.stage)
     const participant: RuntimeParticipant = route ? {
       ...roleParticipant,
       modelProfile: route.modelProfile,
@@ -61,11 +64,17 @@ export class RuntimeTurnExecutor implements ModelAdapter {
       },
       { role: 'user', content: request.prompt }
     ]
+    const activePrompt = this.promptRuntime?.resolveActive(promptTask)
+    if (activePrompt) {
+      const system = runtimeRequest.messages.find((message) => message.role === 'system')
+      if (system) system.content = `${system.content}\n\nPrompt Studio 当前版本 v${activePrompt.version.version}：\n${activePrompt.version.content}`
+    }
 
     return {
       ok: true,
       participant,
-      request: runtimeRequest
+      request: runtimeRequest,
+      promptTask
     }
   }
 
@@ -77,6 +86,7 @@ export class RuntimeTurnExecutor implements ModelAdapter {
       throw new ModelAdapterError(this.promptBuildError(cause))
     }
     if (!prepared.ok) throw new ModelAdapterError(prepared.error)
+    this.recordPromptUsage(prepared)
     if (this.researchExecutor?.shouldHandle(prepared.request, prepared.participant)) {
       return this.withRuntimeMetadata(await this.researchExecutor.complete(prepared.request, prepared.participant), prepared)
     }
@@ -97,6 +107,7 @@ export class RuntimeTurnExecutor implements ModelAdapter {
       yield { type: 'error', requestId: request.requestId, error: prepared.error }
       return
     }
+    this.recordPromptUsage(prepared)
     if (this.researchExecutor?.shouldHandle(prepared.request, prepared.participant)) {
       for await (const event of this.researchExecutor.stream(prepared.request, prepared.participant)) {
         yield event.type === 'completed'
@@ -134,6 +145,23 @@ export class RuntimeTurnExecutor implements ModelAdapter {
     if (stage === 'rebuttal' || stage === 'cross_examination') return 'rebuttal'
     if (stage === 'adjudication') return 'judge'
     return 'argument_generation'
+  }
+
+  private promptTaskFor(stage: Exclude<DebateStage, 'draft' | 'completed'>): PromptTask {
+    if (stage === 'affirmative_research' || stage === 'negative_research' || stage === 'affirmative_planning' || stage === 'negative_planning' || stage === 'public_pool' || stage === 'moderating') return 'research'
+    if (stage === 'rebuttal' || stage === 'cross_examination' || stage === 'free_debate') return 'rebuttal'
+    if (stage === 'adjudication') return 'judge'
+    return 'argument'
+  }
+
+  private recordPromptUsage(prepared: Extract<RuntimeTurnPreparationResult, { ok: true }>): void {
+    this.promptRuntime?.recordUsage({
+      task: prepared.promptTask,
+      modelProfileId: prepared.participant.modelProfile.id,
+      modelId: prepared.participant.modelProfile.modelId,
+      sessionId: prepared.request.sessionId,
+      turnId: prepared.request.turnId
+    })
   }
 
   private missingRoleError(role: DebateParticipantRole): RuntimeTurnExecutionError {

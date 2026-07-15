@@ -586,3 +586,74 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .creation-mode-grid, .planner-options, .assisted-positions, .manual-debate-fields, .model-binding-grid, .plan-review-grid { grid-template-columns: 1fr; }
   .planner-generate-row { align-items: stretch; flex-direction: column; }
 }
+
+/* Debate Studio v0.2 quality and prompt experimentation */
+.quality-panel { display: grid; gap: 20px; border-color: #cbc5ef; }
+.quality-score-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.quality-side { padding: 18px; border: 1px solid #e1e2e7; border-left: 4px solid #6251d6; border-radius: 14px; background: #f8f8fb; }
+.quality-side.role-negative { border-left-color: #c56b65; }
+.quality-side h3 { margin: 0 0 14px; }
+.quality-score-row { display: grid; grid-template-columns: minmax(130px, 1fr) auto; gap: 3px 12px; padding: 10px 0; border-top: 1px solid #e1e2e7; }
+.quality-score-row b { color: #6251d6; font-size: 18px; }
+.quality-score-row small { grid-column: 1 / -1; color: #747782; line-height: 1.5; }
+.quality-side details { margin-top: 14px; }
+.quality-list-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding-top: 12px; }
+.quality-list-columns ul, .quality-review-body ul { margin: 7px 0 0; padding-left: 20px; }
+.quality-review { border-top: 1px solid #e1e2e7; padding-top: 16px; }
+.quality-review summary { cursor: pointer; }
+.quality-review-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-top: 18px; }
+.quality-review-body > p { grid-column: 1 / -1; margin: 0; font-size: 16px; line-height: 1.7; }
+.quality-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.quality-kpis article { padding: 18px; border: 1px solid #e1e2e7; border-radius: 14px; background: rgba(255,255,255,.92); display: grid; gap: 8px; }
+.quality-kpis span { color: #747782; font-size: 13px; }
+.quality-kpis b { font-size: 27px; }
+.quality-prompt-performance { display: flex; gap: 12px; flex-wrap: wrap; }
+.quality-prompt-performance > div { min-width: 150px; padding: 13px 15px; border-radius: 12px; background: #f4f4f8; display: grid; gap: 4px; }
+.quality-prompt-performance span { color: #747782; font-size: 13px; }
+.quality-history-list { display: grid; gap: 10px; }
+.quality-history-list button { width: 100%; border: 1px solid #e1e2e7; border-radius: 12px; background: #f8f8fb; color: inherit; padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 18px; text-align: left; cursor: pointer; }
+.quality-history-list button:hover { border-color: #6251d6; }
+.quality-history-list button > div { display: grid; gap: 3px; }
+.quality-history-list button span, .quality-history-list button small { color: #747782; }
+.quality-history-list button b { font-size: 24px; color: #6251d6; }
+.quality-history-list button small { grid-column: 1 / -1; }
+.quality-insight-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 18px; }
+.quality-trend { display: grid; gap: 10px; }
+.quality-trend > div { display: grid; grid-template-columns: 90px minmax(100px, 1fr) 34px; gap: 10px; align-items: center; font-size: 12px; }
+.quality-trend i { height: 8px; border-radius: 999px; background: #ececf1; overflow: hidden; }
+.quality-trend i b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6251d6, #8c7cff); }
+.quality-common-issues { display: grid; gap: 9px; margin: 0; padding-left: 22px; }
+.quality-common-issues li { display: flex; justify-content: space-between; gap: 14px; }
+.quality-common-issues li b { white-space: nowrap; color: #747782; }
+.prompt-studio-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; align-items: start; }
+.prompt-template-list { display: grid; gap: 8px; position: sticky; top: 82px; }
+.prompt-template-list button { padding: 13px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: inherit; text-align: left; display: grid; gap: 3px; cursor: pointer; }
+.prompt-template-list button.active { border-color: #6251d6; background: #efecff; }
+.prompt-template-list span { color: #747782; font-size: 12px; }
+.prompt-editor-panel textarea { resize: vertical; min-height: 180px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.6; }
+.prompt-version-list { display: grid; gap: 9px; }
+.prompt-version-list article { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border-radius: 11px; background: #f8f8fb; }
+.prompt-version-list article > div { display: grid; gap: 3px; }
+.prompt-version-list span { color: #747782; font-size: 12px; }
+.prompt-compare-selects { display: flex; gap: 16px; margin-bottom: 14px; }
+.prompt-compare-selects label { display: flex; gap: 8px; align-items: center; }
+.prompt-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.prompt-compare-grid pre { min-height: 160px; max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 15px; border: 1px solid #e1e2e7; border-radius: 11px; background: #f8f8fb; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+@media (prefers-color-scheme: dark) {
+  .quality-panel { border-color: #4f466e; }
+  .quality-side, .quality-history-list button, .prompt-version-list article, .prompt-compare-grid pre { color: #eff0f3; background: #1b1d22; border-color: #383b44; }
+  .quality-score-row, .quality-review { border-color: #383b44; }
+  .quality-score-row small, .quality-kpis span, .quality-prompt-performance span, .quality-history-list button span, .quality-history-list button small, .prompt-template-list span, .prompt-version-list span { color: #a8abb4; }
+  .quality-kpis article { background: #22242a; border-color: #343740; }
+  .quality-prompt-performance > div { background: #1b1d22; }
+  .quality-trend i { background: #343740; }
+  .prompt-template-list button.active { background: #2a2640; border-color: #786bcf; }
+}
+
+@media (max-width: 900px) {
+  .quality-score-grid, .quality-review-body, .quality-insight-grid, .prompt-compare-grid { grid-template-columns: 1fr; }
+  .quality-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prompt-studio-layout { grid-template-columns: 1fr; }
+  .prompt-template-list { position: static; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

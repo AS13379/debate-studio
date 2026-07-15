@@ -36,8 +36,11 @@ import { DataManagementApplication } from './data-management-application'
 import { OnboardingApplication } from './onboarding-application'
 import { ModelRoutingApplication } from './model-routing-application'
 import { CostApplication } from './cost-application'
-import { VisionAnalysisService } from '../assets'
+import { VisionAnalysisService, type VisionAdapter } from '../assets'
 import { DebatePlanner } from '../debate-planner'
+import { PromptStudioApplication } from '../prompt-studio'
+import { DebateEvaluationService, DebateReviewService } from '../debate-quality'
+import { DebateQualityApplication } from './debate-quality-application'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -49,6 +52,7 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
   performanceMetrics?: PerformanceMetricsCollector
   onDatabaseRestoreCompleted?(): void
   createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined
+  visionAdapter?: VisionAdapter
 }
 
 export class DebateDesktopApplication {
@@ -64,6 +68,8 @@ export class DebateDesktopApplication {
     readonly modelRouting: ModelRoutingApplication,
     readonly costs: CostApplication,
     readonly planner: DebatePlanner,
+    readonly promptStudio: PromptStudioApplication,
+    readonly quality: DebateQualityApplication,
     readonly logger: StructuredLogger,
     readonly errorCenter: ErrorCenter,
     private readonly closeApplication: () => Promise<PersistenceResult<void>>
@@ -122,6 +128,7 @@ export function initializeDebateDesktopApplication(
     delayMs: 120
   })
   const approvalController = new ResearchApprovalController()
+  const promptStudio = new PromptStudioApplication(persistence, { now: options.now })
   const researchExecutor = new AutonomousResearchExecutor({
     persistence,
     credentialStore,
@@ -135,7 +142,8 @@ export function initializeDebateDesktopApplication(
       credentialStore,
       openAITransport,
       mockAdapter,
-      researchExecutor
+      researchExecutor,
+      promptRuntime: promptStudio
     })
     const configuration = new DebateConfigurationApplication({
       persistence,
@@ -151,8 +159,14 @@ export function initializeDebateDesktopApplication(
       now: options.now
     })
     const modelRouting = new ModelRoutingApplication(persistence, setupApplication.modelRouting, configuration)
-    const planner = new DebatePlanner({ routing: setupApplication.modelRouting, now: options.now })
+    const planner = new DebatePlanner({ routing: setupApplication.modelRouting, now: options.now, promptRuntime: promptStudio })
     const costs = new CostApplication(persistence, { now: options.now })
+    const qualityDependencies = { persistence, routing: setupApplication.modelRouting, prompts: promptStudio, now: options.now }
+    const quality = new DebateQualityApplication(
+      persistence,
+      new DebateEvaluationService(qualityDependencies),
+      new DebateReviewService(qualityDependencies)
+    )
     const runPersistence = new DebateRunPersistence({
       repositories: persistence.repositories,
       streamWriteThrottleMs: options.streamWriteThrottleMs
@@ -162,19 +176,21 @@ export function initializeDebateDesktopApplication(
       participants: persistence.repositories.participants,
       now: options.now
     })
-    const run = new DebateRunApplication(persistence, setupApplication, runPersistence, researchCoordinator)
+    const run = new DebateRunApplication(persistence, setupApplication, runPersistence, researchCoordinator, quality)
     const research = new ResearchApplication({
       persistence,
       appDataDirectory: options.appDataDirectory,
       credentialStore,
       approvalController,
       now: options.now,
-      logger
-      , createImageThumbnail: options.createImageThumbnail,
+      logger,
+      createImageThumbnail: options.createImageThumbnail,
       visionAnalysisService: new VisionAnalysisService({
         persistence,
         routing: setupApplication.modelRouting,
-        now: options.now
+        now: options.now,
+        promptRuntime: promptStudio,
+        mockAdapter: options.visionAdapter
       })
     })
     const diagnostics = new DiagnosticsApplication({
@@ -212,7 +228,7 @@ export function initializeDebateDesktopApplication(
       ok: true,
       value: new DebateDesktopApplication(
         configuration, run, research, diagnostics, dataManagement, history, exports,
-        onboarding, modelRouting, costs, planner, logger, errorCenter, closeApplication
+        onboarding, modelRouting, costs, planner, promptStudio, quality, logger, errorCenter, closeApplication
       )
     }
   } catch (cause) {

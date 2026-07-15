@@ -1,5 +1,6 @@
 import type { ResearchOwnerRole, ResearchVisibility } from '../research'
 import type { ExportType } from '../persistence'
+import type { DebateEvaluationRecord, DebateReviewRecord } from '../debate-quality'
 
 export interface ExportSnapshotModel {
   role: string
@@ -93,6 +94,8 @@ export interface DebateExportSnapshot {
   privateResearch?: ExportResearchItem[]
   evidence: ExportEvidenceItem[]
   turns: ExportTurnItem[]
+  evaluation?: DebateEvaluationRecord
+  review?: DebateReviewRecord
 }
 
 export interface DebateExporter {

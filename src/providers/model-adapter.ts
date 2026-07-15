@@ -7,6 +7,7 @@ export interface UnifiedMessage {
   name?: string
   toolCallId?: string
   toolCalls?: UnifiedToolCall[]
+  imageInputs?: Array<{ mimeType: string; base64: string }>
 }
 
 export interface UnifiedToolDefinition {
@@ -31,7 +32,7 @@ export interface UnifiedRuntimeMetadata {
   providerId?: string
   baseUrl?: string
   reasoningEnabled?: boolean
-  purpose?: 'debate-planning'
+  purpose?: 'debate-planning' | 'debate-evaluation' | 'debate-review' | 'vision-analysis'
 }
 
 export interface UnifiedRequest {

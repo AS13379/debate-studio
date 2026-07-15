@@ -7,6 +7,7 @@ import type {
 } from '../../../shared/ipc-contract'
 import { MarkdownContent } from '../components/MarkdownContent'
 import { stageLabel, statusLabel } from './HomePage'
+import { DebateQualityPanel } from '../components/DebateQualityPanel'
 
 export interface DebateHistoryPageProps {
   debateId: string
@@ -188,6 +189,8 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
         <div className="section-heading"><div><strong>研究状态</strong><span>只显示聚合信息</span></div></div>
         <p>{researchStatusLabel(detail.research.status)} · {detail.research.completedSessionCount}/{detail.research.sessionCount} 个研究空间完成</p>
       </section>
+
+      <DebateQualityPanel debateId={debateId} completed={detail.status === 'completed'} />
 
       <DebateExportPanel
         completed={detail.status === 'completed'}

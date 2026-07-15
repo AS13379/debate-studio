@@ -3,6 +3,7 @@ import type { ModelProfile, ProviderConnection } from '../provider-config'
 import type { SessionRecord } from '../persistence'
 import type { ModelAdapter, UnifiedError, UnifiedMessage, UnifiedRequest, UnifiedResponse, UnifiedStreamEvent } from '../providers'
 import type { ModelRoutingTask, ResolvedModelRoute } from '../model-routing'
+import type { PromptTask } from '../prompt-studio'
 
 export interface RuntimeParticipant {
   role: DebateParticipantRole
@@ -49,7 +50,7 @@ export interface RuntimeTurnExecutionError extends UnifiedError {
 }
 
 export type RuntimeTurnPreparationResult =
-  | { ok: true; request: UnifiedRequest; participant: RuntimeParticipant }
+  | { ok: true; request: UnifiedRequest; participant: RuntimeParticipant; promptTask: PromptTask }
   | { ok: false; error: RuntimeTurnExecutionError }
 
 export interface RuntimePromptBuilder {

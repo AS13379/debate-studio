@@ -20,6 +20,7 @@ import { SQLiteResearchRepository } from './sqlite-research-repository'
 import { SQLiteSearchProviderConnectionRepository } from './sqlite-search-provider-connection-repository'
 import { SQLiteDebateHistoryRepository } from './sqlite-debate-history-repository'
 import { SQLiteDebatePlanRepository } from './sqlite-debate-plan-repository'
+import { SQLiteDebateQualityRepository, SQLitePromptStudioRepository } from './sqlite-quality-prompt-repository'
 import { SQLiteExportRepository } from './sqlite-export-repository'
 import {
   SQLiteAssetFileRepository,
@@ -93,6 +94,8 @@ export function initializePersistence(options: PersistenceOptions): PersistenceR
         sessions: new SQLiteSessionRepository(database),
         debates: new SQLiteDebateRepository(database),
         debatePlans: new SQLiteDebatePlanRepository(database),
+        debateQuality: new SQLiteDebateQualityRepository(database),
+        promptStudio: new SQLitePromptStudioRepository(database),
         debateHistory: new SQLiteDebateHistoryRepository(database),
         turns: new SQLiteTurnRepository(database),
         events: new SQLiteEventRepository(database),

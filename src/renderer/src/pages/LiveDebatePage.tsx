@@ -14,6 +14,7 @@ import { ErrorRecoveryPanel } from '../components/ErrorRecoveryPanel'
 import { DebateProgress } from '../components/DebateProgress'
 import { MarkdownContent } from '../components/MarkdownContent'
 import { ResearchPanel } from '../components/ResearchPanel'
+import { DebateQualityPanel } from '../components/DebateQualityPanel'
 import { formatDebateSpeechMarkdown } from '../debate-speech'
 import { applyRunEvent, type LiveRunSnapshot } from '../run-state'
 import { stageLabel, statusLabel } from './HomePage'
@@ -46,6 +47,7 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
   const [loading, setLoading] = useState(true)
   const [showRoleEditor, setShowRoleEditor] = useState(false)
   const [researchVersion, setResearchVersion] = useState(0)
+  const [qualityVersion, setQualityVersion] = useState(0)
   const [olderTurnsCursor, setOlderTurnsCursor] = useState<{ createdAt: string; id: string }>()
   const [loadingOlderTurns, setLoadingOlderTurns] = useState(false)
 
@@ -111,7 +113,10 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
     setCommandFailure(undefined)
     const result = await command()
     if (!result.ok) setCommandFailure(result.error)
-    else setSnapshot((current) => ({ ...current, state: result.state }))
+    else {
+      setSnapshot((current) => ({ ...current, state: result.state }))
+      if (result.state.status === 'completed') setQualityVersion((current) => current + 1)
+    }
     await reload()
   }
 
@@ -154,6 +159,8 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
       </header>
 
       <DebateProgress stage={state?.currentStage ?? detail.currentStage} />
+
+      <DebateQualityPanel debateId={debateId} completed={status === 'completed'} refreshKey={qualityVersion} />
 
       {error && <div className="notice error" role="alert">{error}</div>}
       {commandFailure && (

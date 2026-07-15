@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { ModelRoutingService, ResolvedModelRoute } from '../model-routing'
 import { ModelAdapterError, type UnifiedRequest } from '../providers'
 import { redactSensitiveText } from '../security'
+import type { PromptRuntime } from '../prompt-studio'
 import { DEBATE_PLANNING_PROMPT_VERSION, DebatePlanningPrompt } from './debate-planning-prompt'
 import type {
   DebatePlan,
@@ -16,6 +17,7 @@ export interface DebatePlannerOptions {
   prompt?: DebatePlanningPrompt
   createId?: () => string
   now?: () => Date
+  promptRuntime?: PromptRuntime
 }
 
 export class DebatePlanner {
@@ -35,6 +37,7 @@ export class DebatePlanner {
     const route = this.resolveRoute()
     if (!route.ok) return route
     const prompt = this.prompt.build(input)
+    const experiment = this.options.promptRuntime?.resolveActive('debate_planning')
     const requestId = this.createId()
     const controller = new AbortController()
     const request: UnifiedRequest = {
@@ -48,7 +51,7 @@ export class DebatePlanner {
       signal: controller.signal,
       modelId: route.route.modelProfile.modelId,
       messages: [
-        { role: 'system', content: prompt.system },
+        { role: 'system', content: experiment ? `${prompt.system}\n\nPrompt Studio 当前版本 v${experiment.version.version}：\n${experiment.version.content}` : prompt.system },
         { role: 'user', content: prompt.user }
       ],
       stream: false,
@@ -62,6 +65,10 @@ export class DebatePlanner {
         purpose: 'debate-planning'
       }
     }
+    this.options.promptRuntime?.recordUsage({
+      task: 'debate_planning', modelProfileId: route.route.modelProfile.id,
+      modelId: route.route.modelProfile.modelId, turnId: requestId
+    })
 
     try {
       const response = await route.route.adapter.complete(request)

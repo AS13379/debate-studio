@@ -161,6 +161,17 @@ export const onboardingDefaultsSchema = z.object({
 export const modelRoutingTaskSchema = z.enum([
   'debate_planning', 'research', 'search_summary', 'argument_generation', 'rebuttal', 'judge', 'vision_analysis'
 ])
+
+export const createPromptVersionSchema = z.object({
+  templateId: idSchema,
+  content: z.string().trim().min(1).max(40_000),
+  changeNote: z.string().trim().max(500).optional()
+}).strict()
+
+export const rollbackPromptSchema = z.object({
+  templateId: idSchema,
+  version: z.number().int().positive().max(1_000_000)
+}).strict()
 export const saveModelRoutingPolicySchema = z.object({
   task: modelRoutingTaskSchema,
   modelProfileId: idSchema

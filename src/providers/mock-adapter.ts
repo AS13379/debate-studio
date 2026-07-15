@@ -16,6 +16,8 @@ export interface MockAdapterOptions {
     atChunk?: number
   }
   plannerResponse?: string
+  evaluationResponse?: string
+  reviewResponse?: string
 }
 
 export class MockAdapter implements ModelAdapter {
@@ -23,12 +25,16 @@ export class MockAdapter implements ModelAdapter {
   private readonly delayMs: number
   private readonly simulatedError?: MockAdapterOptions['error']
   private readonly plannerResponse?: string
+  private readonly evaluationResponse?: string
+  private readonly reviewResponse?: string
 
   constructor(options: MockAdapterOptions = {}) {
     this.chunks = options.chunks ?? [options.responseText ?? '[Mock] 模拟模型发言']
     this.delayMs = options.delayMs ?? 0
     this.simulatedError = options.error
     this.plannerResponse = options.plannerResponse
+    this.evaluationResponse = options.evaluationResponse
+    this.reviewResponse = options.reviewResponse
   }
 
   async complete(request: UnifiedRequest): Promise<UnifiedResponse> {
@@ -55,7 +61,11 @@ export class MockAdapter implements ModelAdapter {
     let content = ''
     const chunks = request.runtimeMetadata.purpose === 'debate-planning'
       ? [this.plannerResponse ?? mockPlanResponse(request.topic)]
-      : this.chunks
+      : request.runtimeMetadata.purpose === 'debate-evaluation'
+        ? [this.evaluationResponse ?? mockEvaluationResponse()]
+        : request.runtimeMetadata.purpose === 'debate-review'
+          ? [this.reviewResponse ?? mockReviewResponse()]
+          : this.chunks
     for (const [index, chunk] of chunks.entries()) {
       if (request.signal.aborted || (await this.waitForDelay(request.signal))) {
         yield this.cancelledEvent(request)
@@ -111,6 +121,12 @@ export class MockAdapter implements ModelAdapter {
   }
 }
 
+export class MockJudgeAdapter extends MockAdapter {
+  constructor(options: Pick<MockAdapterOptions, 'evaluationResponse' | 'reviewResponse' | 'delayMs' | 'error'> = {}) {
+    super(options)
+  }
+}
+
 function mockPlanResponse(topic: string): string {
   return JSON.stringify({
     background: `围绕“${topic}”界定讨论范围、适用条件与评价标准。`,
@@ -119,5 +135,35 @@ function mockPlanResponse(topic: string): string {
     keyQuestions: ['核心概念应如何界定？', '主要收益与代价分别由谁承担？', '在什么条件下结论可能发生变化？'],
     researchDirections: ['查找权威定义与适用边界', '比较支持和反对立场的实证材料', '识别典型案例与反例'],
     evidenceSuggestions: ['官方统计或政策文件', '同行评审研究', '可核验的现实案例']
+  })
+}
+
+function mockEvaluationResponse(): string {
+  const side = (offset: number) => ({
+    logicalCompleteness: { score: 7.5 + offset, reason: '论点与结论之间的关联基本完整。' },
+    evidenceQuality: { score: 7 + offset, reason: '公开证据能支持主要主张，但仍有补强空间。' },
+    rebuttalEffectiveness: { score: 7.2 + offset, reason: '能回应对方核心论点。' },
+    factualAccuracy: { score: 8 + offset, reason: '未发现与已公开证据直接冲突的表述。' },
+    argumentDepth: { score: 7.4 + offset, reason: '论证考虑了条件和影响。' },
+    clarity: { score: 8.1 + offset, reason: '表达简洁，核心主张可识别。' }
+  })
+  return JSON.stringify({
+    winner: 'affirmative', scores: { affirmative: side(0.4), negative: side(0) },
+    strengths: { affirmative: ['主线论证连贯'], negative: ['能指出实施风险'] },
+    weaknesses: { affirmative: ['部分证据的适用边界可更明确'], negative: ['对核心证据回应不足'] },
+    keyTurningPoints: ['正方在反驳阶段将证据与主张重新连接。'],
+    evidenceUsage: { affirmative: '有效使用公开证据支持主线。', negative: '使用了证据，但未完全回应对方核心材料。' },
+    reasoningQuality: { affirmative: '前提、证据与结论的关联较清晰。', negative: '风险分析有效，但替代方案论证偏短。' }
+  })
+}
+
+function mockReviewResponse(): string {
+  return JSON.stringify({
+    summary: '正方依靠连贯的证据主线小幅占优，反方对实施风险的提醒仍有价值。',
+    bestArguments: ['正方将核心主张与公开证据连接。'],
+    bestRebuttals: ['反驳阶段直接回应了成本与可行性质疑。'],
+    missedOpportunities: ['反方没有继续追问核心证据的适用边界。'],
+    evidenceAnalysis: ['已发布证据发挥了作用，但仍需区分因果关系与相关性。'],
+    improvementSuggestions: ['下次应在总结阶段明确回收对方尚未回应的证据。']
   })
 }

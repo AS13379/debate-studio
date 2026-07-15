@@ -31,7 +31,7 @@ describe('Release Candidate database lifecycle', () => {
     expect(initialized.ok).toBe(true)
     if (!initialized.ok) return
 
-    expect(initialized.value.migrations.currentVersion()).toEqual({ ok: true, value: 14 })
+    expect(initialized.value.migrations.currentVersion()).toEqual({ ok: true, value: 15 })
     expect(initialized.value.repositories.settings.set('release-probe', { ready: true })).toMatchObject({ ok: true })
     expect(initialized.value.repositories.settings.get('release-probe')).toEqual({ ok: true, value: { ready: true } })
     expect(initialized.value.backups.listBackups()).toEqual({ ok: true, value: [] })
@@ -41,14 +41,14 @@ describe('Release Candidate database lifecycle', () => {
   })
 
   for (const legacyVersion of [1, 5, 10, 12]) {
-    it(`upgrades schema v${legacyVersion} to v14 without losing supported records`, () => {
+    it(`upgrades schema v${legacyVersion} to v15 without losing supported records`, () => {
       const directory = temporaryDirectory()
       seedLegacyDatabase(directory, legacyVersion)
 
       const upgraded = initializePersistence({ appDataDirectory: directory })
       expect(upgraded.ok).toBe(true)
       if (!upgraded.ok) return
-      expect(upgraded.value.migrations.currentVersion()).toEqual({ ok: true, value: 14 })
+      expect(upgraded.value.migrations.currentVersion()).toEqual({ ok: true, value: 15 })
       expect(upgraded.value.database.get<{ topic: string }>('SELECT topic FROM debates WHERE id = ?', 'legacy-debate')).toEqual({
         ok: true, value: { topic: `v${legacyVersion} 保留辩题` }
       })
@@ -78,7 +78,7 @@ describe('Release Candidate database lifecycle', () => {
     const directory = temporaryDirectory()
     seedLegacyDatabase(directory, 5)
     const failingMigration: Migration = {
-      version: 15,
+      version: 16,
       name: 'intentional_release_probe_failure',
       sql: 'CREATE TABLE should_rollback (id TEXT); INVALID SQL;'
     }

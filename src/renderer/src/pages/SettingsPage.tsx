@@ -4,8 +4,9 @@ const ProviderManagementPage = lazy(() => import('./ProviderManagementPage').the
 const ModelRoutingPage = lazy(() => import('./ModelRoutingPage').then((module) => ({ default: module.ModelRoutingPage })))
 const CostStatisticsPage = lazy(() => import('./CostStatisticsPage').then((module) => ({ default: module.CostStatisticsPage })))
 const DiagnosticsPage = lazy(() => import('./DiagnosticsPage').then((module) => ({ default: module.DiagnosticsPage })))
+const PromptStudioPage = lazy(() => import('./PromptStudioPage').then((module) => ({ default: module.PromptStudioPage })))
 
-export type SettingsTab = 'providers' | 'routing' | 'costs' | 'diagnostics' | 'onboarding'
+export type SettingsTab = 'providers' | 'routing' | 'prompts' | 'costs' | 'diagnostics' | 'onboarding'
 
 interface SettingsPageProps {
   activeTab: SettingsTab
@@ -16,6 +17,7 @@ interface SettingsPageProps {
 const tabs: Array<{ id: SettingsTab; label: string }> = [
   { id: 'providers', label: '模型与平台' },
   { id: 'routing', label: '模型策略' },
+  { id: 'prompts', label: 'Prompt 实验室' },
   { id: 'costs', label: '成本统计' },
   { id: 'diagnostics', label: '诊断与日志' },
   { id: 'onboarding', label: '首次引导' }
@@ -42,6 +44,7 @@ export function SettingsPage({ activeTab, onTabChange, onOpenOnboarding }: Setti
         <Suspense fallback={<section className="panel muted page-loading" role="status">正在加载设置…</section>}>
           {activeTab === 'providers' && <ProviderManagementPage />}
           {activeTab === 'routing' && <ModelRoutingPage />}
+          {activeTab === 'prompts' && <PromptStudioPage />}
           {activeTab === 'costs' && <CostStatisticsPage />}
           {activeTab === 'diagnostics' && <DiagnosticsPage />}
           {activeTab === 'onboarding' && (

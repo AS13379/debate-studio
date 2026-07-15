@@ -31,6 +31,7 @@ import {
 } from '../runtime'
 import { DebatePromptBuilder, ResearchContextReader } from '../research'
 import { ModelRoutingService } from '../model-routing'
+import type { PromptRuntime } from '../prompt-studio'
 
 export interface DebateSetupApplicationOptions extends DatabaseOptions {
   getCapabilityRequirements?: (sessionId: string) => DebateCapabilityRequirements | undefined
@@ -39,6 +40,7 @@ export interface DebateSetupApplicationOptions extends DatabaseOptions {
   mockAdapter?: ModelAdapter
   fetchTimeoutMs?: number
   researchExecutor?: RuntimeResearchExecutor
+  promptRuntime?: PromptRuntime
   now?: () => Date
 }
 
@@ -83,7 +85,7 @@ export class DebateSetupApplication {
       turnRunnerFactory: new TurnRunnerFactory(new DebatePromptBuilder(new ResearchContextReader(
         persistence.repositories.debates,
         persistence.repositories.research
-      )), options.researchExecutor),
+      )), options.researchExecutor, options.promptRuntime),
       adapterRegistry
     })
   }
@@ -170,7 +172,8 @@ export function composeDebateSetupApplication(
     openAITransport,
     mockAdapter: options.mockAdapter,
     fetchTimeoutMs: options.fetchTimeoutMs,
-    researchExecutor: options.researchExecutor
+    researchExecutor: options.researchExecutor,
+    promptRuntime: options.promptRuntime
   }, adapterRegistry, new ConnectionTestService({
     transport: openAITransport,
     credentialStore

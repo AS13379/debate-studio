@@ -88,6 +88,8 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     onboarding: desktopApplication.onboarding,
     modelRouting: desktopApplication.modelRouting,
     costs: desktopApplication.costs,
+    promptStudio: desktopApplication.promptStudio,
+    quality: desktopApplication.quality,
     history: desktopApplication.history,
     run: desktopApplication.run,
     research: desktopApplication.research,

@@ -86,6 +86,34 @@ export class MarkdownDebateExporter implements DebateExporter {
       lines.push(markdownQuote(turn.content), '')
     }
 
+    if (snapshot.evaluation) {
+      const evaluation = snapshot.evaluation.evaluation
+      lines.push('## 裁判评分', '')
+      lines.push(`- 胜方：${winnerLabel(evaluation.winner)}`)
+      lines.push(`- 评审模型：${safeInline(snapshot.evaluation.evaluatorModelId)}`)
+      lines.push(`- Prompt 版本：v${snapshot.evaluation.promptVersion}`, '')
+      for (const side of ['affirmative', 'negative'] as const) {
+        lines.push(`### ${roleLabel(side)}评分`, '')
+        for (const [dimension, score] of Object.entries(evaluation.scores[side])) {
+          lines.push(`- ${scoreLabel(dimension)}：${score.score}/10 — ${safeInline(score.reason)}`)
+        }
+        lines.push('')
+        this.list(lines, '亮点', evaluation.strengths[side])
+        this.list(lines, '不足', evaluation.weaknesses[side])
+      }
+      this.list(lines, '关键转折', evaluation.keyTurningPoints)
+    }
+
+    if (snapshot.review) {
+      const review = snapshot.review.review
+      lines.push('## 赛后复盘', '', markdownQuote(review.summary), '')
+      this.list(lines, '最佳论证', review.bestArguments)
+      this.list(lines, '最佳反驳', review.bestRebuttals)
+      this.list(lines, '错失机会', review.missedOpportunities)
+      this.list(lines, '证据分析', review.evidenceAnalysis)
+      this.list(lines, '改进建议', review.improvementSuggestions)
+    }
+
     return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`
   }
 
@@ -118,4 +146,12 @@ export class MarkdownDebateExporter implements DebateExporter {
       if (item.content) lines.push(markdownQuote(item.content), '')
     }
   }
+}
+
+function winnerLabel(winner: string): string { return { affirmative: '正方', negative: '反方', draw: '平局' }[winner] ?? winner }
+function scoreLabel(dimension: string): string {
+  return {
+    logicalCompleteness: '逻辑完整性', evidenceQuality: '证据质量', rebuttalEffectiveness: '反驳有效性',
+    factualAccuracy: '事实准确性', argumentDepth: '论证深度', clarity: '表达清晰度'
+  }[dimension] ?? dimension
 }

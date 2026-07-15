@@ -69,6 +69,10 @@ export class ExportSnapshotBuilder {
     if (!evidence.ok) return this.persistenceFailure(evidence.error)
     const evidenceHistory = repositories.research.listEvidenceHistory(history.value.sessionId)
     if (!evidenceHistory.ok) return this.persistenceFailure(evidenceHistory.error)
+    const debateEvaluation = repositories.debateQuality.findEvaluationByDebate(debateId)
+    if (!debateEvaluation.ok) return this.persistenceFailure(debateEvaluation.error)
+    const debateReview = repositories.debateQuality.findReviewByDebate(debateId)
+    if (!debateReview.ok) return this.persistenceFailure(debateReview.error)
 
     const participantRoles = new Map(participants.value.map((item) => [item.id, item.role]))
     const participantNames = new Map(participants.value.map((item) => [item.id, item.displayName]))
@@ -145,7 +149,9 @@ export class ExportSnapshotBuilder {
           content: turn.content ?? '',
           createdAt: turn.createdAt,
           completedAt: turn.completedAt
-        }))
+        })),
+      evaluation: debateEvaluation.value,
+      review: debateReview.value
     }
 
     return { ok: true, value: redactForExport(snapshot) }

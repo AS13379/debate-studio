@@ -80,6 +80,17 @@ import type {
   SaveProviderPricingInputDto,
   WorkbenchResultDto
 } from './workbench-dtos'
+import type {
+  DebateQualityOverviewItemDto,
+  DebateQualityResultDto,
+  DebateQualitySnapshotDto
+} from './quality-dtos'
+import type {
+  CreatePromptVersionInputDto,
+  PromptStudioResultDto,
+  PromptTemplateDetailDto,
+  RollbackPromptInputDto
+} from './prompt-studio-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
@@ -96,6 +107,12 @@ export const IPC_CHANNELS = {
   listProviderPricing: 'workbench:list-provider-pricing',
   saveProviderPricing: 'workbench:save-provider-pricing',
   getCostSummary: 'workbench:get-cost-summary',
+  listPromptTemplates: 'prompt-studio:list-templates',
+  createPromptVersion: 'prompt-studio:create-version',
+  rollbackPromptVersion: 'prompt-studio:rollback-version',
+  getDebateQuality: 'quality:get-debate',
+  listDebateQuality: 'quality:list',
+  regenerateDebateQuality: 'quality:regenerate',
   listProviderConnections: 'configuration:list-provider-connections',
   listProviderPresets: 'configuration:list-provider-presets',
   saveProviderConnection: 'configuration:save-provider-connection',
@@ -222,6 +239,12 @@ export interface DebateStudioApi {
   listProviderPricing(): Promise<WorkbenchResultDto<ProviderPricingDto[]>>
   saveProviderPricing(input: SaveProviderPricingInputDto): Promise<WorkbenchResultDto<ProviderPricingDto>>
   getCostSummary(): Promise<WorkbenchResultDto<CostSummaryDto>>
+  listPromptTemplates(): Promise<PromptStudioResultDto<PromptTemplateDetailDto[]>>
+  createPromptVersion(input: CreatePromptVersionInputDto): Promise<PromptStudioResultDto<PromptTemplateDetailDto>>
+  rollbackPromptVersion(input: RollbackPromptInputDto): Promise<PromptStudioResultDto<PromptTemplateDetailDto>>
+  getDebateQuality(input: { id: string }): Promise<DebateQualityResultDto<DebateQualitySnapshotDto>>
+  listDebateQuality(): Promise<DebateQualityResultDto<DebateQualityOverviewItemDto[]>>
+  regenerateDebateQuality(input: { id: string }): Promise<DebateQualityResultDto<DebateQualitySnapshotDto>>
   listProviderConnections(): Promise<ConfigurationResultDto<ProviderConnectionDto[]>>
   listProviderPresets(): Promise<ConfigurationResultDto<ProviderPresetDto[]>>
   saveProviderConnection(input: SaveProviderConnectionInput): Promise<ConfigurationResultDto<ProviderConnectionDto>>
@@ -312,6 +335,33 @@ export type {
   SaveProviderPricingInputDto,
   WorkbenchResultDto
 } from './workbench-dtos'
+
+export type {
+  DebateDimensionScoreDto,
+  DebateEvaluationDto,
+  DebateEvaluationRecordDto,
+  DebateQualityErrorDto,
+  DebateQualityOverviewItemDto,
+  DebateQualityResultDto,
+  DebateQualitySnapshotDto,
+  DebateReviewDto,
+  DebateReviewRecordDto,
+  DebateScoreDimensionDto,
+  DebateSideScoresDto,
+  DebateWinnerDto
+} from './quality-dtos'
+
+export type {
+  CreatePromptVersionInputDto,
+  PromptStudioErrorDto,
+  PromptStudioResultDto,
+  PromptTaskDto,
+  PromptTemplateDetailDto,
+  PromptTemplateDto,
+  PromptUsageDto,
+  PromptVersionDto,
+  RollbackPromptInputDto
+} from './prompt-studio-dtos'
 
 export type {
   ConfigurationResultDto,

@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod'
 
 import type {
-  CostApplication, DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ModelRoutingApplication, OnboardingApplication, ResearchApplication
+  CostApplication, DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateQualityApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ModelRoutingApplication, OnboardingApplication, PromptStudioApplication, ResearchApplication
 } from '../application'
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
@@ -52,6 +52,8 @@ import {
   , onboardingDefaultsSchema
   , saveModelRoutingPolicySchema
   , saveProviderPricingSchema
+  , createPromptVersionSchema
+  , rollbackPromptSchema
 } from '../shared/ipc-schemas'
 
 export interface IpcMainLike {
@@ -66,6 +68,8 @@ export interface DebateIpcDependencies {
   onboarding?: OnboardingApplication
   modelRouting?: ModelRoutingApplication
   costs?: CostApplication
+  promptStudio?: PromptStudioApplication
+  quality?: DebateQualityApplication
   history: DebateHistoryApplication
   run: DebateRunApplication
   research?: ResearchApplication
@@ -98,6 +102,12 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.listProviderPricing, () => dependencies.costs?.listPricing() ?? workbenchUnavailable())
   ipcMain.handle(IPC_CHANNELS.saveProviderPricing, validated(saveProviderPricingSchema, (input) => dependencies.costs?.savePricing(input) ?? workbenchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.getCostSummary, () => dependencies.costs?.getSummary() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.listPromptTemplates, () => dependencies.promptStudio?.listTemplates() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.createPromptVersion, validated(createPromptVersionSchema, (input) => dependencies.promptStudio?.createVersion(input.templateId, input.content, input.changeNote) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.rollbackPromptVersion, validated(rollbackPromptSchema, (input) => dependencies.promptStudio?.rollback(input.templateId, input.version) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.getDebateQuality, validated(idInputSchema, (input) => dependencies.quality?.getByDebate(input.id) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.listDebateQuality, () => dependencies.quality?.listOverview() ?? workbenchUnavailable())
+  ipcMain.handle(IPC_CHANNELS.regenerateDebateQuality, validated(idInputSchema, (input) => dependencies.quality?.regenerate(input.id) ?? workbenchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.listProviderConnections, () => configuration.listProviderConnections())
   ipcMain.handle(IPC_CHANNELS.listProviderPresets, () => configuration.listProviderPresets())
   ipcMain.handle(IPC_CHANNELS.saveProviderConnection, validated(saveProviderConnectionSchema, (input) => configuration.saveProviderConnection(input)))

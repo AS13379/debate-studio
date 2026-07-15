@@ -700,6 +700,89 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_debate_plans_created ON debate_plans(created_at DESC);
       CREATE INDEX idx_debate_plans_model ON debate_plans(model_profile_id, created_at DESC);
     `
+  },
+  {
+    version: 15,
+    name: 'debate_quality_prompt_studio_and_reviews',
+    sql: `
+      CREATE TABLE debate_evaluations (
+        id TEXT PRIMARY KEY,
+        debate_id TEXT NOT NULL UNIQUE REFERENCES debates(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+        evaluation_json TEXT NOT NULL,
+        evaluator_model_profile_id TEXT REFERENCES model_profiles(id) ON DELETE SET NULL,
+        evaluator_model_id TEXT NOT NULL,
+        prompt_template_id TEXT NOT NULL,
+        prompt_version INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE debate_reviews (
+        id TEXT PRIMARY KEY,
+        debate_id TEXT NOT NULL UNIQUE REFERENCES debates(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+        review_json TEXT NOT NULL,
+        reviewer_model_profile_id TEXT REFERENCES model_profiles(id) ON DELETE SET NULL,
+        reviewer_model_id TEXT NOT NULL,
+        prompt_template_id TEXT NOT NULL,
+        prompt_version INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE prompt_templates (
+        id TEXT PRIMARY KEY,
+        task TEXT NOT NULL UNIQUE CHECK (task IN ('debate_planning', 'research', 'argument', 'rebuttal', 'judge', 'review')),
+        display_name TEXT NOT NULL,
+        active_version INTEGER NOT NULL CHECK (active_version > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE prompt_versions (
+        id TEXT PRIMARY KEY,
+        template_id TEXT NOT NULL REFERENCES prompt_templates(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK (version > 0),
+        content TEXT NOT NULL,
+        change_note TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (template_id, version)
+      );
+
+      CREATE TABLE prompt_usage_records (
+        id TEXT PRIMARY KEY,
+        prompt_template_id TEXT NOT NULL REFERENCES prompt_templates(id) ON DELETE RESTRICT,
+        prompt_version_id TEXT NOT NULL REFERENCES prompt_versions(id) ON DELETE RESTRICT,
+        task TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        model_profile_id TEXT REFERENCES model_profiles(id) ON DELETE SET NULL,
+        model_id TEXT NOT NULL,
+        session_id TEXT,
+        turn_id TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX idx_debate_evaluations_created ON debate_evaluations(created_at DESC);
+      CREATE INDEX idx_debate_reviews_created ON debate_reviews(created_at DESC);
+      CREATE INDEX idx_prompt_versions_template ON prompt_versions(template_id, version DESC);
+      CREATE INDEX idx_prompt_usage_template ON prompt_usage_records(prompt_template_id, created_at DESC);
+      CREATE INDEX idx_prompt_usage_session ON prompt_usage_records(session_id, created_at DESC);
+
+      INSERT INTO prompt_templates (id, task, display_name, active_version, created_at, updated_at) VALUES
+        ('prompt-debate-planning', 'debate_planning', '辩题规划', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('prompt-research', 'research', '研究与资料评价', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('prompt-argument', 'argument', '立论与总结', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('prompt-rebuttal', 'rebuttal', '质询与反驳', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('prompt-judge', 'judge', '结构化裁判', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+        ('prompt-review', 'review', '赛后复盘', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+      INSERT INTO prompt_versions (id, template_id, version, content, change_note, created_at) VALUES
+        ('prompt-debate-planning-v1', 'prompt-debate-planning', 1, '生成平衡、可编辑、可被证据检验的辩论方案；只返回约定的最终结构，不输出隐藏思维链。', '内置默认版本', CURRENT_TIMESTAMP),
+        ('prompt-research-v1', 'prompt-research', 1, '优先使用可核验资料，明确标注局限与未解决问题；不输出隐藏思维链。', '内置默认版本', CURRENT_TIMESTAMP),
+        ('prompt-argument-v1', 'prompt-argument', 1, '论点应明确、论据与结论应建立可检查联系，避免套话和任务复述。', '内置默认版本', CURRENT_TIMESTAMP),
+        ('prompt-rebuttal-v1', 'prompt-rebuttal', 1, '直接回应对方已公开的核心主张与证据，不构造虚假靶子。', '内置默认版本', CURRENT_TIMESTAMP),
+        ('prompt-judge-v1', 'prompt-judge', 1, '按逻辑、证据、反驳、事实、深度和表达六个维度进行 0-10 分的公开评价，只输出最终评分、简短理由和可公开分析。', '内置默认版本', CURRENT_TIMESTAMP),
+        ('prompt-review-v1', 'prompt-review', 1, '基于公开发言、证据和结构化评分生成简洁赛后复盘，指出具体转折与改进机会，不输出隐藏思维链。', '内置默认版本', CURRENT_TIMESTAMP);
+    `
   }
 ]
 
