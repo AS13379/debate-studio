@@ -15,11 +15,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .app-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
 .sidebar {
   position: sticky; top: 0; height: 100vh; padding: 28px 18px 20px;
-  display: grid; grid-template-columns: 44px 1fr; grid-template-rows: auto 1fr auto;
+  display: grid; grid-template-columns: 56px 1fr; grid-template-rows: auto 1fr auto;
   gap: 12px; color: #f7f7f8; background: linear-gradient(180deg, #25272c, #18191d);
   border-right: 1px solid rgba(255,255,255,.08);
 }
-.brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: #6c5ce7; font-weight: 750; }
+.brand-mark { display: grid; place-items: center; width: 56px; height: 56px; }
+.brand-mark img { display: block; width: 56px; height: 56px; filter: drop-shadow(0 8px 16px rgba(59,47,143,.28)); }
 .brand-copy { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
 .brand-copy span, .app-version { color: #aeb1bb; font-size: 12px; }
 .sidebar nav { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; margin-top: 26px; }
@@ -321,18 +322,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .history-list summary { cursor: pointer; font-weight: 700; }
 .history-list p { margin: 7px 0; }
 .diagnostics-message { padding: 12px 15px; color: #4f42b4; background: #f0edff; border-color: #d7d0ff; font-size: 13px; overflow-wrap: anywhere; }
+.diagnostics-page { gap: 28px; }
 .diagnostics-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .diagnostics-summary .panel { display: flex; flex-direction: column; gap: 4px; padding: 17px 19px; }
 .diagnostics-summary strong { color: #5143ba; font-size: 27px; }
 .diagnostics-summary span { color: #777b85; font-size: 12px; }
-.performance-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.performance-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .performance-fact { display: flex; flex-direction: column; gap: 6px; padding: 13px 15px; border-radius: 10px; background: #f6f5fb; }
 .performance-fact span { color: #777b85; font-size: 12px; }
 .performance-fact strong { font-size: 14px; }
 .turn-card, .debate-card, .evidence-card, .asset-row { content-visibility: auto; contain-intrinsic-size: auto 180px; }
-.diagnostics-grid { display: grid; grid-template-columns: minmax(340px, 1.15fr) minmax(300px, .85fr); gap: 16px; align-items: start; }
-.diagnostics-section { padding: 20px; }
+.diagnostics-grid { display: grid; grid-template-columns: minmax(340px, 1.15fr) minmax(300px, .85fr); gap: 20px; align-items: start; }
+.diagnostics-section { padding: 24px; }
 .diagnostics-section h2 { margin: 0; font-size: 18px; }
+.performance-panel, .log-section { display: flex; flex-direction: column; gap: 18px; }
 .data-management-panel { display: grid; gap: 18px; }
 .data-management-facts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(120px, .45fr) minmax(180px, .75fr); gap: 12px; }
 .data-management-facts > div { display: flex; flex-direction: column; gap: 7px; padding: 14px; border-radius: 10px; background: #f7f7f9; }
@@ -362,6 +365,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .error-detail-body summary { cursor: pointer; font-weight: 700; }
 .error-detail-body pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
 .log-list { max-height: 420px; margin-top: 15px; overflow: auto; border: 1px solid #e4e5e9; border-radius: 9px; }
+.log-section .log-list { margin-top: 0; }
 .log-row { display: grid; grid-template-columns: 48px 82px 115px minmax(0, 1fr); gap: 9px; align-items: center; padding: 9px 11px; border-bottom: 1px solid #ececf0; font-size: 12px; }
 .log-row:last-child { border-bottom: 0; }
 .log-row time, .log-row strong { color: #727680; }
@@ -507,7 +511,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 @media (max-width: 820px) {
   .app-shell { display: block; }
-  .sidebar { position: sticky; z-index: 10; height: auto; padding: 12px 16px; grid-template-columns: 42px 1fr; grid-template-rows: auto auto; }
+  .sidebar { position: sticky; z-index: 10; height: auto; padding: 12px 16px; grid-template-columns: 56px 1fr; grid-template-rows: auto auto; }
   .sidebar nav { margin-top: 5px; flex-direction: row; overflow-x: auto; }
   .sidebar nav button { flex: 0 0 auto; white-space: nowrap; }
   .app-version { display: none; }

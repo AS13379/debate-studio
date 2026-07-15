@@ -95,7 +95,7 @@ export function DiagnosticsPage() {
   }
 
   return (
-    <section className="page diagnostics-page">
+    <section className="page-stack diagnostics-page">
       <header className="page-header">
         <div><span className="eyebrow">设置</span><h1>诊断与日志</h1><p className="page-description">查看最近问题，导出不含辩论正文和凭据的脱敏诊断信息。</p></div>
         <div className="compact-actions"><button className="button secondary" onClick={() => void reload()}>刷新</button><button className="button primary" onClick={() => void exportReport()}>导出诊断报告</button></div>

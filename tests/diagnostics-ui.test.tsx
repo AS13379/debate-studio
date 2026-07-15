@@ -7,6 +7,7 @@ import { DiagnosticsPage } from '../src/renderer/src/pages/DiagnosticsPage'
 describe('diagnostics UI', () => {
   it('renders a useful empty state and diagnostic controls', () => {
     const html = renderToStaticMarkup(<DiagnosticsPage />)
+    expect(html).toContain('class="page-stack diagnostics-page"')
     expect(html).toContain('诊断与日志')
     expect(html).toContain('导出诊断报告')
     expect(html).toContain('清理错误')

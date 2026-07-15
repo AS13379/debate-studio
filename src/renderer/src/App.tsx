@@ -3,6 +3,7 @@ import { lazy, Profiler, Suspense, useEffect, useRef, useState } from 'react'
 import type { DebateDetailDto, DebateHistoryListQueryDto, DebateHistorySummaryDto, OnboardingStateDto } from '../../shared/ipc-contract'
 import { HomePage } from './pages/HomePage'
 import { OnboardingWizard } from './components/OnboardingWizard'
+import brandIconUrl from '../../../build/icon.svg?url'
 
 const LiveDebatePage = lazy(() => import('./pages/LiveDebatePage').then((module) => ({ default: module.LiveDebatePage })))
 const NewDebatePage = lazy(() => import('./pages/NewDebatePage').then((module) => ({ default: module.NewDebatePage })))
@@ -108,7 +109,7 @@ export function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand-mark">DS</div>
+        <div className="brand-mark" aria-hidden="true"><img src={brandIconUrl} alt="" /></div>
         <div className="brand-copy"><strong>Debate Studio</strong><span>本地 AI 辩论</span></div>
         <nav aria-label="主导航">
           <button className={page === 'home' ? 'active' : ''} onClick={goHome}>辩论列表</button>
