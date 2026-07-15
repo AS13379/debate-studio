@@ -33,7 +33,8 @@ describe('debate export UI', () => {
     const record: DebateExportRecordDto = {
       exportId: 'export-1', debateId: 'debate-1', debateTitle: '历史辩论', type: 'html',
       includePrivateResearch: true, filePath: '/safe/app-data/exports/history.html',
-      createdAt: '2026-07-15T00:00:00.000Z', fileSize: 2_048, status: 'completed'
+      createdAt: '2026-07-15T00:00:00.000Z', updatedAt: '2026-07-15T00:00:01.000Z',
+      fileSize: 2_048, status: 'completed', progress: 100
     }
     const html = renderToStaticMarkup(<DebateExportPanel
       completed

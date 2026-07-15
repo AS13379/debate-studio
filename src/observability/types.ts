@@ -72,3 +72,28 @@ export interface DiagnosticReport {
   recentRuntime?: RuntimeDiagnosticSnapshot
   testStatus: { status: string; descriptionZh: string }
 }
+
+export interface SessionPerformanceMetric {
+  sessionId: string
+  status: string
+  totalDurationMs: number
+  turnCount: number
+  averageResponseMs: number
+  maxGenerationCharacters: number
+}
+
+export interface PerformanceMetricSummary {
+  count: number
+  averageMs: number
+  maxMs: number
+  p95Ms: number
+}
+
+export interface PerformanceSnapshot {
+  generatedAt: string
+  sessions: SessionPerformanceMetric[]
+  sqlite: PerformanceMetricSummary
+  renderer: PerformanceMetricSummary
+  exports: PerformanceMetricSummary & { completed: number; failed: number; cancelled: number }
+  memoryPeakBytes?: number
+}

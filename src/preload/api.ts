@@ -42,6 +42,7 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     restoreDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.restoreDebate, input),
     deleteDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteDebate, input),
     listDebateTurns: (input) => invoke(ipcRenderer, IPC_CHANNELS.listDebateTurns, input),
+    listDebateTurnsPage: (input) => invoke(ipcRenderer, IPC_CHANNELS.listDebateTurnsPage, input),
     loadDebateSetup: (input) => invoke(ipcRenderer, IPC_CHANNELS.loadDebateSetup, input),
     loadResearchWorkspace: (input) => invoke(ipcRenderer, IPC_CHANNELS.loadResearchWorkspace, input),
     addResearchAsset: (input) => invoke(ipcRenderer, IPC_CHANNELS.addResearchAsset, input),
@@ -64,10 +65,13 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     getRecentLogs: () => invoke(ipcRenderer, IPC_CHANNELS.getRecentLogs),
     clearLogs: () => invoke(ipcRenderer, IPC_CHANNELS.clearLogs),
     reportRendererError: (input) => invoke(ipcRenderer, IPC_CHANNELS.reportRendererError, input),
+    reportRendererPerformance: (input) => invoke(ipcRenderer, IPC_CHANNELS.reportRendererPerformance, input),
+    getPerformanceSnapshot: () => invoke(ipcRenderer, IPC_CHANNELS.getPerformanceSnapshot),
     exportMarkdown: (input) => invoke(ipcRenderer, IPC_CHANNELS.exportMarkdown, input),
     exportHtml: (input) => invoke(ipcRenderer, IPC_CHANNELS.exportHtml, input),
     listExports: () => invoke(ipcRenderer, IPC_CHANNELS.listExports),
     deleteExport: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteExport, input),
+    cancelExport: (input) => invoke(ipcRenderer, IPC_CHANNELS.cancelExport, input),
     onRunEvent: (listener) => {
       const wrapped = (_event: IpcRendererEvent, payload: RunEventDto): void => listener(payload)
       ipcRenderer.on(IPC_CHANNELS.runEvent, wrapped)

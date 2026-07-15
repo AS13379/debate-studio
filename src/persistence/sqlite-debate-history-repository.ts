@@ -93,16 +93,30 @@ export class SQLiteDebateHistoryRepository implements DebateHistoryRepository {
       'updated-asc': 'updated_at ASC, d.id ASC'
     }[query.sort]
     const result = this.database.all<HistoryRow>(
-      `${HISTORY_SELECT}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY ${orderBy}`,
-      ...parameters
+      `${HISTORY_SELECT}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY ${orderBy} LIMIT ? OFFSET ?`,
+      ...parameters,
+      query.limit,
+      query.offset
     )
     if (!result.ok) return result
-    const tags = this.listAllTags()
+    const tags = this.listTagsForDebates(result.value.map((row) => row.debate_id))
     if (!tags.ok) return tags
     return {
       ok: true,
       value: result.value.map((row) => this.mapHistoryRow(row, tags.value.get(row.debate_id) ?? []))
     }
+  }
+
+  private listTagsForDebates(debateIds: string[]): PersistenceResult<Map<string, string[]>> {
+    if (!debateIds.length) return { ok: true, value: new Map() }
+    const rows = this.database.all<TagRow>(
+      `SELECT debate_id, tag FROM debate_tags WHERE debate_id IN (${debateIds.map(() => '?').join(', ')}) ORDER BY tag COLLATE NOCASE`,
+      ...debateIds
+    )
+    if (!rows.ok) return rows
+    const mapped = new Map<string, string[]>()
+    for (const row of rows.value) mapped.set(row.debate_id, [...(mapped.get(row.debate_id) ?? []), row.tag])
+    return { ok: true, value: mapped }
   }
 
   getDetail(debateId: string): PersistenceResult<DebateHistoryDetailRecord | undefined> {
@@ -241,14 +255,6 @@ export class SQLiteDebateHistoryRepository implements DebateHistoryRepository {
       `SELECT COUNT(*) AS count FROM ${table} WHERE ${column} IN (SELECT id FROM sessions WHERE debate_id = ?)`,
       debateId
     )
-  }
-
-  private listAllTags(): PersistenceResult<Map<string, string[]>> {
-    const result = this.database.all<TagRow>('SELECT debate_id, tag FROM debate_tags ORDER BY tag COLLATE NOCASE')
-    if (!result.ok) return result
-    const tags = new Map<string, string[]>()
-    for (const row of result.value) tags.set(row.debate_id, [...(tags.get(row.debate_id) ?? []), row.tag])
-    return { ok: true, value: tags }
   }
 
   private mapHistoryRow(row: HistoryRow, tags: string[]): DebateHistoryListRecord {

@@ -5,8 +5,10 @@ export interface HomePageProps {
   query?: DebateHistoryListQueryDto
   loading: boolean
   error?: string
+  hasMore?: boolean
   onQueryChange?(query: DebateHistoryListQueryDto): void
   onCreate(): void
+  onLoadMore?(): void
   onCreateDemo(): void
   onOpen(debate: DebateHistorySummaryDto): void
   onOpenHistory?(debate: DebateHistorySummaryDto): void
@@ -15,7 +17,7 @@ export interface HomePageProps {
 
 export function HomePage({
   debates, query = {}, loading, error, onQueryChange = () => undefined, onCreate, onCreateDemo, onOpen,
-  onOpenHistory = onOpen, onExport = onOpenHistory
+  onOpenHistory = onOpen, onExport = onOpenHistory, hasMore = false, onLoadMore = () => undefined
 }: HomePageProps) {
   const availableTags = [...new Set([
     ...debates.flatMap((debate) => debate.tags),
@@ -126,6 +128,7 @@ export function HomePage({
           ))}
         </div>
       )}
+      {hasMore && <button className="button secondary history-load-more" disabled={loading} onClick={onLoadMore}>{loading ? '正在加载…' : '加载更多历史记录'}</button>}
     </section>
   )
 }

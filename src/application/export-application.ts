@@ -10,7 +10,7 @@ import {
   type ExportFileStore
 } from '../export'
 import type { ExportRecord, ExportType, PersistenceContext, PersistenceError } from '../persistence'
-import type { LoggerLike } from '../observability'
+import type { ErrorCenter, LoggerLike, PerformanceMetricsCollector } from '../observability'
 import { redactSensitiveText } from '../security'
 import type { ConfigurationErrorDto } from '../shared/debate-dtos'
 import type { DebateExportRecordDto, DebateExportResultDto } from '../shared/export-dtos'
@@ -24,6 +24,13 @@ export interface ExportApplicationDependencies {
   fileStore?: ExportFileStore
   createId?: () => string
   now?: () => Date
+  performanceMetrics?: Pick<PerformanceMetricsCollector, 'recordExport'>
+  errorCenter?: ErrorCenter
+}
+
+interface ActiveExportTask {
+  controller: AbortController
+  promise: Promise<void>
 }
 
 export class ExportApplication {
@@ -33,6 +40,8 @@ export class ExportApplication {
   private readonly exporters: Record<ExportType, DebateExporter>
   private readonly createId: () => string
   private readonly now: () => Date
+  private readonly tasks = new Map<string, ActiveExportTask>()
+  private closed = false
 
   constructor(private readonly dependencies: ExportApplicationDependencies) {
     this.rootDirectory = resolve(dependencies.appDataDirectory, 'exports')
@@ -51,29 +60,59 @@ export class ExportApplication {
   }
 
   exportDebateMarkdown(debateId: string, exportOptions: { includePrivateResearch: boolean }): DebateExportResultDto<DebateExportRecordDto> {
-    return this.export(debateId, 'markdown', exportOptions.includePrivateResearch)
+    return this.startExport(debateId, 'markdown', exportOptions.includePrivateResearch)
   }
 
   exportDebateHtml(debateId: string, exportOptions: { includePrivateResearch: boolean }): DebateExportResultDto<DebateExportRecordDto> {
-    return this.export(debateId, 'html', exportOptions.includePrivateResearch)
+    return this.startExport(debateId, 'html', exportOptions.includePrivateResearch)
   }
 
   getExportHistory(): DebateExportResultDto<DebateExportRecordDto[]> {
     const result = this.dependencies.persistence.repositories.exports.list()
     if (!result.ok) return this.persistenceFailure(result.error)
-    return { ok: true, value: result.value.map((record) => this.recordDto(record)) }
+    const titles = new Map<string, string>()
+    for (const record of result.value) {
+      if (titles.has(record.debateId)) continue
+      const detail = this.dependencies.history.getDebateDetail(record.debateId)
+      titles.set(record.debateId, detail.ok ? detail.value.displayTitle : record.debateId)
+    }
+    return { ok: true, value: result.value.map((record) => this.recordDto(record, titles.get(record.debateId))) }
   }
 
-  deleteExportRecord(exportId: string): DebateExportResultDto<{ deleted: boolean }> {
+  async cancelExport(exportId: string): Promise<DebateExportResultDto<{ cancelled: boolean }>> {
     const found = this.dependencies.persistence.repositories.exports.findById(exportId)
     if (!found.ok) return this.persistenceFailure(found.error)
     if (!found.value) return this.failure('EXPORT_NOT_FOUND', '没有找到导出记录', '这条导出记录可能已经被删除。', false)
+    if (found.value.status !== 'generating') return { ok: true, value: { cancelled: false } }
+    const active = this.tasks.get(exportId)
+    if (active) {
+      active.controller.abort()
+      await active.promise
+    } else {
+      this.persistTerminal({
+        ...found.value,
+        status: 'cancelled',
+        updatedAt: this.timestamp(),
+        errorTitle: '导出已取消',
+        errorMessage: '导出任务已由用户取消，未完成文件不会保留。'
+      })
+    }
+    return { ok: true, value: { cancelled: true } }
+  }
+
+  async deleteExportRecord(exportId: string): Promise<DebateExportResultDto<{ deleted: boolean }>> {
+    const found = this.dependencies.persistence.repositories.exports.findById(exportId)
+    if (!found.ok) return this.persistenceFailure(found.error)
+    if (!found.value) return this.failure('EXPORT_NOT_FOUND', '没有找到导出记录', '这条导出记录可能已经被删除。', false)
+    if (found.value.status === 'generating') {
+      return this.failure('EXPORT_STILL_RUNNING', '导出仍在进行', '请先取消导出任务，再删除记录。', true)
+    }
     if (!this.isManagedPath(found.value.filePath)) {
       return this.failure('EXPORT_PATH_REJECTED', '导出路径不安全', '为保护本地文件，只能删除应用导出目录中的文件。', false)
     }
 
     try {
-      this.fileStore.delete(found.value.filePath)
+      await this.fileStore.delete(found.value.filePath)
     } catch (cause) {
       this.dependencies.logger?.error('删除导出文件失败', { source: 'export', metadata: { exportId } })
       return this.failure('EXPORT_FILE_DELETE_FAILED', '无法删除导出文件', this.safeFailureMessage(cause), true)
@@ -84,7 +123,16 @@ export class ExportApplication {
     return { ok: true, value: { deleted: deleted.value } }
   }
 
-  private export(debateId: string, type: ExportType, includePrivateResearch: boolean): DebateExportResultDto<DebateExportRecordDto> {
+  async close(): Promise<void> {
+    if (this.closed) return
+    this.closed = true
+    const active = [...this.tasks.values()]
+    for (const task of active) task.controller.abort()
+    await Promise.allSettled(active.map((task) => task.promise))
+  }
+
+  private startExport(debateId: string, type: ExportType, includePrivateResearch: boolean): DebateExportResultDto<DebateExportRecordDto> {
+    if (this.closed) return this.failure('EXPORT_APPLICATION_CLOSED', '导出服务已关闭', '应用正在退出，无法创建新的导出任务。', true)
     const detail = this.dependencies.history.getDebateDetail(debateId)
     if (!detail.ok) return detail
     if (detail.value.status !== 'completed') {
@@ -92,53 +140,134 @@ export class ExportApplication {
     }
 
     const exporter = this.exporters[type]
-    const createdAt = this.now().toISOString()
-    const exportId = this.createId()
+    const createdAt = this.timestamp()
     const record: ExportRecord = {
-      id: exportId,
+      id: this.createId(),
       debateId,
       type,
       includePrivateResearch,
-      filePath: this.filePath(detail.value.displayTitle, exporter.extension, createdAt, exportId),
+      filePath: '',
       createdAt,
+      updatedAt: createdAt,
       fileSize: 0,
-      status: 'generating'
+      status: 'generating',
+      progress: 0
     }
+    record.filePath = this.filePath(detail.value.displayTitle, exporter.extension, createdAt, record.id)
     const created = this.dependencies.persistence.repositories.exports.create(record)
     if (!created.ok) return this.persistenceFailure(created.error)
-    this.dependencies.logger?.info('开始生成辩论导出', { source: 'export', metadata: { exportId: record.id, debateId, type, includePrivateResearch } })
+    this.dependencies.logger?.info('开始生成辩论导出', {
+      source: 'export', metadata: { exportId: record.id, debateId, type, includePrivateResearch }
+    })
+    this.schedule(record)
+    return { ok: true, value: this.recordDto(record, detail.value.displayTitle) }
+  }
 
+  private schedule(record: ExportRecord): void {
+    const controller = new AbortController()
+    const promise = new Promise<void>((resolveTask) => {
+      setImmediate(() => void this.execute(record, controller.signal).finally(resolveTask))
+    }).finally(() => this.tasks.delete(record.id))
+    this.tasks.set(record.id, { controller, promise })
+  }
+
+  private async execute(initial: ExportRecord, signal: AbortSignal): Promise<void> {
+    const startedAt = performance.now()
+    let record = initial
     try {
-      const snapshot = this.snapshotBuilder.build(debateId, includePrivateResearch)
-      if (!snapshot.ok) return this.failRecord(record, snapshot.error.titleZh, snapshot.error.descriptionZh, snapshot.error)
-      const content = exporter.render(snapshot.value)
-      const fileSize = this.fileStore.write(record.filePath, content)
-      const completed: ExportRecord = { ...record, fileSize, status: 'completed' }
-      const updated = this.dependencies.persistence.repositories.exports.update(completed)
-      if (!updated.ok) return this.persistenceFailure(updated.error)
-      if (!updated.value) return this.failure('EXPORT_RECORD_UPDATE_FAILED', '导出记录更新失败', '文件已生成，但无法更新本地导出记录。', true)
-      this.dependencies.logger?.info('辩论导出完成', { source: 'export', metadata: { exportId: record.id, debateId, type, fileSize } })
-      return { ok: true, value: this.recordDto(completed, detail.value.displayTitle) }
+      this.throwIfAborted(signal)
+      record = this.updateProgress(record, 10)
+      await nextTask()
+      const snapshot = this.snapshotBuilder.build(record.debateId, record.includePrivateResearch)
+      if (!snapshot.ok) throw new ExportTaskError(snapshot.error.titleZh, snapshot.error.descriptionZh)
+      record = this.updateProgress(record, 35)
+      await nextTask()
+      this.throwIfAborted(signal)
+      const content = this.exporters[record.type].render(snapshot.value)
+      record = this.updateProgress(record, 55)
+      await nextTask()
+      const fileSize = await this.fileStore.write(record.filePath, content, {
+        signal,
+        onProgress: (value) => { record = this.updateProgress(record, 55 + Math.floor(value * 44)) }
+      })
+      this.throwIfAborted(signal)
+      const completed: ExportRecord = {
+        ...record,
+        fileSize,
+        status: 'completed',
+        progress: 100,
+        updatedAt: this.timestamp(),
+        errorTitle: undefined,
+        errorMessage: undefined
+      }
+      this.persistTerminal(completed)
+      this.dependencies.performanceMetrics?.recordExport(performance.now() - startedAt, 'completed')
+      this.dependencies.logger?.info('辩论导出完成', {
+        source: 'export', metadata: { exportId: record.id, debateId: record.debateId, type: record.type, fileSize }
+      })
     } catch (cause) {
-      return this.failRecord(record, '导出文件生成失败', this.safeFailureMessage(cause), cause)
+      if (isAbortError(cause) || signal.aborted) {
+        await this.fileStore.delete(record.filePath).catch(() => false)
+        const cancelled: ExportRecord = {
+          ...record,
+          status: 'cancelled',
+          updatedAt: this.timestamp(),
+          errorTitle: '导出已取消',
+          errorMessage: '导出任务已由用户取消，未完成文件不会保留。'
+        }
+        this.persistTerminal(cancelled)
+        this.dependencies.performanceMetrics?.recordExport(performance.now() - startedAt, 'cancelled')
+        this.dependencies.logger?.warn('辩论导出已取消', { source: 'export', metadata: { exportId: record.id } })
+        return
+      }
+      const taskError = cause instanceof ExportTaskError ? cause : undefined
+      const failed: ExportRecord = {
+        ...record,
+        status: 'failed',
+        updatedAt: this.timestamp(),
+        errorTitle: redactSensitiveText(taskError?.title ?? '导出文件生成失败'),
+        errorMessage: redactSensitiveText(taskError?.message ?? this.safeFailureMessage(cause))
+      }
+      this.persistTerminal(failed)
+      this.dependencies.performanceMetrics?.recordExport(performance.now() - startedAt, 'failed')
+      this.dependencies.logger?.error('辩论导出失败', {
+        source: 'export', metadata: { exportId: record.id, debateId: record.debateId, type: record.type }
+      })
+      this.dependencies.errorCenter?.capture({
+        code: 'EXPORT_GENERATION_FAILED',
+        titleZh: failed.errorTitle,
+        descriptionZh: failed.errorMessage,
+        retryable: true
+      }, {
+        source: 'export', category: 'runtime', metadata: { exportId: record.id, type: record.type }
+      })
     }
   }
 
-  private failRecord(record: ExportRecord, title: string, message: string, cause: unknown): DebateExportResultDto<never> {
-    const failed: ExportRecord = {
-      ...record,
-      status: 'failed',
-      errorTitle: redactSensitiveText(title),
-      errorMessage: redactSensitiveText(message)
-    }
-    this.dependencies.persistence.repositories.exports.update(failed)
-    this.dependencies.logger?.error('辩论导出失败', { source: 'export', metadata: { exportId: record.id, debateId: record.debateId, type: record.type } })
-    return this.failure(
-      'EXPORT_GENERATION_FAILED',
-      failed.errorTitle ?? '导出文件生成失败',
-      failed.errorMessage || this.safeFailureMessage(cause),
-      true
-    )
+  private updateProgress(record: ExportRecord, progress: number): ExportRecord {
+    const normalized = Math.max(record.progress, Math.min(99, progress))
+    if (normalized < record.progress + 4) return record
+    const updated = { ...record, progress: normalized, updatedAt: this.timestamp() }
+    const persisted = this.dependencies.persistence.repositories.exports.update(updated)
+    if (!persisted.ok) this.capturePersistenceFailure(record.id, persisted.error, 'progress')
+    return updated
+  }
+
+  private persistTerminal(record: ExportRecord): void {
+    const persisted = this.dependencies.persistence.repositories.exports.update(record)
+    if (!persisted.ok) this.capturePersistenceFailure(record.id, persisted.error, 'terminal')
+  }
+
+  private capturePersistenceFailure(exportId: string, error: PersistenceError, phase: string): void {
+    this.dependencies.logger?.error('导出状态保存失败', {
+      source: 'export', metadata: { exportId, phase, code: error.code }
+    })
+    this.dependencies.errorCenter?.capture({
+      code: 'EXPORT_STATUS_PERSISTENCE_FAILED',
+      titleZh: '导出状态保存失败',
+      descriptionZh: '导出文件可能已生成，但本地状态未能更新；重启后可重新导出。',
+      retryable: true
+    }, { source: 'export', category: 'persistence', metadata: { exportId, phase, code: error.code } })
   }
 
   private recordDto(record: ExportRecord, knownTitle?: string): DebateExportRecordDto {
@@ -155,9 +284,11 @@ export class ExportApplication {
       includePrivateResearch: record.includePrivateResearch,
       filePath: record.filePath,
       createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
       fileSize: record.fileSize,
       status: record.status,
-      error: record.status === 'failed' ? {
+      progress: record.progress,
+      error: record.status === 'failed' || record.status === 'cancelled' ? {
         titleZh: redactSensitiveText(record.errorTitle ?? '导出失败'),
         descriptionZh: redactSensitiveText(record.errorMessage ?? '无法生成导出文件。')
       } : undefined
@@ -180,9 +311,20 @@ export class ExportApplication {
     return candidate !== this.rootDirectory && candidate.startsWith(`${this.rootDirectory}${sep}`) && basename(candidate) !== ''
   }
 
+  private throwIfAborted(signal: AbortSignal): void {
+    if (!signal.aborted) return
+    const error = new Error('Export was cancelled.')
+    error.name = 'AbortError'
+    throw error
+  }
+
   private safeFailureMessage(cause: unknown): string {
     const detail = cause instanceof Error ? cause.message : '本地文件系统拒绝了导出操作。'
     return redactSensitiveText(detail).slice(0, 500)
+  }
+
+  private timestamp(): string {
+    return this.now().toISOString()
   }
 
   private persistenceFailure(error: PersistenceError): DebateExportResultDto<never> {
@@ -192,4 +334,19 @@ export class ExportApplication {
   private failure(code: string, titleZh: string, descriptionZh: string, retryable: boolean): { ok: false; error: ConfigurationErrorDto } {
     return { ok: false, error: { code, titleZh, descriptionZh, retryable } }
   }
+}
+
+class ExportTaskError extends Error {
+  constructor(readonly title: string, message: string) {
+    super(message)
+    this.name = 'ExportTaskError'
+  }
+}
+
+function isAbortError(cause: unknown): boolean {
+  return cause instanceof Error && cause.name === 'AbortError'
+}
+
+function nextTask(): Promise<void> {
+  return new Promise((resolveTask) => setImmediate(resolveTask))
 }

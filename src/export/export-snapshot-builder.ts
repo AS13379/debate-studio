@@ -59,7 +59,7 @@ export class ExportSnapshotBuilder {
     if (!notes.ok) return this.persistenceFailure(notes.error)
     const claims = repositories.research.listClaims(history.value.sessionId)
     if (!claims.ok) return this.persistenceFailure(claims.error)
-    const pages = repositories.research.listFetchedPages(history.value.sessionId)
+    const pages = repositories.research.listFetchedPageSummaries(history.value.sessionId)
     if (!pages.ok) return this.persistenceFailure(pages.error)
     const evaluations = repositories.research.listSourceEvaluations(history.value.sessionId)
     if (!evaluations.ok) return this.persistenceFailure(evaluations.error)

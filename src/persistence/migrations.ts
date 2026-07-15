@@ -564,6 +564,46 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_export_records_status
         ON export_records(status, created_at DESC);
     `
+  },
+  {
+    version: 12,
+    name: 'performance_and_resumable_exports',
+    sql: `
+      DROP INDEX IF EXISTS idx_export_records_debate_created;
+      DROP INDEX IF EXISTS idx_export_records_status;
+      ALTER TABLE export_records RENAME TO export_records_v11;
+
+      CREATE TABLE export_records (
+        id TEXT PRIMARY KEY,
+        debate_id TEXT NOT NULL REFERENCES debates(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('markdown', 'html')),
+        include_private_research INTEGER NOT NULL CHECK (include_private_research IN (0, 1)),
+        file_path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        file_size INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL CHECK (status IN ('generating', 'completed', 'failed', 'cancelled')),
+        progress INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+        error_title TEXT,
+        error_message TEXT
+      );
+
+      INSERT INTO export_records
+        (id, debate_id, type, include_private_research, file_path, created_at, updated_at,
+         file_size, status, progress, error_title, error_message)
+      SELECT id, debate_id, type, include_private_research, file_path, created_at, created_at,
+        file_size, status, CASE WHEN status = 'completed' THEN 100 ELSE 0 END, error_title, error_message
+      FROM export_records_v11;
+      DROP TABLE export_records_v11;
+
+      CREATE INDEX idx_export_records_debate_created ON export_records(debate_id, created_at DESC);
+      CREATE INDEX idx_export_records_status ON export_records(status, created_at DESC);
+      CREATE INDEX idx_turns_session_created_desc ON turns(session_id, created_at DESC, id DESC);
+      CREATE INDEX idx_events_session_created_desc ON events(session_id, created_at DESC, id DESC);
+      CREATE INDEX idx_sessions_debate_created_desc ON sessions(debate_id, created_at DESC, id DESC);
+      CREATE INDEX idx_research_sources_visibility_created ON research_sources(debate_session_id, visibility, created_at DESC);
+      CREATE INDEX idx_published_evidence_created ON published_evidence(debate_session_id, created_at DESC);
+    `
   }
 ]
 

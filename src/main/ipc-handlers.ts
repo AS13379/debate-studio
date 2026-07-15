@@ -16,6 +16,8 @@ import {
 import {
   addResearchAssetSchema,
   challengeEvidenceSchema,
+  cancelExportSchema,
+  debateTurnPageSchema,
   connectionInputSchema,
   connectionTestInputSchema,
   createDebateSchema,
@@ -30,6 +32,7 @@ import {
   publishEvidenceSchema,
   researchRuntimeSettingsSchema,
   rendererErrorSchema,
+  rendererPerformanceSchema,
   renameDebateSchema,
   researchToolDecisionSchema,
   runMockSearchSchema,
@@ -100,6 +103,7 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.restoreDebate, validated(idInputSchema, (input) => dependencies.history.restoreDebate(input.id)))
   ipcMain.handle(IPC_CHANNELS.deleteDebate, validated(deleteDebateSchema, (input) => dependencies.history.deleteDebate(input.id, input.confirmed)))
   ipcMain.handle(IPC_CHANNELS.listDebateTurns, validated(sessionInputSchema, (input) => configuration.listDebateTurns(input.sessionId)))
+  ipcMain.handle(IPC_CHANNELS.listDebateTurnsPage, validated(debateTurnPageSchema, (input) => configuration.listDebateTurnsPage(input.sessionId, input.limit, input.before)))
   ipcMain.handle(IPC_CHANNELS.loadDebateSetup, validated(sessionInputSchema, (input) => configuration.loadDebateSetup(input.sessionId)))
   ipcMain.handle(IPC_CHANNELS.loadResearchWorkspace, validated(sessionInputSchema, (input) => research?.loadWorkspace(input.sessionId) ?? researchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.addResearchAsset, validated(addResearchAssetSchema, (input) => research?.addAsset(input) ?? researchUnavailable()))
@@ -122,10 +126,13 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.getRecentLogs, () => dependencies.diagnostics.getRecentLogs())
   ipcMain.handle(IPC_CHANNELS.clearLogs, () => dependencies.diagnostics.clearLogs())
   ipcMain.handle(IPC_CHANNELS.reportRendererError, validated(rendererErrorSchema, (input) => dependencies.diagnostics.reportRendererError(input)))
+  ipcMain.handle(IPC_CHANNELS.reportRendererPerformance, validated(rendererPerformanceSchema, (input) => dependencies.diagnostics.reportRendererPerformance(input)))
+  ipcMain.handle(IPC_CHANNELS.getPerformanceSnapshot, () => dependencies.diagnostics.getPerformanceSnapshot())
   ipcMain.handle(IPC_CHANNELS.exportMarkdown, validated(exportDebateSchema, (input) => dependencies.exports.exportDebateMarkdown(input.debateId, input.exportOptions)))
   ipcMain.handle(IPC_CHANNELS.exportHtml, validated(exportDebateSchema, (input) => dependencies.exports.exportDebateHtml(input.debateId, input.exportOptions)))
   ipcMain.handle(IPC_CHANNELS.listExports, () => dependencies.exports.getExportHistory())
   ipcMain.handle(IPC_CHANNELS.deleteExport, validated(deleteExportSchema, (input) => dependencies.exports.deleteExportRecord(input.exportId)))
+  ipcMain.handle(IPC_CHANNELS.cancelExport, validated(cancelExportSchema, (input) => dependencies.exports.cancelExport(input.exportId)))
 
   const unsubscribe = run.subscribe((event) => {
     dependencies.diagnostics.observeRunEvent(event)
@@ -141,7 +148,9 @@ function observedIpcMain(dependencies: DebateIpcDependencies): IpcMainLike {
   return {
     handle(channel, listener) {
       dependencies.ipcMain.handle(channel, async (event, input) => {
-        dependencies.logger.debug('IPC 调用开始', { source: 'ipc', metadata: { channel } })
+        if (channel !== IPC_CHANNELS.reportRendererPerformance) {
+          dependencies.logger.debug('IPC 调用开始', { source: 'ipc', metadata: { channel } })
+        }
         try {
           const result = await listener(event, input)
           if (isFailureResult(result)) {

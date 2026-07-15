@@ -46,6 +46,12 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
   }
 
   useEffect(() => { void load(); void loadExports() }, [debateId])
+  const hasGeneratingExport = exports.some((record) => record.status === 'generating')
+  useEffect(() => {
+    if (!hasGeneratingExport) return
+    const interval = window.setInterval(() => void loadExports(), 500)
+    return () => window.clearInterval(interval)
+  }, [debateId, hasGeneratingExport])
 
   const runExport = async (type: 'markdown' | 'html'): Promise<void> => {
     setExporting(type)
@@ -56,10 +62,19 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
       ? await window.debateStudio.exportMarkdown(input)
       : await window.debateStudio.exportHtml(input)
     if (result.ok) {
-      setExportMessage(`导出完成：${result.value.filePath}`)
+      setExportMessage('导出任务已开始，可继续使用应用；进度会自动更新。')
       await loadExports()
     } else setExportError(result.error.descriptionZh)
     setExporting(undefined)
+  }
+
+  const cancelExport = async (exportId: string): Promise<void> => {
+    const result = await window.debateStudio.cancelExport({ exportId })
+    if (!result.ok) setExportError(result.error.descriptionZh)
+    else {
+      setExportMessage(result.value.cancelled ? '导出已取消，未完成文件不会保留。' : '该任务已经结束。')
+      await loadExports()
+    }
   }
 
   const deleteExport = async (exportId: string): Promise<void> => {
@@ -187,6 +202,11 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
         onRequestDelete={setConfirmExportDeleteId}
         onCancelDelete={() => setConfirmExportDeleteId(undefined)}
         onConfirmDelete={(exportId) => void deleteExport(exportId)}
+        onCancelExport={(exportId) => void cancelExport(exportId)}
+        onRetryExport={(record) => {
+          setIncludePrivateResearch(record.includePrivateResearch)
+          void runExport(record.type)
+        }}
       />
 
       <details className="panel collapsible-section history-adjudication">
@@ -227,7 +247,9 @@ export function DebateExportPanel({
   onExport,
   onRequestDelete,
   onCancelDelete,
-  onConfirmDelete
+  onConfirmDelete,
+  onCancelExport = () => undefined,
+  onRetryExport = () => undefined
 }: {
   completed: boolean
   includePrivateResearch: boolean
@@ -241,6 +263,8 @@ export function DebateExportPanel({
   onRequestDelete(exportId: string): void
   onCancelDelete(): void
   onConfirmDelete(exportId: string): void
+  onCancelExport?(exportId: string): void
+  onRetryExport?(record: DebateExportRecordDto): void
 }) {
   return <section className="panel debate-export-panel" aria-labelledby="debate-export-title">
     <div className="section-heading">
@@ -266,14 +290,19 @@ export function DebateExportPanel({
           <p className="export-record-path">{record.filePath}</p>
           <div className="export-record-meta">
             <span>{exportStatusLabel(record.status)}</span>
+            {record.status === 'generating' && <span>{record.progress}%</span>}
             {record.includePrivateResearch && <span className="private-badge">包含私有研究</span>}
           </div>
+          {record.status === 'generating' && <div className="export-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={record.progress}><span style={{ width: `${record.progress}%` }} /></div>}
           {record.error && <div className="notice error"><strong>{record.error.titleZh}</strong>：{record.error.descriptionZh}</div>}
-          {confirmDeleteId === record.exportId ? <div className="compact-actions export-delete-confirm">
+          {record.status === 'generating' ? <button className="button secondary export-delete" onClick={() => onCancelExport(record.exportId)}>取消导出</button> : confirmDeleteId === record.exportId ? <div className="compact-actions export-delete-confirm">
             <span>同时删除本地文件？</span>
             <button className="button ghost" onClick={onCancelDelete}>取消</button>
             <button className="button danger" onClick={() => onConfirmDelete(record.exportId)}>确认删除</button>
-          </div> : <button className="button ghost export-delete" onClick={() => onRequestDelete(record.exportId)}>删除导出</button>}
+          </div> : <div className="compact-actions export-record-actions">
+            {(record.status === 'failed' || record.status === 'cancelled') && <button className="button secondary" onClick={() => onRetryExport(record)}>重新导出</button>}
+            <button className="button ghost export-delete" onClick={() => onRequestDelete(record.exportId)}>删除导出</button>
+          </div>}
         </article>)}
       </div>}
     </details>
@@ -315,7 +344,7 @@ function researchStatusLabel(status: string): string {
   return { 'not-started': '尚未开始研究', planning: '研究规划中', researching: '研究进行中', drafting: '论证草拟中', completed: '研究已完成' }[status] ?? status
 }
 function exportStatusLabel(status: string): string {
-  return { generating: '生成中', completed: '已完成', failed: '失败' }[status] ?? status
+  return { generating: '生成中', completed: '已完成', failed: '失败', cancelled: '已取消' }[status] ?? status
 }
 function formatFileSize(size: number): string {
   if (size < 1024) return `${size} B`

@@ -1,7 +1,7 @@
 import type { ConfigurationResultDto } from './debate-dtos'
 
 export type DebateExportTypeDto = 'markdown' | 'html'
-export type DebateExportStatusDto = 'generating' | 'completed' | 'failed'
+export type DebateExportStatusDto = 'generating' | 'completed' | 'failed' | 'cancelled'
 
 export interface DebateExportOptionsDto {
   includePrivateResearch: boolean
@@ -16,6 +16,10 @@ export interface DeleteExportInputDto {
   exportId: string
 }
 
+export interface CancelExportInputDto {
+  exportId: string
+}
+
 export interface DebateExportRecordDto {
   exportId: string
   debateId: string
@@ -24,8 +28,10 @@ export interface DebateExportRecordDto {
   includePrivateResearch: boolean
   filePath: string
   createdAt: string
+  updatedAt: string
   fileSize: number
   status: DebateExportStatusDto
+  progress: number
   error?: {
     titleZh: string
     descriptionZh: string

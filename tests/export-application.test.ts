@@ -21,13 +21,15 @@ afterEach(() => {
 })
 
 describe('debate export application', () => {
-  it('exports structured Markdown in chronological order without private research or secrets by default', () => {
+  it('exports structured Markdown in chronological order without private research or secrets by default', async () => {
     const fixture = createFixture()
     const result = fixture.application.exportDebateMarkdown('debate-1', { includePrivateResearch: false })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    const content = readFileSync(result.value.filePath, 'utf8')
+    expect(result.value.status).toBe('generating')
+    const completed = await waitForExport(fixture.application, result.value.exportId)
+    const content = readFileSync(completed.filePath, 'utf8')
     expect(content).toContain('# 可分享的归档名称')
     expect(content).toContain('## 公共资源池')
     expect(content).toContain('## 公开证据桌')
@@ -40,11 +42,11 @@ describe('debate export application', () => {
     expect(content).not.toContain(CREDENTIAL_REFERENCE)
     expect(content).not.toContain('<script>')
     expect(content).toContain('&lt;script&gt;')
-    expect(result.value).toMatchObject({ type: 'markdown', includePrivateResearch: false, status: 'completed' })
-    expect(result.value.fileSize).toBeGreaterThan(0)
+    expect(completed).toMatchObject({ type: 'markdown', includePrivateResearch: false, status: 'completed', progress: 100 })
+    expect(completed.fileSize).toBeGreaterThan(0)
   })
 
-  it('exports a standalone safe HTML file and only includes private research after explicit opt-in', () => {
+  it('exports a standalone safe HTML file and only includes private research after explicit opt-in', async () => {
     const fixture = createFixture()
     const defaultResult = fixture.application.exportDebateHtml('debate-1', { includePrivateResearch: false })
     const privateResult = fixture.application.exportDebateHtml('debate-1', { includePrivateResearch: true })
@@ -52,8 +54,10 @@ describe('debate export application', () => {
     expect(defaultResult.ok).toBe(true)
     expect(privateResult.ok).toBe(true)
     if (!defaultResult.ok || !privateResult.ok) return
-    const publicHtml = readFileSync(defaultResult.value.filePath, 'utf8')
-    const privateHtml = readFileSync(privateResult.value.filePath, 'utf8')
+    const defaultCompleted = await waitForExport(fixture.application, defaultResult.value.exportId)
+    const privateCompleted = await waitForExport(fixture.application, privateResult.value.exportId)
+    const publicHtml = readFileSync(defaultCompleted.filePath, 'utf8')
+    const privateHtml = readFileSync(privateCompleted.filePath, 'utf8')
     expect(publicHtml).toContain('<!doctype html>')
     expect(publicHtml).toContain('Content-Security-Policy')
     expect(publicHtml).toContain('@media(prefers-color-scheme:dark)')
@@ -67,14 +71,17 @@ describe('debate export application', () => {
     expect(privateHtml).not.toContain(CREDENTIAL_REFERENCE)
   })
 
-  it('keeps a redacted failed record when writing the file fails', () => {
+  it('keeps a redacted failed record when writing the file fails', async () => {
     const fixture = createFixture({
-      write() { throw new Error(`Authorization: Bearer ${SECRET}`) },
-      delete() { return false }
+      async write() { throw new Error(`Authorization: Bearer ${SECRET}`) },
+      async delete() { return false }
     })
     const result = fixture.application.exportDebateMarkdown('debate-1', { includePrivateResearch: false })
-    expect(result).toMatchObject({ ok: false, error: { code: 'EXPORT_GENERATION_FAILED' } })
+    expect(result).toMatchObject({ ok: true, value: { status: 'generating' } })
     expect(JSON.stringify(result)).not.toContain(SECRET)
+
+    if (!result.ok) return
+    await waitForExport(fixture.application, result.value.exportId, 'failed')
 
     const history = fixture.application.getExportHistory()
     expect(history.ok).toBe(true)
@@ -85,22 +92,25 @@ describe('debate export application', () => {
     expect(JSON.stringify(history.value[0])).toContain('[REDACTED]')
   })
 
-  it('deletes the generated file together with its export record', () => {
+  it('deletes the generated file together with its export record', async () => {
     const fixture = createFixture()
     const exported = fixture.application.exportDebateMarkdown('debate-1', { includePrivateResearch: false })
     expect(exported.ok).toBe(true)
     if (!exported.ok) return
-    expect(existsSync(exported.value.filePath)).toBe(true)
+    const completed = await waitForExport(fixture.application, exported.value.exportId)
+    expect(existsSync(completed.filePath)).toBe(true)
 
-    expect(fixture.application.deleteExportRecord(exported.value.exportId)).toEqual({ ok: true, value: { deleted: true } })
-    expect(existsSync(exported.value.filePath)).toBe(false)
+    expect(await fixture.application.deleteExportRecord(exported.value.exportId)).toEqual({ ok: true, value: { deleted: true } })
+    expect(existsSync(completed.filePath)).toBe(false)
     expect(fixture.application.getExportHistory()).toEqual({ ok: true, value: [] })
   })
 
-  it('restores export history after reopening the SQLite database', () => {
+  it('restores export history after reopening the SQLite database', async () => {
     const fixture = createFixture()
     const exported = fixture.application.exportDebateHtml('debate-1', { includePrivateResearch: false })
     expect(exported.ok).toBe(true)
+    if (!exported.ok) return
+    await waitForExport(fixture.application, exported.value.exportId)
     fixture.context.database.close()
     contexts.splice(contexts.indexOf(fixture.context), 1)
 
@@ -117,6 +127,25 @@ describe('debate export application', () => {
     expect(records.value[0]).toMatchObject({ type: 'html', status: 'completed', debateTitle: '可分享的归档名称' })
   })
 })
+
+async function waitForExport(
+  application: ExportApplication,
+  exportId: string,
+  expected: 'completed' | 'failed' | 'cancelled' = 'completed'
+): Promise<import('../src/shared/ipc-contract').DebateExportRecordDto> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const history = application.getExportHistory()
+    if (history.ok) {
+      const record = history.value.find((item) => item.exportId === exportId)
+      if (record && record.status !== 'generating') {
+        expect(record.status).toBe(expected)
+        return record
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`Export ${exportId} did not finish.`)
+}
 
 function createFixture(fileStore?: ExportFileStore): {
   directory: string

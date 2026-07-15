@@ -102,6 +102,10 @@ export interface DebateExporter {
 }
 
 export interface ExportFileStore {
-  write(filePath: string, content: string): number
-  delete(filePath: string): boolean
+  write(filePath: string, content: string, options?: {
+    signal?: AbortSignal
+    onProgress?: (progress: number) => void
+    chunkCharacters?: number
+  }): Promise<number>
+  delete(filePath: string): Promise<boolean>
 }

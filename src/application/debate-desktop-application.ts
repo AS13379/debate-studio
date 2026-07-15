@@ -13,7 +13,12 @@ import {
   MacOSKeychainCredentialStore,
   type CredentialStore
 } from '../security'
-import { ErrorCenter, ObservedCredentialStore, StructuredLogger } from '../observability'
+import {
+  ErrorCenter,
+  ObservedCredentialStore,
+  PerformanceMetricsCollector,
+  StructuredLogger
+} from '../observability'
 import { DebateConfigurationApplication } from './debate-configuration-application'
 import { ResearchApprovalController, ResearchRunCoordinator } from '../research'
 import { AutonomousResearchExecutor } from '../runtime'
@@ -35,6 +40,7 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
   errorCenter?: ErrorCenter
   appVersion?: string
   systemInfo?: Record<string, string>
+  performanceMetrics?: PerformanceMetricsCollector
 }
 
 export class DebateDesktopApplication {
@@ -49,7 +55,8 @@ export class DebateDesktopApplication {
     readonly errorCenter: ErrorCenter
   ) {}
 
-  close(): Promise<PersistenceResult<void>> {
+  async close(): Promise<PersistenceResult<void>> {
+    await this.exports.close()
     return this.run.close()
   }
 }
@@ -67,7 +74,8 @@ export function initializeDebateDesktopApplication(
     systemInfo: options.systemInfo ?? { platform: process.platform, arch: process.arch, node: process.versions.node },
     now: options.now
   })
-  const persistenceResult = initializePersistence({ ...options, logger })
+  const performanceMetrics = options.performanceMetrics ?? new PerformanceMetricsCollector({ now: options.now })
+  const persistenceResult = initializePersistence({ ...options, logger, performanceMetrics })
   if (!persistenceResult.ok) return persistenceResult
   const persistence = persistenceResult.value
   const recoveredAt = (options.now ?? (() => new Date()))().toISOString()
@@ -86,6 +94,11 @@ export function initializeDebateDesktopApplication(
   if (!researchRecovered.ok) {
     persistence.database.close()
     return researchRecovered
+  }
+  const exportsRecovered = persistence.repositories.exports.markGeneratingInterrupted(recoveredAt)
+  if (!exportsRecovered.ok) {
+    persistence.database.close()
+    return exportsRecovered
   }
 
   const baseCredentialStore = options.credentialStore ?? new MacOSKeychainCredentialStore()
@@ -140,6 +153,7 @@ export function initializeDebateDesktopApplication(
       appDataDirectory: options.appDataDirectory,
       errorCenter,
       logger,
+      performanceMetrics,
       now: options.now
     })
     const history = new DebateHistoryApplication({ persistence, logger, now: options.now })
@@ -148,6 +162,8 @@ export function initializeDebateDesktopApplication(
       history,
       appDataDirectory: options.appDataDirectory,
       logger,
+      errorCenter,
+      performanceMetrics,
       now: options.now
     })
     logger.info('Debate Studio 应用组合完成', { source: 'application' })

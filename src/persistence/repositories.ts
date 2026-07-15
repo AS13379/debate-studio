@@ -60,6 +60,8 @@ export interface DebateHistoryListQuery {
   favoriteOnly: boolean
   tag?: string
   status: DebateHistoryStatus | 'all'
+  limit: number
+  offset: number
 }
 
 export interface DebateHistoryListRecord {
@@ -128,6 +130,16 @@ export interface TurnRecord {
   completedAt?: string
 }
 
+export interface TurnPageCursor {
+  createdAt: string
+  id: string
+}
+
+export interface TurnPage {
+  records: TurnRecord[]
+  nextCursor?: TurnPageCursor
+}
+
 export interface EventRecord {
   id: string
   sessionId: string
@@ -151,7 +163,7 @@ export interface UsageRecord {
 }
 
 export type ExportType = 'markdown' | 'html'
-export type ExportStatus = 'generating' | 'completed' | 'failed'
+export type ExportStatus = 'generating' | 'completed' | 'failed' | 'cancelled'
 
 export interface ExportRecord {
   id: string
@@ -160,8 +172,10 @@ export interface ExportRecord {
   includePrivateResearch: boolean
   filePath: string
   createdAt: string
+  updatedAt: string
   fileSize: number
   status: ExportStatus
+  progress: number
   errorTitle?: string
   errorMessage?: string
 }
@@ -198,6 +212,8 @@ export interface TurnRepository {
   create(record: TurnRecord): PersistenceResult<void>
   update(record: TurnRecord): PersistenceResult<boolean>
   listBySession(sessionId: string): PersistenceResult<TurnRecord[]>
+  listPage(sessionId: string, limit: number, before?: TurnPageCursor): PersistenceResult<TurnPage>
+  findLatest(sessionId: string): PersistenceResult<TurnRecord | undefined>
   findLatestRetryable(sessionId: string): PersistenceResult<TurnRecord | undefined>
   markInProgressInterrupted(completedAt: string): PersistenceResult<number>
 }
@@ -218,6 +234,7 @@ export interface ExportRepository {
   findById(id: string): PersistenceResult<ExportRecord | undefined>
   list(): PersistenceResult<ExportRecord[]>
   delete(id: string): PersistenceResult<boolean>
+  markGeneratingInterrupted(updatedAt: string): PersistenceResult<number>
 }
 
 export interface SettingsRepository {
@@ -284,6 +301,7 @@ export interface ResearchRepository {
   saveFetchedPage(page: FetchedWebPage): PersistenceResult<void>
   findFetchedPageBySource(sourceId: string): PersistenceResult<FetchedWebPage | undefined>
   listFetchedPages(debateSessionId: string): PersistenceResult<FetchedWebPage[]>
+  listFetchedPageSummaries(debateSessionId: string): PersistenceResult<FetchedWebPage[]>
   saveSourceEvaluation(evaluation: SourceEvaluation): PersistenceResult<void>
   listSourceEvaluations(debateSessionId: string): PersistenceResult<SourceEvaluation[]>
   saveToolCall(call: ResearchToolCall): PersistenceResult<void>

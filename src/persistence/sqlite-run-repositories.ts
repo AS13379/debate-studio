@@ -6,6 +6,8 @@ import type {
   EventRecord,
   EventRepository,
   TurnRecord,
+  TurnPage,
+  TurnPageCursor,
   TurnRepository,
   UsageRecord,
   UsageRepository
@@ -200,6 +202,40 @@ export class SQLiteTurnRepository implements TurnRepository {
       sessionId
     )
     return result.ok ? { ok: true, value: result.value.map((row) => this.mapRow(row)) } : result
+  }
+
+  listPage(sessionId: string, limit: number, before?: TurnPageCursor): PersistenceResult<TurnPage> {
+    const pageSize = Math.max(1, Math.min(100, Math.trunc(limit)))
+    const cursorSql = before ? ' AND (created_at < ? OR (created_at = ? AND id < ?))' : ''
+    const parameters = before
+      ? [sessionId, before.createdAt, before.createdAt, before.id, pageSize + 1]
+      : [sessionId, pageSize + 1]
+    const result = this.database.all<TurnRow>(
+      `${this.selectSql()} WHERE session_id = ?${cursorSql}
+       ORDER BY created_at DESC, id DESC LIMIT ?`,
+      ...parameters
+    )
+    if (!result.ok) return result
+    const hasMore = result.value.length > pageSize
+    const rows = result.value.slice(0, pageSize)
+    const oldest = rows.at(-1)
+    return {
+      ok: true,
+      value: {
+        records: rows.map((row) => this.mapRow(row)).reverse(),
+        nextCursor: hasMore && oldest ? { createdAt: oldest.created_at, id: oldest.id } : undefined
+      }
+    }
+  }
+
+  findLatest(sessionId: string): PersistenceResult<TurnRecord | undefined> {
+    const result = this.database.get<TurnRow>(
+      `${this.selectSql()} WHERE session_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+      sessionId
+    )
+    return result.ok
+      ? { ok: true, value: result.value ? this.mapRow(result.value) : undefined }
+      : result
   }
 
   findLatestRetryable(sessionId: string): PersistenceResult<TurnRecord | undefined> {

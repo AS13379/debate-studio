@@ -46,6 +46,8 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
   const [loading, setLoading] = useState(true)
   const [showRoleEditor, setShowRoleEditor] = useState(false)
   const [researchVersion, setResearchVersion] = useState(0)
+  const [olderTurnsCursor, setOlderTurnsCursor] = useState<{ createdAt: string; id: string }>()
+  const [loadingOlderTurns, setLoadingOlderTurns] = useState(false)
 
   const reload = async (): Promise<void> => {
     const detailResult = await window.debateStudio.getDebate({ id: debateId })
@@ -57,16 +59,36 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
     const sessionId = detailResult.value.sessionId
     const [stateResult, turnsResult, setupResult] = await Promise.all([
       window.debateStudio.getRunState({ sessionId }),
-      window.debateStudio.listDebateTurns({ sessionId }),
+      window.debateStudio.listDebateTurnsPage({ sessionId, limit: 40 }),
       window.debateStudio.loadDebateSetup({ sessionId })
     ])
     setDetail(detailResult.value)
-    if (stateResult.ok) setSnapshot({ state: stateResult.state, turns: turnsResult.ok ? turnsResult.value : [] })
+    if (stateResult.ok) setSnapshot({ state: stateResult.state, turns: turnsResult.ok ? turnsResult.value.turns : [] })
     else setCommandFailure(stateResult.error)
     if (setupResult.ok) setSetup(setupResult.value)
     else setError(setupResult.error.descriptionZh)
-    if (!turnsResult.ok) setError(turnsResult.error.descriptionZh)
+    if (turnsResult.ok) setOlderTurnsCursor(turnsResult.value.nextCursor)
+    else setError(turnsResult.error.descriptionZh)
     setLoading(false)
+  }
+
+  const loadOlderTurns = async (): Promise<void> => {
+    if (!detail || !olderTurnsCursor || loadingOlderTurns) return
+    setLoadingOlderTurns(true)
+    const result = await window.debateStudio.listDebateTurnsPage({
+      sessionId: detail.sessionId,
+      limit: 40,
+      before: olderTurnsCursor
+    })
+    if (!result.ok) setError(result.error.descriptionZh)
+    else {
+      setSnapshot((current) => {
+        const known = new Set(current.turns.map((turn) => turn.id))
+        return { ...current, turns: [...result.value.turns.filter((turn) => !known.has(turn.id)), ...current.turns] }
+      })
+      setOlderTurnsCursor(result.value.nextCursor)
+    }
+    setLoadingOlderTurns(false)
   }
 
   useEffect(() => { void reload() }, [debateId])
@@ -188,6 +210,12 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
       </div>
 
       <ResearchPanel detail={detail} refreshKey={researchVersion} onError={setError} />
+
+      {olderTurnsCursor && (
+        <button className="button ghost load-older-button" disabled={loadingOlderTurns} onClick={() => void loadOlderTurns()}>
+          {loadingOlderTurns ? '正在加载更早记录…' : '加载更早的发言与研究记录'}
+        </button>
+      )}
 
       {researchTurns.length > 0 && <details className="research-turn-archive panel">
         <summary><div><strong>研究过程</strong><span>搜索、读页和资料整理已折叠，不影响查看正式辩论</span></div><span>{researchTurns.length} 条记录</span></summary>

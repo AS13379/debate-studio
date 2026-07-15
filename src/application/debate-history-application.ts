@@ -40,7 +40,9 @@ export class DebateHistoryApplication {
       sort: query.sort ?? 'updated-desc',
       favoriteOnly: query.favoriteOnly ?? false,
       tag: query.tag?.trim() || undefined,
-      status: query.status ?? 'active'
+      status: query.status ?? 'active',
+      limit: Math.max(1, Math.min(100, Math.trunc(query.limit ?? 100))),
+      offset: Math.max(0, Math.trunc(query.offset ?? 0))
     }
     const result = this.dependencies.persistence.repositories.debateHistory.list(normalized)
     return result.ok

@@ -279,7 +279,14 @@ describe('typed IPC UI flow', () => {
       IPC_CHANNELS.exportMarkdown,
       { debateId: demo.value.id, exportOptions: { includePrivateResearch: false } }
     )
-    expect(exported).toMatchObject({ ok: true, value: { status: 'completed' } })
+    expect(exported).toMatchObject({ ok: true, value: { status: 'generating' } })
+    let exportedStatus = 'generating'
+    for (let attempt = 0; attempt < 100 && exportedStatus === 'generating'; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      const history = await first.ipc.invoke<{ ok: true; value: Array<{ exportId: string; status: string }> }>(IPC_CHANNELS.listExports)
+      exportedStatus = history.value.find((record) => record.exportId === exported.value.exportId)?.status ?? 'missing'
+    }
+    expect(exportedStatus).toBe('completed')
     first.dispose()
     await firstApplication.close()
 

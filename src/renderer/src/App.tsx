@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { lazy, Profiler, Suspense, useEffect, useRef, useState } from 'react'
 
 import type { DebateDetailDto, DebateHistoryListQueryDto, DebateHistorySummaryDto } from '../../shared/ipc-contract'
 import { HomePage } from './pages/HomePage'
-import { LiveDebatePage } from './pages/LiveDebatePage'
-import { NewDebatePage } from './pages/NewDebatePage'
-import { ProviderManagementPage } from './pages/ProviderManagementPage'
-import { DiagnosticsPage } from './pages/DiagnosticsPage'
-import { DebateHistoryPage } from './pages/DebateHistoryPage'
+
+const LiveDebatePage = lazy(() => import('./pages/LiveDebatePage').then((module) => ({ default: module.LiveDebatePage })))
+const NewDebatePage = lazy(() => import('./pages/NewDebatePage').then((module) => ({ default: module.NewDebatePage })))
+const ProviderManagementPage = lazy(() => import('./pages/ProviderManagementPage').then((module) => ({ default: module.ProviderManagementPage })))
+const DiagnosticsPage = lazy(() => import('./pages/DiagnosticsPage').then((module) => ({ default: module.DiagnosticsPage })))
+const DebateHistoryPage = lazy(() => import('./pages/DebateHistoryPage').then((module) => ({ default: module.DebateHistoryPage })))
 
 type Page = 'home' | 'new' | 'models' | 'diagnostics' | 'live' | 'history'
 
@@ -18,14 +19,27 @@ export function App() {
   const [debates, setDebates] = useState<DebateHistorySummaryDto[]>([])
   const [historyQuery, setHistoryQuery] = useState<DebateHistoryListQueryDto>({ status: 'active', sort: 'updated-desc' })
   const [loading, setLoading] = useState(true)
+  const [historyHasMore, setHistoryHasMore] = useState(false)
   const [error, setError] = useState<string>()
   const [version, setVersion] = useState('')
+  const lastPerformanceReportAt = useRef(0)
 
-  const loadDebates = async (query = historyQuery): Promise<void> => {
+  const reportRender = (_id: string, _phase: string, actualDuration: number): void => {
+    const now = performance.now()
+    if (now - lastPerformanceReportAt.current < 750) return
+    lastPerformanceReportAt.current = now
+    const reporter = window.debateStudio.reportRendererPerformance
+    if (typeof reporter === 'function') void reporter({ durationMs: actualDuration, source: page })
+  }
+
+  const loadDebates = async (query = historyQuery, append = false): Promise<void> => {
     setLoading(true)
-    const result = await window.debateStudio.listDebates(query)
+    const offset = append ? debates.length : 0
+    const result = await window.debateStudio.listDebates({ ...query, limit: 51, offset })
     if (result.ok) {
-      setDebates(result.value)
+      const page = result.value.slice(0, 50)
+      setDebates((current) => append ? [...current, ...page] : page)
+      setHistoryHasMore(result.value.length > 50)
       setError(undefined)
     } else setError(result.error.descriptionZh)
     setLoading(false)
@@ -89,13 +103,18 @@ export function App() {
         <span className="app-version">v{version || '…'}</span>
       </aside>
       <main className="content-area">
+        <Profiler id={page} onRender={reportRender}>
+        <Suspense fallback={<section className="panel muted page-loading" role="status">正在按需加载页面…</section>}>
+        <>
         {page === 'home' && (
           <HomePage
             debates={debates}
             query={historyQuery}
             loading={loading}
             error={error}
+            hasMore={historyHasMore}
             onQueryChange={setHistoryQuery}
+            onLoadMore={() => void loadDebates(historyQuery, true)}
             onCreate={() => setPage('new')}
             onCreateDemo={() => void createDemo()}
             onOpen={openDebate}
@@ -115,6 +134,9 @@ export function App() {
         {page === 'live' && selectedDebateId && (
           <LiveDebatePage debateId={selectedDebateId} onBack={goHome} onOpenModels={() => setPage('models')} />
         )}
+        </>
+        </Suspense>
+        </Profiler>
       </main>
     </div>
   )

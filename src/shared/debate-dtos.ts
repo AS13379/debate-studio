@@ -134,6 +134,17 @@ export interface DebateTurnDto {
   completedAt?: string
 }
 
+export interface DebateTurnPageDto {
+  turns: DebateTurnDto[]
+  nextCursor?: { createdAt: string; id: string }
+}
+
+export interface DebateTurnPageInputDto {
+  sessionId: string
+  limit?: number
+  before?: { createdAt: string; id: string }
+}
+
 export interface DebateTurnFailureDto {
   code: string
   titleZh: string

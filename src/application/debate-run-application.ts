@@ -229,8 +229,8 @@ export class DebateRunApplication {
     const session = this.persistence.repositories.sessions.get(sessionId)
     if (!session.ok) return this.persistenceFailure(session.error)
     if (!session.value) return this.sessionNotFound(sessionId)
-    const turns = this.persistence.repositories.turns.listBySession(sessionId)
-    if (!turns.ok) return this.persistenceFailure(turns.error)
+    const lastTurn = this.persistence.repositories.turns.findLatest(sessionId)
+    if (!lastTurn.ok) return this.persistenceFailure(lastTurn.error)
     return {
       ok: true,
       state: {
@@ -238,7 +238,7 @@ export class DebateRunApplication {
         status: session.value.status,
         currentStage: session.value.currentStage,
         active: Boolean(this.handles.get(sessionId)?.drivePromise),
-        lastTurn: turns.value.at(-1)
+        lastTurn: lastTurn.value
       }
     }
   }

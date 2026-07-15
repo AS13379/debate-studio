@@ -7,6 +7,8 @@ import type {
   DebateSetupDto,
   DebateSummaryDto,
   DebateTurnDto,
+  DebateTurnPageDto,
+  DebateTurnPageInputDto,
   ModelProfileDto,
   ProviderPresetDto,
   ProviderConnectionDto,
@@ -32,7 +34,9 @@ import type {
   DiagnosticsResultDto,
   ErrorRecordDto,
   LogEntryDto,
-  RendererErrorInputDto
+  PerformanceSnapshotDto,
+  RendererErrorInputDto,
+  RendererPerformanceInputDto
 } from './diagnostics-dtos'
 import type {
   DebateHistoryDetailDto,
@@ -47,6 +51,7 @@ import type {
 import type {
   DebateExportRecordDto,
   DebateExportResultDto,
+  CancelExportInputDto,
   DeleteExportInputDto,
   ExportDebateInputDto
 } from './export-dtos'
@@ -84,6 +89,7 @@ export const IPC_CHANNELS = {
   restoreDebate: 'history:restore-debate',
   deleteDebate: 'history:delete-debate',
   listDebateTurns: 'query:list-debate-turns',
+  listDebateTurnsPage: 'query:list-debate-turns-page',
   loadDebateSetup: 'query:load-debate-setup',
   loadResearchWorkspace: 'research:load-workspace',
   addResearchAsset: 'research:add-asset',
@@ -106,10 +112,13 @@ export const IPC_CHANNELS = {
   getRecentLogs: 'diagnostics:get-recent-logs',
   clearLogs: 'diagnostics:clear-logs',
   reportRendererError: 'diagnostics:report-renderer-error',
+  reportRendererPerformance: 'diagnostics:report-renderer-performance',
+  getPerformanceSnapshot: 'diagnostics:get-performance-snapshot',
   exportMarkdown: 'export:markdown',
   exportHtml: 'export:html',
   listExports: 'export:list',
   deleteExport: 'export:delete',
+  cancelExport: 'export:cancel',
   runEvent: 'run:event'
 } as const
 
@@ -188,6 +197,7 @@ export interface DebateStudioApi {
   restoreDebate(input: { id: string }): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
   deleteDebate(input: DeleteDebateInputDto): Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>
   listDebateTurns(input: { sessionId: string }): Promise<ConfigurationResultDto<DebateTurnDto[]>>
+  listDebateTurnsPage(input: DebateTurnPageInputDto): Promise<ConfigurationResultDto<DebateTurnPageDto>>
   loadDebateSetup(input: { sessionId: string }): Promise<ConfigurationResultDto<DebateSetupDto>>
   loadResearchWorkspace(input: { sessionId: string }): Promise<ResearchResultDto<ResearchWorkspaceDto>>
   addResearchAsset(input: AddResearchAssetInput): Promise<ResearchResultDto<ResearchAssetDto>>
@@ -210,10 +220,13 @@ export interface DebateStudioApi {
   getRecentLogs(): Promise<DiagnosticsResultDto<LogEntryDto[]>>
   clearLogs(): Promise<DiagnosticsResultDto<boolean>>
   reportRendererError(input: RendererErrorInputDto): Promise<DiagnosticsResultDto<boolean>>
+  reportRendererPerformance(input: RendererPerformanceInputDto): Promise<DiagnosticsResultDto<boolean>>
+  getPerformanceSnapshot(): Promise<DiagnosticsResultDto<PerformanceSnapshotDto>>
   exportMarkdown(input: ExportDebateInputDto): Promise<DebateExportResultDto<DebateExportRecordDto>>
   exportHtml(input: ExportDebateInputDto): Promise<DebateExportResultDto<DebateExportRecordDto>>
   listExports(): Promise<DebateExportResultDto<DebateExportRecordDto[]>>
   deleteExport(input: DeleteExportInputDto): Promise<DebateExportResultDto<{ deleted: boolean }>>
+  cancelExport(input: CancelExportInputDto): Promise<DebateExportResultDto<{ cancelled: boolean }>>
   onRunEvent(listener: (event: RunEventDto) => void): () => void
 }
 
@@ -226,6 +239,8 @@ export type {
   DebateSetupDto,
   DebateSummaryDto,
   DebateTurnDto,
+  DebateTurnPageDto,
+  DebateTurnPageInputDto,
   DebateTurnFailureDto,
   DebateSetupIssueDto,
   ModelCapabilitiesDto,
@@ -261,7 +276,10 @@ export type {
   ErrorSeverityDto,
   LogEntryDto,
   LogLevelDto,
-  RendererErrorInputDto
+  PerformanceMetricSummaryDto,
+  PerformanceSnapshotDto,
+  RendererErrorInputDto,
+  RendererPerformanceInputDto
 } from './diagnostics-dtos'
 export type {
   DebateHistoryDetailDto,
@@ -282,6 +300,7 @@ export type {
   DebateExportResultDto,
   DebateExportStatusDto,
   DebateExportTypeDto,
+  CancelExportInputDto,
   DeleteExportInputDto,
   ExportDebateInputDto
 } from './export-dtos'

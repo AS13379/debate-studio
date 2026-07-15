@@ -9,6 +9,8 @@ export interface DebateHistoryListQueryDto {
   favoriteOnly?: boolean
   tag?: string
   status?: DebateHistoryStatusDto | 'all'
+  limit?: number
+  offset?: number
 }
 
 export interface DebateHistorySummaryDto extends DebateSummaryDto {

@@ -35,6 +35,8 @@ export type {
   SessionRepository,
   SettingsRepository,
   TurnRecord,
+  TurnPage,
+  TurnPageCursor,
   TurnRepository,
   UsageRecord,
   UsageRepository

@@ -337,6 +337,17 @@ export class SQLiteResearchRepository implements ResearchRepository {
       (row) => this.mapFetchedPage(row), debateSessionId)
   }
 
+  listFetchedPageSummaries(debateSessionId: string): PersistenceResult<FetchedWebPage[]> {
+    return this.mapAll(
+      `SELECT id, debate_session_id, research_session_id, source_id, owner_participant_id,
+        visibility, url, final_url, title, author, published_at, content_type,
+        '' AS body_text, summary, excerpt, body_characters, status, error_code, fetched_at, created_at
+       FROM fetched_web_pages WHERE debate_session_id = ? ORDER BY fetched_at, id`,
+      (row) => this.mapFetchedPage(row),
+      debateSessionId
+    )
+  }
+
   saveSourceEvaluation(evaluation: SourceEvaluation): PersistenceResult<void> {
     return this.voidResult(this.database.run(
       `INSERT INTO source_evaluations

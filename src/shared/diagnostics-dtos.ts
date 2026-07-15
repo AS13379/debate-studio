@@ -46,3 +46,31 @@ export interface RendererErrorInputDto {
   technicalMessage?: string
   source: string
 }
+
+export interface RendererPerformanceInputDto {
+  durationMs: number
+  source: string
+}
+
+export interface PerformanceMetricSummaryDto {
+  count: number
+  averageMs: number
+  maxMs: number
+  p95Ms: number
+}
+
+export interface PerformanceSnapshotDto {
+  generatedAt: string
+  sessions: Array<{
+    sessionId: string
+    status: string
+    totalDurationMs: number
+    turnCount: number
+    averageResponseMs: number
+    maxGenerationCharacters: number
+  }>
+  sqlite: PerformanceMetricSummaryDto
+  renderer: PerformanceMetricSummaryDto
+  exports: PerformanceMetricSummaryDto & { completed: number; failed: number; cancelled: number }
+  memoryPeakBytes?: number
+}

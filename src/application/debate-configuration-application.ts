@@ -446,6 +446,23 @@ export class DebateConfigurationApplication {
       : this.persistenceError(turns.error)
   }
 
+  listDebateTurnsPage(
+    sessionId: string,
+    limit = 40,
+    before?: { createdAt: string; id: string }
+  ): ConfigurationResultDto<import('../shared/debate-dtos').DebateTurnPageDto> {
+    const page = this.dependencies.persistence.repositories.turns.listPage(sessionId, limit, before)
+    return page.ok
+      ? {
+          ok: true,
+          value: {
+            turns: page.value.records.map((turn) => this.turnDto(turn)),
+            nextCursor: page.value.nextCursor
+          }
+        }
+      : this.persistenceError(page.error)
+  }
+
   async loadDebateSetup(sessionId: string): Promise<ConfigurationResultDto<DebateSetupDto>> {
     const loaded = this.dependencies.setupApplication.loadDebateSetup(sessionId)
     if (!loaded.setup) {

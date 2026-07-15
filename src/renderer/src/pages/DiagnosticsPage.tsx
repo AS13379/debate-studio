@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import type { ErrorRecordDto, LogEntryDto } from '../../../shared/ipc-contract'
+import type { ErrorRecordDto, LogEntryDto, PerformanceSnapshotDto } from '../../../shared/ipc-contract'
 
 const categoryLabel: Record<ErrorRecordDto['category'], string> = {
   provider: '模型服务', network: '网络', authentication: '凭据', validation: '校验',
@@ -14,6 +14,7 @@ const levelLabel: Record<LogEntryDto['level'], string> = {
 export function DiagnosticsPage() {
   const [errors, setErrors] = useState<ErrorRecordDto[]>([])
   const [logs, setLogs] = useState<LogEntryDto[]>([])
+  const [performance, setPerformance] = useState<PerformanceSnapshotDto>()
   const [selectedId, setSelectedId] = useState<string>()
   const [message, setMessage] = useState<string>()
   const [loading, setLoading] = useState(true)
@@ -21,8 +22,8 @@ export function DiagnosticsPage() {
 
   const reload = async (): Promise<void> => {
     setLoading(true)
-    const [errorResult, logResult] = await Promise.all([
-      window.debateStudio.listRecentErrors(), window.debateStudio.getRecentLogs()
+    const [errorResult, logResult, performanceResult] = await Promise.all([
+      window.debateStudio.listRecentErrors(), window.debateStudio.getRecentLogs(), window.debateStudio.getPerformanceSnapshot()
     ])
     if (errorResult.ok) {
       setErrors(errorResult.value)
@@ -30,6 +31,8 @@ export function DiagnosticsPage() {
     } else setMessage(errorResult.error.descriptionZh)
     if (logResult.ok) setLogs(logResult.value)
     else setMessage(logResult.error.descriptionZh)
+    if (performanceResult.ok) setPerformance(performanceResult.value)
+    else setMessage(performanceResult.error.descriptionZh)
     setLoading(false)
   }
 
@@ -79,6 +82,19 @@ export function DiagnosticsPage() {
         <div className="panel"><strong>{logs.length}</strong><span>最近日志</span></div>
         <div className="panel"><strong>{errors.filter((item) => item.retryable).length}</strong><span>可重试问题</span></div>
       </div>
+      <section className="panel diagnostics-section performance-panel">
+        <div className="section-heading"><div><h2>本次运行性能</h2><span>仅统计耗时、数量、字符数和进程内存，不记录任何正文</span></div></div>
+        {!performance ? <p className="muted">正在收集性能数据…</p> : (
+          <div className="performance-grid">
+            <PerformanceFact label="SQLite 平均查询" value={`${formatMs(performance.sqlite.averageMs)} / P95 ${formatMs(performance.sqlite.p95Ms)}`} />
+            <PerformanceFact label="Renderer 平均渲染" value={`${formatMs(performance.renderer.averageMs)} / 最大 ${formatMs(performance.renderer.maxMs)}`} />
+            <PerformanceFact label="导出平均耗时" value={`${formatMs(performance.exports.averageMs)} / ${performance.exports.completed} 次完成`} />
+            <PerformanceFact label="进程内存峰值" value={performance.memoryPeakBytes ? formatBytes(performance.memoryPeakBytes) : '当前环境不可用'} />
+            <PerformanceFact label="最近 Session" value={performance.sessions[0] ? `${performance.sessions[0].turnCount} Turns / ${formatMs(performance.sessions[0].totalDurationMs)}` : '尚无运行记录'} />
+            <PerformanceFact label="最长单次生成" value={performance.sessions[0] ? `${performance.sessions[0].maxGenerationCharacters.toLocaleString('zh-CN')} 字符` : '尚无运行记录'} />
+          </div>
+        )}
+      </section>
       <div className="diagnostics-grid">
         <section className="panel diagnostics-section">
           <div className="section-heading"><div><h2>最近错误</h2><span>默认不展示技术细节</span></div><button className="button ghost danger-text" disabled={!errors.length} onClick={() => void clearErrors()}>清理错误</button></div>
@@ -110,4 +126,17 @@ export function DiagnosticsPage() {
       </section>
     </section>
   )
+}
+
+function PerformanceFact({ label, value }: { label: string; value: string }) {
+  return <div className="performance-fact"><span>{label}</span><strong>{value}</strong></div>
+}
+
+function formatMs(value: number): string {
+  if (value >= 1_000) return `${(value / 1_000).toFixed(2)} 秒`
+  return `${value.toFixed(1)} ms`
+}
+
+function formatBytes(value: number): string {
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
 }

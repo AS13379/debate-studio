@@ -72,8 +72,15 @@ export const historyListQuerySchema = z.object({
   sort: z.enum(['created-desc', 'created-asc', 'updated-desc', 'updated-asc']).optional(),
   favoriteOnly: z.boolean().optional(),
   tag: z.string().trim().max(50).optional(),
-  status: z.enum(['active', 'archived', 'deleted', 'all']).optional()
+  status: z.enum(['active', 'archived', 'deleted', 'all']).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  offset: z.number().int().min(0).max(1_000_000).optional()
 }).strict().default({})
+export const debateTurnPageSchema = z.object({
+  sessionId: idSchema,
+  limit: z.number().int().min(1).max(100).optional(),
+  before: z.object({ createdAt: z.string().datetime(), id: idSchema }).strict().optional()
+}).strict()
 export const renameDebateSchema = z.object({
   id: idSchema,
   customTitle: z.string().trim().min(1).max(200)
@@ -185,6 +192,11 @@ export const rendererErrorSchema = z.object({
   source: z.string().trim().min(1).max(100)
 }).strict()
 
+export const rendererPerformanceSchema = z.object({
+  durationMs: z.number().finite().min(0).max(60_000),
+  source: z.string().trim().min(1).max(100)
+}).strict()
+
 export const exportDebateSchema = z.object({
   debateId: idSchema,
   exportOptions: z.object({
@@ -193,3 +205,4 @@ export const exportDebateSchema = z.object({
 }).strict()
 
 export const deleteExportSchema = z.object({ exportId: idSchema }).strict()
+export const cancelExportSchema = z.object({ exportId: idSchema }).strict()

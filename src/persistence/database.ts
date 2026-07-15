@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-import type { LoggerLike } from '../observability'
+import type { LoggerLike, PerformanceMetricsCollector } from '../observability'
 import { persistenceFailure, type PersistenceResult } from './errors'
 
 export type DatabaseValue = null | number | bigint | string | NodeJS.ArrayBufferView
@@ -11,6 +11,7 @@ export interface DatabaseOptions {
   appDataDirectory: string
   fileName?: string
   logger?: LoggerLike
+  performanceMetrics?: Pick<PerformanceMetricsCollector, 'recordSQLite'>
 }
 
 export interface RunResult {
@@ -21,7 +22,12 @@ export interface RunResult {
 export class Database {
   readonly path: string
 
-  private constructor(private readonly connection: DatabaseSync, path: string, private readonly logger?: LoggerLike) {
+  private constructor(
+    private readonly connection: DatabaseSync,
+    path: string,
+    private readonly logger?: LoggerLike,
+    private readonly performanceMetrics?: Pick<PerformanceMetricsCollector, 'recordSQLite'>
+  ) {
     this.path = path
   }
 
@@ -41,7 +47,7 @@ export class Database {
       })
       connection.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;')
       options.logger?.info('SQLite 数据库已打开', { source: 'sqlite', metadata: { operation: 'open' } })
-      return { ok: true, value: new Database(connection, path, options.logger) }
+      return { ok: true, value: new Database(connection, path, options.logger, options.performanceMetrics) }
     } catch (cause) {
       options.logger?.error('SQLite 数据库打开失败', { source: 'sqlite', metadata: { operation: 'open' } })
       return persistenceFailure('OPEN_FAILED', 'open', cause, `Unable to open SQLite database at ${path}.`)
@@ -49,39 +55,51 @@ export class Database {
   }
 
   execute(sql: string): PersistenceResult<void> {
+    const startedAt = performance.now()
     try {
       this.connection.exec(sql)
       return { ok: true, value: undefined }
     } catch (cause) {
       this.logFailure('execute', cause)
       return persistenceFailure(this.errorCode(cause), 'execute', cause)
+    } finally {
+      this.performanceMetrics?.recordSQLite(performance.now() - startedAt)
     }
   }
 
   run(sql: string, ...parameters: DatabaseValue[]): PersistenceResult<RunResult> {
+    const startedAt = performance.now()
     try {
       return { ok: true, value: this.connection.prepare(sql).run(...parameters) }
     } catch (cause) {
       this.logFailure('run', cause)
       return persistenceFailure(this.errorCode(cause), 'run', cause)
+    } finally {
+      this.performanceMetrics?.recordSQLite(performance.now() - startedAt)
     }
   }
 
   get<T extends object>(sql: string, ...parameters: DatabaseValue[]): PersistenceResult<T | undefined> {
+    const startedAt = performance.now()
     try {
       return { ok: true, value: this.connection.prepare(sql).get(...parameters) as T | undefined }
     } catch (cause) {
       this.logFailure('get', cause)
       return persistenceFailure(this.errorCode(cause), 'get', cause)
+    } finally {
+      this.performanceMetrics?.recordSQLite(performance.now() - startedAt)
     }
   }
 
   all<T extends object>(sql: string, ...parameters: DatabaseValue[]): PersistenceResult<T[]> {
+    const startedAt = performance.now()
     try {
       return { ok: true, value: this.connection.prepare(sql).all(...parameters) as T[] }
     } catch (cause) {
       this.logFailure('all', cause)
       return persistenceFailure(this.errorCode(cause), 'all', cause)
+    } finally {
+      this.performanceMetrics?.recordSQLite(performance.now() - startedAt)
     }
   }
 

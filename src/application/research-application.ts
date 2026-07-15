@@ -91,7 +91,7 @@ export class ResearchApplication {
     if (!issues.ok) return this.persistenceError(issues.error)
     const searchSessions = repository.listSearchSessions(sessionId)
     if (!searchSessions.ok) return this.persistenceError(searchSessions.error)
-    const fetchedPages = repository.listFetchedPages(sessionId)
+    const fetchedPages = repository.listFetchedPageSummaries(sessionId)
     if (!fetchedPages.ok) return this.persistenceError(fetchedPages.error)
     const sourceEvaluations = repository.listSourceEvaluations(sessionId)
     if (!sourceEvaluations.ok) return this.persistenceError(sourceEvaluations.error)
@@ -117,7 +117,7 @@ export class ResearchApplication {
         notes: notes.value.filter((item) => item.ownerParticipantId === ownerId),
         claims: claims.value.filter((item) => item.ownerParticipantId === ownerId),
         searchSessions: searchSessions.value.filter((item) => item.ownerParticipantId === ownerId),
-        fetchedPages: fetchedPages.value.filter((item) => item.ownerParticipantId === ownerId).map(({ bodyText, ...page }) => ({ ...page, hasFullText: Boolean(bodyText) })),
+        fetchedPages: fetchedPages.value.filter((item) => item.ownerParticipantId === ownerId).map(({ bodyText: _bodyText, ...page }) => ({ ...page, hasFullText: page.bodyCharacters > 0 })),
         sourceEvaluations: sourceEvaluations.value.filter((item) => item.ownerParticipantId === ownerId),
         toolCalls: toolCalls.value.filter((item) => item.ownerParticipantId === ownerId),
         loopState: loopStates.value.find((item) => item.ownerParticipantId === ownerId)
