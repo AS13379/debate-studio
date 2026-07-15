@@ -22,6 +22,10 @@ export type {
   EntityRepository,
   EventRecord,
   EventRepository,
+  ExportRecord,
+  ExportRepository,
+  ExportStatus,
+  ExportType,
   ModelProfileRepository,
   ProviderConnectionRepository,
   ResearchRepository,
@@ -36,6 +40,7 @@ export type {
   UsageRepository
 } from './repositories'
 export { SQLiteResearchRepository } from './sqlite-research-repository'
+export { SQLiteExportRepository } from './sqlite-export-repository'
 export { SQLiteDebateHistoryRepository } from './sqlite-debate-history-repository'
 export { SQLiteSearchProviderConnectionRepository } from './sqlite-search-provider-connection-repository'
 export { SQLiteDebateParticipantRepository } from './sqlite-debate-participant-repository'

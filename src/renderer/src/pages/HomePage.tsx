@@ -10,11 +10,12 @@ export interface HomePageProps {
   onCreateDemo(): void
   onOpen(debate: DebateHistorySummaryDto): void
   onOpenHistory?(debate: DebateHistorySummaryDto): void
+  onExport?(debate: DebateHistorySummaryDto): void
 }
 
 export function HomePage({
   debates, query = {}, loading, error, onQueryChange = () => undefined, onCreate, onCreateDemo, onOpen,
-  onOpenHistory = onOpen
+  onOpenHistory = onOpen, onExport = onOpenHistory
 }: HomePageProps) {
   const availableTags = [...new Set([
     ...debates.flatMap((debate) => debate.tags),
@@ -118,6 +119,7 @@ export function HomePage({
               {debate.tags.length > 0 && <div className="tag-list">{debate.tags.map((tag) => <span className="tag-pill" key={tag}>{tag}</span>)}</div>}
               <div className="compact-actions history-card-actions">
                 {debate.historyStatus === 'active' && <button className="button secondary" onClick={() => onOpen(debate)}>继续查看或运行</button>}
+                <button className="button ghost" onClick={() => onExport(debate)}>导出</button>
                 <button className="button ghost" onClick={() => onOpenHistory(debate)}>详情与管理</button>
               </div>
             </article>

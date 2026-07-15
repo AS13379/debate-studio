@@ -20,6 +20,7 @@ describe('debate history UI', () => {
     expect(html).toContain('回收站')
     expect(html).toContain('长期观察案例')
     expect(html).toContain('详情与管理')
+    expect(html).toContain('导出')
   })
 
   it('shows the actual soft-delete impact and protected external configuration', () => {

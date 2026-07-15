@@ -28,9 +28,9 @@ describe('preload DebateStudioApi', () => {
 
     expect(Object.keys(api).sort()).toEqual([
       'addResearchAsset', 'addTag', 'archiveDebate', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDebate', 'createMockDemoDebate', 'decideResearchToolCall', 'deleteCredential',
-      'deleteDebate', 'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
-      'exportDiagnosticReport', 'getAppVersion', 'getDebate', 'getDebateDetail', 'getErrorDetail', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebates',
-      'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
+      'deleteDebate', 'deleteExport', 'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
+      'exportDiagnosticReport', 'exportHtml', 'exportMarkdown', 'getAppVersion', 'getDebate', 'getDebateDetail', 'getErrorDetail', 'getRecentLogs', 'getRunState', 'listDebateTurns', 'listDebates',
+      'listExports', 'listModelProfiles', 'listProviderConnections', 'listProviderPresets', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'onRunEvent',
       'pauseDebate', 'publishResearchEvidence', 'removeTag', 'renameDebate', 'reportRendererError', 'restoreDebate', 'resumeDebate', 'retryFailedTurn', 'runMockSearch', 'saveCredential', 'saveModelProfile',
       'saveParticipantBindings', 'saveProviderConnection', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection',
       'startDebate', 'stopDebate', 'testConnection', 'testSearchConnection', 'toggleFavorite', 'updateEvidenceStatus'

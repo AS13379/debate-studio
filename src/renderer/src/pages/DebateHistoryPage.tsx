@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 
-import type { DebateHistoryDetailDto, DebateHistoryResultDto } from '../../../shared/ipc-contract'
+import type {
+  DebateExportRecordDto,
+  DebateHistoryDetailDto,
+  DebateHistoryResultDto
+} from '../../../shared/ipc-contract'
 import { MarkdownContent } from '../components/MarkdownContent'
 import { stageLabel, statusLabel } from './HomePage'
 
@@ -18,6 +22,12 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [includePrivateResearch, setIncludePrivateResearch] = useState(false)
+  const [exporting, setExporting] = useState<'markdown' | 'html'>()
+  const [exports, setExports] = useState<DebateExportRecordDto[]>([])
+  const [exportMessage, setExportMessage] = useState<string>()
+  const [exportError, setExportError] = useState<string>()
+  const [confirmExportDeleteId, setConfirmExportDeleteId] = useState<string>()
 
   const load = async (): Promise<void> => {
     const result = await window.debateStudio.getDebateDetail({ id: debateId })
@@ -29,7 +39,38 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
     }
   }
 
-  useEffect(() => { void load() }, [debateId])
+  const loadExports = async (): Promise<void> => {
+    const result = await window.debateStudio.listExports()
+    if (result.ok) setExports(result.value.filter((record) => record.debateId === debateId))
+    else setExportError(result.error.descriptionZh)
+  }
+
+  useEffect(() => { void load(); void loadExports() }, [debateId])
+
+  const runExport = async (type: 'markdown' | 'html'): Promise<void> => {
+    setExporting(type)
+    setExportMessage(undefined)
+    setExportError(undefined)
+    const input = { debateId, exportOptions: { includePrivateResearch } }
+    const result = type === 'markdown'
+      ? await window.debateStudio.exportMarkdown(input)
+      : await window.debateStudio.exportHtml(input)
+    if (result.ok) {
+      setExportMessage(`导出完成：${result.value.filePath}`)
+      await loadExports()
+    } else setExportError(result.error.descriptionZh)
+    setExporting(undefined)
+  }
+
+  const deleteExport = async (exportId: string): Promise<void> => {
+    const result = await window.debateStudio.deleteExport({ exportId })
+    if (!result.ok) setExportError(result.error.descriptionZh)
+    else {
+      setExportMessage(result.value.deleted ? '导出文件和历史记录已删除。' : '导出记录已经不存在。')
+      setConfirmExportDeleteId(undefined)
+      await loadExports()
+    }
+  }
 
   const update = async (operation: Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>): Promise<void> => {
     setBusy(true)
@@ -133,6 +174,21 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
         <p>{researchStatusLabel(detail.research.status)} · {detail.research.completedSessionCount}/{detail.research.sessionCount} 个研究空间完成</p>
       </section>
 
+      <DebateExportPanel
+        completed={detail.status === 'completed'}
+        includePrivateResearch={includePrivateResearch}
+        exporting={exporting}
+        records={exports}
+        message={exportMessage}
+        error={exportError}
+        confirmDeleteId={confirmExportDeleteId}
+        onIncludePrivateResearchChange={setIncludePrivateResearch}
+        onExport={(type) => void runExport(type)}
+        onRequestDelete={setConfirmExportDeleteId}
+        onCancelDelete={() => setConfirmExportDeleteId(undefined)}
+        onConfirmDelete={(exportId) => void deleteExport(exportId)}
+      />
+
       <details className="panel collapsible-section history-adjudication">
         <summary><div><strong>最终裁决</strong><span>{detail.finalAdjudication ? '点击按需展开' : '尚无裁决'}</span></div></summary>
         <div className="collapsible-body">
@@ -157,6 +213,71 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
       />}
     </section>
   )
+}
+
+export function DebateExportPanel({
+  completed,
+  includePrivateResearch,
+  exporting,
+  records,
+  message,
+  error,
+  confirmDeleteId,
+  onIncludePrivateResearchChange,
+  onExport,
+  onRequestDelete,
+  onCancelDelete,
+  onConfirmDelete
+}: {
+  completed: boolean
+  includePrivateResearch: boolean
+  exporting?: 'markdown' | 'html'
+  records: DebateExportRecordDto[]
+  message?: string
+  error?: string
+  confirmDeleteId?: string
+  onIncludePrivateResearchChange(value: boolean): void
+  onExport(type: 'markdown' | 'html'): void
+  onRequestDelete(exportId: string): void
+  onCancelDelete(): void
+  onConfirmDelete(exportId: string): void
+}) {
+  return <section className="panel debate-export-panel" aria-labelledby="debate-export-title">
+    <div className="section-heading">
+      <div><strong id="debate-export-title">导出与归档</strong><span>文件由主进程安全生成，默认只包含公开资料</span></div>
+      <div className="compact-actions">
+        <button className="button secondary" disabled={!completed || Boolean(exporting)} onClick={() => onExport('markdown')}>{exporting === 'markdown' ? '正在导出…' : '导出 Markdown'}</button>
+        <button className="button primary" disabled={!completed || Boolean(exporting)} onClick={() => onExport('html')}>{exporting === 'html' ? '正在导出…' : '导出 HTML'}</button>
+      </div>
+    </div>
+    {!completed && <div className="notice">辩论完成后即可导出，当前记录不会生成不完整归档。</div>}
+    <label className="checkbox-field export-private-option">
+      <input type="checkbox" checked={includePrivateResearch} onChange={(event) => onIncludePrivateResearchChange(event.target.checked)} />
+      包含私有研究
+    </label>
+    {includePrivateResearch && <div className="notice warning" role="alert"><strong>隐私提醒：</strong>导出的文件会包含正反方和主持人的私有研究内容。请确认接收者与分享范围。</div>}
+    {message && <div className="notice success export-path" role="status">{message}</div>}
+    {error && <div className="notice error" role="alert">导出失败：{error}</div>}
+    <details className="export-history" open={records.length > 0}>
+      <summary>导出历史（{records.length}）</summary>
+      {records.length === 0 ? <p className="muted">尚未生成导出文件。</p> : <div className="export-record-list">
+        {records.map((record) => <article className={`export-record status-${record.status}`} key={record.exportId}>
+          <div><strong>{record.type === 'markdown' ? 'Markdown' : 'HTML'}</strong><span>{new Date(record.createdAt).toLocaleString('zh-CN')} · {formatFileSize(record.fileSize)}</span></div>
+          <p className="export-record-path">{record.filePath}</p>
+          <div className="export-record-meta">
+            <span>{exportStatusLabel(record.status)}</span>
+            {record.includePrivateResearch && <span className="private-badge">包含私有研究</span>}
+          </div>
+          {record.error && <div className="notice error"><strong>{record.error.titleZh}</strong>：{record.error.descriptionZh}</div>}
+          {confirmDeleteId === record.exportId ? <div className="compact-actions export-delete-confirm">
+            <span>同时删除本地文件？</span>
+            <button className="button ghost" onClick={onCancelDelete}>取消</button>
+            <button className="button danger" onClick={() => onConfirmDelete(record.exportId)}>确认删除</button>
+          </div> : <button className="button ghost export-delete" onClick={() => onRequestDelete(record.exportId)}>删除导出</button>}
+        </article>)}
+      </div>}
+    </details>
+  </section>
 }
 
 export function DeleteDebateConfirmation({ detail, busy, onCancel, onConfirm }: {
@@ -192,4 +313,12 @@ function historyStatusLabel(status: string): string {
 }
 function researchStatusLabel(status: string): string {
   return { 'not-started': '尚未开始研究', planning: '研究规划中', researching: '研究进行中', drafting: '论证草拟中', completed: '研究已完成' }[status] ?? status
+}
+function exportStatusLabel(status: string): string {
+  return { generating: '生成中', completed: '已完成', failed: '失败' }[status] ?? status
+}
+function formatFileSize(size: number): string {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }

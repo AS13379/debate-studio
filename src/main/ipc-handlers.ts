@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod'
 
 import type {
-  DebateConfigurationApplication, DebateHistoryApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ResearchApplication
+  DebateConfigurationApplication, DebateHistoryApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ResearchApplication
 } from '../application'
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
@@ -22,9 +22,11 @@ import {
   credentialInputSchema,
   deleteProviderConnectionSchema,
   deleteDebateSchema,
+  deleteExportSchema,
   debateTagSchema,
   historyListQuerySchema,
   idInputSchema,
+  exportDebateSchema,
   publishEvidenceSchema,
   researchRuntimeSettingsSchema,
   rendererErrorSchema,
@@ -53,6 +55,7 @@ export interface DebateIpcDependencies {
   run: DebateRunApplication
   research?: ResearchApplication
   diagnostics: DiagnosticsApplication
+  exports: ExportApplication
   logger: LoggerLike
   errorCenter: ErrorCenter
   getAppVersion(): string
@@ -119,6 +122,10 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.getRecentLogs, () => dependencies.diagnostics.getRecentLogs())
   ipcMain.handle(IPC_CHANNELS.clearLogs, () => dependencies.diagnostics.clearLogs())
   ipcMain.handle(IPC_CHANNELS.reportRendererError, validated(rendererErrorSchema, (input) => dependencies.diagnostics.reportRendererError(input)))
+  ipcMain.handle(IPC_CHANNELS.exportMarkdown, validated(exportDebateSchema, (input) => dependencies.exports.exportDebateMarkdown(input.debateId, input.exportOptions)))
+  ipcMain.handle(IPC_CHANNELS.exportHtml, validated(exportDebateSchema, (input) => dependencies.exports.exportDebateHtml(input.debateId, input.exportOptions)))
+  ipcMain.handle(IPC_CHANNELS.listExports, () => dependencies.exports.getExportHistory())
+  ipcMain.handle(IPC_CHANNELS.deleteExport, validated(deleteExportSchema, (input) => dependencies.exports.deleteExportRecord(input.exportId)))
 
   const unsubscribe = run.subscribe((event) => {
     dependencies.diagnostics.observeRunEvent(event)

@@ -44,6 +44,12 @@ import type {
   RenameDebateInputDto,
   ToggleFavoriteInputDto
 } from './history-dtos'
+import type {
+  DebateExportRecordDto,
+  DebateExportResultDto,
+  DeleteExportInputDto,
+  ExportDebateInputDto
+} from './export-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
@@ -100,6 +106,10 @@ export const IPC_CHANNELS = {
   getRecentLogs: 'diagnostics:get-recent-logs',
   clearLogs: 'diagnostics:clear-logs',
   reportRendererError: 'diagnostics:report-renderer-error',
+  exportMarkdown: 'export:markdown',
+  exportHtml: 'export:html',
+  listExports: 'export:list',
+  deleteExport: 'export:delete',
   runEvent: 'run:event'
 } as const
 
@@ -200,6 +210,10 @@ export interface DebateStudioApi {
   getRecentLogs(): Promise<DiagnosticsResultDto<LogEntryDto[]>>
   clearLogs(): Promise<DiagnosticsResultDto<boolean>>
   reportRendererError(input: RendererErrorInputDto): Promise<DiagnosticsResultDto<boolean>>
+  exportMarkdown(input: ExportDebateInputDto): Promise<DebateExportResultDto<DebateExportRecordDto>>
+  exportHtml(input: ExportDebateInputDto): Promise<DebateExportResultDto<DebateExportRecordDto>>
+  listExports(): Promise<DebateExportResultDto<DebateExportRecordDto[]>>
+  deleteExport(input: DeleteExportInputDto): Promise<DebateExportResultDto<{ deleted: boolean }>>
   onRunEvent(listener: (event: RunEventDto) => void): () => void
 }
 
@@ -262,3 +276,12 @@ export type {
   RenameDebateInputDto,
   ToggleFavoriteInputDto
 } from './history-dtos'
+export type {
+  DebateExportOptionsDto,
+  DebateExportRecordDto,
+  DebateExportResultDto,
+  DebateExportStatusDto,
+  DebateExportTypeDto,
+  DeleteExportInputDto,
+  ExportDebateInputDto
+} from './export-dtos'

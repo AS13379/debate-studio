@@ -25,4 +25,6 @@ export type { DebateDesktopApplicationOptions } from './debate-desktop-applicati
 export { DiagnosticsApplication } from './diagnostics-application'
 export { DebateHistoryApplication } from './debate-history-application'
 export type { DebateHistoryApplicationDependencies } from './debate-history-application'
+export { ExportApplication } from './export-application'
+export type { ExportApplicationDependencies } from './export-application'
 export type { DiagnosticsApplicationOptions } from './diagnostics-application'

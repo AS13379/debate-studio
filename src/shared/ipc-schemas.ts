@@ -184,3 +184,12 @@ export const rendererErrorSchema = z.object({
   technicalMessage: z.string().trim().max(1_000).optional(),
   source: z.string().trim().min(1).max(100)
 }).strict()
+
+export const exportDebateSchema = z.object({
+  debateId: idSchema,
+  exportOptions: z.object({
+    includePrivateResearch: z.boolean()
+  }).strict()
+}).strict()
+
+export const deleteExportSchema = z.object({ exportId: idSchema }).strict()

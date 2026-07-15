@@ -150,6 +150,22 @@ export interface UsageRecord {
   createdAt: string
 }
 
+export type ExportType = 'markdown' | 'html'
+export type ExportStatus = 'generating' | 'completed' | 'failed'
+
+export interface ExportRecord {
+  id: string
+  debateId: string
+  type: ExportType
+  includePrivateResearch: boolean
+  filePath: string
+  createdAt: string
+  fileSize: number
+  status: ExportStatus
+  errorTitle?: string
+  errorMessage?: string
+}
+
 export interface EntityRepository<T extends { id: string }> {
   findById(id: string): PersistenceResult<T | undefined>
   save(record: T): PersistenceResult<void>
@@ -194,6 +210,14 @@ export interface UsageRepository {
   findById(id: string): PersistenceResult<UsageRecord | undefined>
   create(record: UsageRecord): PersistenceResult<void>
   listBySession(sessionId: string): PersistenceResult<UsageRecord[]>
+}
+
+export interface ExportRepository {
+  create(record: ExportRecord): PersistenceResult<void>
+  update(record: ExportRecord): PersistenceResult<boolean>
+  findById(id: string): PersistenceResult<ExportRecord | undefined>
+  list(): PersistenceResult<ExportRecord[]>
+  delete(id: string): PersistenceResult<boolean>
 }
 
 export interface SettingsRepository {
@@ -290,6 +314,7 @@ export interface RepositoryCollection {
   turns: TurnRepository
   events: EventRepository
   usage: UsageRepository
+  exports: ExportRepository
   research: ResearchRepository
   searchProviderConnections: SearchProviderConnectionRepository
 }

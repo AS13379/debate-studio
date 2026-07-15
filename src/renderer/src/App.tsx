@@ -100,6 +100,7 @@ export function App() {
             onCreateDemo={() => void createDemo()}
             onOpen={openDebate}
             onOpenHistory={openHistory}
+            onExport={openHistory}
           />
         )}
         {page === 'new' && <NewDebatePage onBack={goHome} onCreated={openDebate} onOpenModels={() => setPage('models')} />}

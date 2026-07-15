@@ -541,6 +541,29 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_debate_tags_tag
         ON debate_tags(tag COLLATE NOCASE);
     `
+  },
+  {
+    version: 11,
+    name: 'debate_export_records',
+    sql: `
+      CREATE TABLE export_records (
+        id TEXT PRIMARY KEY,
+        debate_id TEXT NOT NULL REFERENCES debates(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('markdown', 'html')),
+        include_private_research INTEGER NOT NULL CHECK (include_private_research IN (0, 1)),
+        file_path TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        file_size INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL CHECK (status IN ('generating', 'completed', 'failed')),
+        error_title TEXT,
+        error_message TEXT
+      );
+
+      CREATE INDEX idx_export_records_debate_created
+        ON export_records(debate_id, created_at DESC);
+      CREATE INDEX idx_export_records_status
+        ON export_records(status, created_at DESC);
+    `
   }
 ]
 

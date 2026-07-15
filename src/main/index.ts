@@ -59,6 +59,7 @@ app.whenReady().then(() => {
     run: desktopApplication.run,
     research: desktopApplication.research,
     diagnostics: desktopApplication.diagnostics,
+    exports: desktopApplication.exports,
     logger: desktopApplication.logger,
     errorCenter: desktopApplication.errorCenter,
     getAppVersion: () => app.getVersion(),

@@ -110,6 +110,7 @@ function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()
     run: application.run,
     research: application.research,
     diagnostics: application.diagnostics,
+    exports: application.exports,
     logger: application.logger,
     errorCenter: application.errorCenter,
     getAppVersion: () => '0.1.0-test',
@@ -182,6 +183,10 @@ describe('typed IPC UI flow', () => {
 
     expect(invalid).toMatchObject({ ok: false, error: { code: 'IPC_VALIDATION_FAILED' } })
     expect(connections.value).toEqual([])
+    const invalidExport = await ipc.invoke<{ ok: false; error: { code: string } }>(IPC_CHANNELS.exportMarkdown, {
+      debateId: 'debate-1', exportOptions: { includePrivateResearch: false }, apiKey: secret
+    })
+    expect(invalidExport).toMatchObject({ ok: false, error: { code: 'IPC_VALIDATION_FAILED' } })
     expect(JSON.stringify(invalid)).not.toContain(secret)
     dispose()
     expect(ipc.handlers.size).toBe(0)
@@ -249,7 +254,7 @@ describe('typed IPC UI flow', () => {
     const firstApplication = createApplication(path)
     const first = register(firstApplication)
 
-    const demo = await first.ipc.invoke<{ ok: true; value: { sessionId: string } }>(IPC_CHANNELS.createMockDemoDebate)
+    const demo = await first.ipc.invoke<{ ok: true; value: { id: string; sessionId: string } }>(IPC_CHANNELS.createMockDemoDebate)
     const completed = await first.ipc.invoke<{ ok: boolean; state: { status: string } }>(
       IPC_CHANNELS.startDebate,
       { sessionId: demo.value.sessionId }
@@ -270,6 +275,11 @@ describe('typed IPC UI flow', () => {
     expect(research.value.negative.goals).not.toHaveLength(0)
     expect(first.events.some((event) => event.type === 'turnUpdated')).toBe(true)
     expect(first.events.at(-1)?.type).toBe('sessionCompleted')
+    const exported = await first.ipc.invoke<{ ok: true; value: { exportId: string; filePath: string; status: string } }>(
+      IPC_CHANNELS.exportMarkdown,
+      { debateId: demo.value.id, exportOptions: { includePrivateResearch: false } }
+    )
+    expect(exported).toMatchObject({ ok: true, value: { status: 'completed' } })
     first.dispose()
     await firstApplication.close()
 
@@ -287,6 +297,9 @@ describe('typed IPC UI flow', () => {
     )
     expect(restoredResearch.value.publicPool).toBeDefined()
     expect(restoredResearch.value.affirmative.goals).not.toHaveLength(0)
+    const restoredExports = await reopened.ipc.invoke<{ ok: true; value: Array<{ exportId: string }> }>(IPC_CHANNELS.listExports)
+    expect(restoredExports.value).toHaveLength(1)
+    expect(restoredExports.value[0].exportId).toBe(exported.value.exportId)
     reopened.dispose()
   })
 
