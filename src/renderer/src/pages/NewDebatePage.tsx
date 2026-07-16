@@ -181,7 +181,7 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
     <section className="page-stack new-debate-page" aria-labelledby="new-debate-title">
       <header className="page-header compact">
         <div><p className="eyebrow">Debate Planner</p><h1 id="new-debate-title">新建辩论</h1><p className="page-description">只输入一个辩题，也可以先生成方案、确认后再创建。</p></div>
-        <button className="button ghost" onClick={onBack}>返回列表</button>
+        <button className="button ghost header-back-button" onClick={onBack}>返回列表</button>
       </header>
 
       {error && <div className="notice error" role="alert">{error}</div>}
