@@ -15,6 +15,7 @@ import { DebateProgress } from '../components/DebateProgress'
 import { MarkdownContent } from '../components/MarkdownContent'
 import { ResearchPanel } from '../components/ResearchPanel'
 import { DebateQualityPanel } from '../components/DebateQualityPanel'
+import { DebateInlineManagement } from '../components/DebateInlineManagement'
 import { formatDebateSpeechMarkdown } from '../debate-speech'
 import { applyRunEvent, type LiveRunSnapshot } from '../run-state'
 import { stageLabel, statusLabel } from './HomePage'
@@ -23,6 +24,7 @@ export interface LiveDebatePageProps {
   debateId: string
   onBack(): void
   onOpenModels(): void
+  onHistoryChanged?(): void | Promise<void>
 }
 
 export function isDebateStartBlocked(setup?: Pick<DebateSetupDto, 'validation'>): boolean {
@@ -38,7 +40,7 @@ export function isResearchPreparationStage(stage: string): boolean {
   return RESEARCH_PREPARATION_STAGES.has(stage)
 }
 
-export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePageProps) {
+export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChanged = () => undefined }: LiveDebatePageProps) {
   const [detail, setDetail] = useState<DebateDetailDto>()
   const [setup, setSetup] = useState<DebateSetupDto>()
   const [snapshot, setSnapshot] = useState<LiveRunSnapshot>({ turns: [] })
@@ -157,6 +159,8 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels }: LiveDebatePag
         </div>
         <button className="button ghost" onClick={onBack}>返回列表</button>
       </header>
+
+      <DebateInlineManagement debateId={debateId} onChanged={onHistoryChanged} onExit={onBack} />
 
       <DebateProgress stage={state?.currentStage ?? detail.currentStage} />
 

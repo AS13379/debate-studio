@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { DeleteDebateConfirmation } from '../src/renderer/src/pages/DebateHistoryPage'
-import { HomePage } from '../src/renderer/src/pages/HomePage'
+import { DeleteDebateConfirmation } from '../src/renderer/src/components/DeleteDebateConfirmation'
+import { BatchDeleteConfirmation, HomePage } from '../src/renderer/src/pages/HomePage'
 import type { DebateHistoryDetailDto, DebateHistorySummaryDto } from '../src/shared/ipc-contract'
 
 const summary: DebateHistorySummaryDto = {
@@ -19,8 +19,10 @@ describe('debate history UI', () => {
     expect(html).toContain('已归档')
     expect(html).toContain('回收站')
     expect(html).toContain('长期观察案例')
-    expect(html).toContain('详情与管理')
-    expect(html).toContain('导出')
+    expect(html).toContain('详情、重命名与标签')
+    expect(html).toContain('批量收藏')
+    expect(html).toContain('导出 HTML')
+    expect(html).toContain('全选当前')
   })
 
   it('shows the actual soft-delete impact and protected external configuration', () => {
@@ -42,5 +44,12 @@ describe('debate history UI', () => {
     expect(html).toContain('研究索引：12')
     expect(html).toContain('确认软删除')
     expect(html).toContain('Provider、ModelProfile 和系统加密凭据均不会受到影响')
+  })
+
+  it('shows a recoverable batch soft-delete confirmation', () => {
+    const html = renderToStaticMarkup(<BatchDeleteConfirmation debates={[summary, { ...summary, id: 'debate-2', displayTitle: '第二场' }]} busy={false} onCancel={() => undefined} onConfirm={() => undefined} />)
+    expect(html).toContain('将 2 场辩论移入回收站')
+    expect(html).toContain('API Key')
+    expect(html).toContain('可在回收站恢复')
   })
 })

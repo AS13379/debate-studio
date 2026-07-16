@@ -1,4 +1,4 @@
-import { lazy, Profiler, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Profiler, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import type { DebateDetailDto, DebateHistoryListQueryDto, DebateHistorySummaryDto, OnboardingStateDto } from '../../shared/ipc-contract'
 import type { SettingsTab } from './pages/SettingsPage'
@@ -68,6 +68,10 @@ export function App() {
       })
     }
   }, [])
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }, [page, settingsTab, selectedDebateId, selectedHistoryId])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void loadDebates(historyQuery), 160)
@@ -150,7 +154,7 @@ export function App() {
             onOpenOnboarding={() => void reopenOnboarding()}
             onOpen={openDebate}
             onOpenHistory={openHistory}
-            onExport={openHistory}
+            onChanged={() => loadDebates()}
           />
         )}
         {page === 'new' && <NewDebatePage onBack={goHome} onCreated={openDebate} onOpenModels={() => openSettings('providers')} />}
@@ -163,7 +167,7 @@ export function App() {
           onOpenDebate={(id) => openDebate({ id })}
         />}
         {page === 'live' && selectedDebateId && (
-          <LiveDebatePage debateId={selectedDebateId} onBack={goHome} onOpenModels={() => openSettings('providers')} />
+          <LiveDebatePage debateId={selectedDebateId} onBack={goHome} onOpenModels={() => openSettings('providers')} onHistoryChanged={() => loadDebates()} />
         )}
         </>
         </Suspense>
