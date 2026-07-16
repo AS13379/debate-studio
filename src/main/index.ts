@@ -42,7 +42,17 @@ function createWindow(): void {
   }
 }
 
+function configureDockIcon(): void {
+  if (process.platform !== 'darwin' || !app.dock) return
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(app.getAppPath(), 'build', 'icon.png')
+  const icon = nativeImage.createFromPath(iconPath)
+  if (!icon.isEmpty()) app.dock.setIcon(icon)
+}
+
 if (hasSingleInstanceLock) void app.whenReady().then(() => {
+  configureDockIcon()
   const appDataDirectory = app.getPath('userData')
   const credentialStore = new EncryptedFileCredentialStore({
     filePath: join(appDataDirectory, 'security', 'credentials.bin'),

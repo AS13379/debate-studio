@@ -3,12 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="${0:A:h:h}"
 ICONSET_DIR="$ROOT_DIR/build/icon.iconset"
-SOURCE="$ROOT_DIR/build/icon.svg"
+SOURCE="$ROOT_DIR/build/icon.png"
 
 rm -rf "$ICONSET_DIR"
 mkdir -p "$ICONSET_DIR"
-qlmanage -t -s 1024 -o "$ICONSET_DIR" "$SOURCE" >/dev/null 2>&1
-mv "$ICONSET_DIR/icon.svg.png" "$ICONSET_DIR/source.png"
+"$ROOT_DIR/node_modules/.bin/electron" "$ROOT_DIR/scripts/render-macos-icon.cjs"
+cp "$SOURCE" "$ICONSET_DIR/source.png"
 
 for size in 16 32 128 256 512; do
   sips -z "$size" "$size" "$ICONSET_DIR/source.png" --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
