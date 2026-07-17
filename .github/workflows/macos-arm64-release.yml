@@ -2,6 +2,11 @@ name: macOS arm64 release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: GitHub Release tag to receive the DMG
+        required: true
+        type: string
   release:
     types: [published]
 
@@ -32,7 +37,7 @@ jobs:
           npm test
 
       - name: Build unsigned arm64 DMG
-        run: npm run release:mac:arm64
+        run: npm run release:mac:arm64 -- --publish never
 
       - name: Verify packaged artifact
         run: npm run release:check
@@ -46,7 +51,8 @@ jobs:
           retention-days: 14
 
       - name: Attach DMG to GitHub Release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" release/Debate-Studio-*-arm64.dmg --clobber
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" release/Debate-Studio-*-arm64.dmg --clobber
