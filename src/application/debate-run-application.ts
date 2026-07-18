@@ -212,15 +212,23 @@ export class DebateRunApplication {
     const available = this.ensureAvailable()
     if (available) return available
     let handle = this.handles.get(sessionId)
-    if (handle?.drivePromise) return this.alreadyRunning()
     if (!handle) {
       const restored = this.restoreHandle(sessionId, 'running')
       if (!restored.ok) return restored
       handle = restored.handle
       this.handles.set(sessionId, handle)
     }
+    const pending = handle.drivePromise
     if (!handle.runner.skip(reason)) {
       return this.invalidState('跳过当前阶段失败', 'SessionRunner 拒绝了当前 skip 命令。')
+    }
+    // Do not make the command wait for the rest of the debate. The active
+    // drive owns continuation after AbortSignal settles; the UI should receive
+    // the new stage immediately so this action remains a real escape hatch.
+    if (pending) {
+      const settled = await handle.runner.waitForSkipSettlement()
+      if (settled === false) return this.invalidState('跳过当前阶段失败', '在途请求结束后无法推进状态机。')
+      return this.stateAfterFlush(sessionId)
     }
     return this.launch(sessionId, handle, () => handle.runner.run())
   }

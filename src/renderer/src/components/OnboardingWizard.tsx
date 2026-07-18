@@ -17,8 +17,9 @@ export function OnboardingWizard({ state, onClose, onCreated }: {
   const [defaults, setDefaults] = useState({ affirmative: '', negative: '', moderator: '' })
   const [status, setStatus] = useState<string>()
   const [busy, setBusy] = useState(false)
+  const [customModel, setCustomModel] = useState(false)
 
-  useEffect(() => setForm(providerForm(selected)), [selectedProvider])
+  useEffect(() => { setForm(providerForm(selected)); setCustomModel(false) }, [selectedProvider])
   useEffect(() => {
     if (step >= 4) void window.debateStudio.listModelProfiles().then((result) => {
       if (!result.ok) return
@@ -45,13 +46,17 @@ export function OnboardingWizard({ state, onClose, onCreated }: {
     setBusy(false)
     if (!result.ok) return setStatus(`${result.error.titleZh}：${result.error.descriptionZh}`)
     setForm((current) => ({ ...current, apiKey: '' }))
-    setSaved(result.value); setStatus('模型连接与凭据已安全保存。'); setStep(3)
+    setSaved(result.value); setStatus('模型连接与凭据已安全保存，正在自动测试…'); setStep(3)
+    await test(result.value)
   }
 
-  const test = async (): Promise<void> => {
-    if (!saved) return
+  const test = async (target = saved): Promise<void> => {
+    if (!target) return
     setBusy(true); setStatus('正在发送最小连接测试…')
-    const result = await window.debateStudio.testOnboardingConnection(saved)
+    const result = await window.debateStudio.testOnboardingConnection({
+      connectionId: target.connectionId,
+      modelProfileId: target.modelProfileId
+    })
     setBusy(false)
     if (!result.ok) return setStatus(`${result.error.titleZh}：${result.error.descriptionZh}`)
     setStatus(`连接正常，延迟 ${result.value.latencyMs} ms。`); setStep(4)
@@ -85,12 +90,24 @@ export function OnboardingWizard({ state, onClose, onCreated }: {
       {step === 2 && <div className="onboarding-form">
         <label className="field">模型服务<select value={selectedProvider} onChange={(event) => setSelectedProvider(event.target.value)}>{state.recommendations.map((item) => <option key={item.providerId} value={item.providerId}>{item.displayName}</option>)}</select></label>
         <div className="onboarding-recommendation"><b>推荐：{selected?.recommendedModelId}</b><span>{selected?.recommendedContextWindow.toLocaleString()} 上下文 · {selected?.recommendedMaxOutputTokens} 最大输出</span><small>{selected?.costNoticeZh}</small></div>
+        {selected && <div className="provider-official-links">
+          <button type="button" className="button ghost official-link" onClick={() => void window.debateStudio.openExternalUrl({ url: selected.platformUrl })}>打开服务商平台</button>
+          <button type="button" className="button ghost official-link" onClick={() => void window.debateStudio.openExternalUrl({ url: selected.documentationUrl })}>接入文档</button>
+          <button type="button" className="button ghost official-link" onClick={() => void window.debateStudio.openExternalUrl({ url: selected.pricingUrl })}>官方定价</button>
+        </div>}
         <label className="field">Base URL<input value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} /></label>
-        <label className="field">Model ID<input value={form.modelId} onChange={(event) => setForm({ ...form, modelId: event.target.value })} /></label>
+        <label className="field">模型<select value={customModel ? '__custom__' : form.modelId} onChange={(event) => {
+          if (event.target.value === '__custom__') { setCustomModel(true); setForm({ ...form, modelId: '' }) }
+          else { setCustomModel(false); setForm({ ...form, modelId: event.target.value }) }
+        }}>
+          {selected?.modelOptions.map((model) => <option key={model.id} value={model.id}>{model.displayName} · {model.id}</option>)}
+          <option value="__custom__">自定义 Model ID…</option>
+        </select></label>
+        {customModel && <label className="field">自定义 Model ID<input value={form.modelId} onChange={(event) => setForm({ ...form, modelId: event.target.value })} /></label>}
         <label className="field">API Key<input type="password" autoComplete="off" value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} placeholder="只发送到主进程并保存到系统加密存储" /></label>
         <button className="button primary" disabled={busy || !form.apiKey || !form.modelId || !form.baseUrl} onClick={() => void saveProvider()}>{busy ? '正在保存…' : '安全保存并继续'}</button>
       </div>}
-      {step === 3 && <div className="onboarding-copy"><div className="onboarding-symbol">连</div><h2>测试最小模型请求</h2><p>只有点击按钮才会请求服务商。Key 仅在输入时短暂存在于 Renderer，一次性传入主进程后会立即清空，不会写入 SQLite、日志或 IPC 返回值。</p><button className="button primary" disabled={busy || !saved} onClick={() => void test()}>{busy ? '测试中…' : '测试连接'}</button></div>}
+      {step === 3 && <div className="onboarding-copy"><div className="onboarding-symbol">连</div><h2>{busy ? '正在自动测试连接' : '连接测试没有通过'}</h2><p>{busy ? '正在发送一个最小模型请求。API Key 已离开输入框，只在主进程安全存储和请求 Header 中使用。' : '检查下方中文错误后可以直接重试，不需要返回寻找测试按钮。'}</p>{busy && <div className="operation-progress onboarding-auto-test"><span style={{ width: '68%' }} /></div>}{!busy && <button className="button primary" disabled={!saved} onClick={() => void test()}>重新测试</button>}</div>}
       {step === 4 && <div className="onboarding-form"><label className="checkbox-field"><input type="checkbox" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />高级模式：三个角色使用不同模型</label>
         <ModelSelect label="正方" value={defaults.affirmative} profiles={profiles} onChange={(affirmative) => setDefaults({ ...defaults, affirmative, ...(!advanced ? { negative: affirmative, moderator: affirmative } : {}) })} />
         {advanced && <><ModelSelect label="反方" value={defaults.negative} profiles={profiles} onChange={(negative) => setDefaults({ ...defaults, negative })} /><ModelSelect label="主持人" value={defaults.moderator} profiles={profiles} onChange={(moderator) => setDefaults({ ...defaults, moderator })} /></>}

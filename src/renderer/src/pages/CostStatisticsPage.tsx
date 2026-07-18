@@ -1,34 +1,82 @@
 import { useEffect, useState } from 'react'
 
-import type { CostSummaryDto, ModelProfileDto, ProviderPricingDto } from '../../../shared/ipc-contract'
+import type { CostSummaryDto, ProviderPricingDto } from '../../../shared/ipc-contract'
 
 export function CostStatisticsPage() {
   const [summary, setSummary] = useState<CostSummaryDto>()
-  const [profiles, setProfiles] = useState<ModelProfileDto[]>([])
   const [pricing, setPricing] = useState<ProviderPricingDto[]>([])
-  const [editing, setEditing] = useState<string>()
-  const [inputPrice, setInputPrice] = useState('')
-  const [outputPrice, setOutputPrice] = useState('')
-  const load = async () => {
-    const [summaryResult, profileResult, pricingResult] = await Promise.all([window.debateStudio.getCostSummary(), window.debateStudio.listModelProfiles(), window.debateStudio.listProviderPricing()])
-    if (summaryResult.ok) setSummary(summaryResult.value)
-    if (profileResult.ok) setProfiles(profileResult.value)
-    if (pricingResult.ok) setPricing(pricingResult.value)
-  }
-  useEffect(() => { void load() }, [])
-  const begin = (profile: ModelProfileDto) => {
-    const value = pricing.find((item) => item.modelProfileId === profile.id)
-    setEditing(profile.id); setInputPrice(value?.inputPricePerMillion.toString() ?? ''); setOutputPrice(value?.outputPricePerMillion.toString() ?? '')
-  }
-  const save = async (profileId: string) => {
-    await window.debateStudio.saveProviderPricing({ modelProfileId: profileId, inputPricePerMillion: Number(inputPrice), outputPricePerMillion: Number(outputPrice), currency: 'USD' })
-    setEditing(undefined); await load()
-  }
-  return <section className="page-stack"><header className="page-header"><div><p className="eyebrow">UsageRecord</p><h1>成本统计</h1><p className="page-description">只计算服务商实际返回的 Token；价格只使用你明确配置的定价，不自动猜测。</p></div></header>
-    <div className="cost-kpis"><article><span>调用</span><b>{summary?.totalCalls ?? 0}</b></article><article><span>总 Token</span><b>{formatUnknown(summary?.totalTokens)}</b></article><article><span>估算费用</span><b>{summary?.totalCost === undefined ? '未知' : `$${summary.totalCost.toFixed(4)}`}</b></article><article><span>Token 未知调用</span><b>{summary?.unknownTokenCalls ?? 0}</b></article></div>
-    <div className="panel"><div className="section-heading"><div><strong>模型定价</strong><span>单位：每百万 Token / USD</span></div></div><div className="pricing-list">{profiles.map((profile) => { const value = pricing.find((item) => item.modelProfileId === profile.id); return <div className="pricing-row" key={profile.id}><div><strong>{profile.displayName}</strong><span>{profile.modelId}</span></div>{editing === profile.id ? <><input type="number" min="0" step="0.01" value={inputPrice} onChange={(event) => setInputPrice(event.target.value)} placeholder="输入价格" /><input type="number" min="0" step="0.01" value={outputPrice} onChange={(event) => setOutputPrice(event.target.value)} placeholder="输出价格" /><button className="button primary" onClick={() => void save(profile.id)}>保存</button></> : <><span>{value ? `输入 $${value.inputPricePerMillion} · 输出 $${value.outputPricePerMillion}` : '未配置价格'}</span><button className="button secondary" onClick={() => begin(profile)}>配置</button></>}</div>})}</div></div>
-    <div className="panel"><strong>按模型</strong><div className="cost-ranking">{summary?.byModel.map((item) => <div key={item.modelId}><span>{item.modelId}</span><span>{item.calls} 次 · {formatUnknown(item.totalTokens)} Token · {item.totalCost === undefined ? item.pricingConfigured ? 'Token 未知' : '未配置价格' : `$${item.totalCost.toFixed(4)}`}</span></div>)}</div></div>
+
+  useEffect(() => {
+    void Promise.all([
+      window.debateStudio.getCostSummary(),
+      window.debateStudio.listProviderPricing()
+    ]).then(([summaryResult, pricingResult]) => {
+      if (summaryResult.ok) setSummary(summaryResult.value)
+      if (pricingResult.ok) setPricing(pricingResult.value)
+    })
+  }, [])
+
+  return <section className="page-stack">
+    <header className="page-header"><div>
+      <p className="eyebrow">UsageRecord</p>
+      <h1>成本统计</h1>
+      <p className="page-description">只计算服务商实际返回的 Token；模型价格来自服务商官方定价，应用自动匹配，无需手动配置。</p>
+    </div></header>
+
+    <div className="cost-kpis">
+      <article><span>调用</span><b>{summary?.totalCalls ?? 0}</b></article>
+      <article><span>总 Token</span><b>{formatUnknown(summary?.totalTokens)}</b></article>
+      <article><span>估算费用</span><b>{formatCurrencyTotals(summary?.totalsByCurrency)}</b></article>
+      <article><span>Token 未知调用</span><b>{summary?.unknownTokenCalls ?? 0}</b></article>
+    </div>
+
+    <div className="panel">
+      <div className="section-heading"><div>
+        <strong>模型定价</strong>
+        <span>单位：每百万 Token；输入费用按缓存未命中价估算，阶梯价按实际输入 Token 自动选择</span>
+      </div></div>
+      <div className="pricing-list">
+        {pricing.length === 0
+          ? <div className="empty-state compact"><strong>暂无可匹配的官方定价</strong><span>应用不会为自定义或未确认的模型猜测价格。</span></div>
+          : pricing.map((value) => <PricingRow key={value.modelProfileId} value={value} />)}
+      </div>
+    </div>
+
+    <div className="panel"><strong>按模型</strong><div className="cost-ranking">
+      {summary?.byModel.map((item) => <div key={item.modelId}>
+        <span>{item.modelId}</span>
+        <span>{item.calls} 次 · {formatUnknown(item.totalTokens)} Token · {item.costsByCurrency.length
+          ? formatCurrencyTotals(item.costsByCurrency)
+          : item.pricingConfigured ? 'Token 未知' : '暂无官方定价'}</span>
+      </div>)}
+    </div></div>
   </section>
 }
 
-function formatUnknown(value?: number): string { return value === undefined ? '未知' : value.toLocaleString() }
+function PricingRow({ value }: { value: ProviderPricingDto }) {
+  return <div className="pricing-row">
+    <div><strong>{value.modelId}</strong><span>{value.sourceLabel ?? '本地定价记录'}</span></div>
+    <div className="pricing-values">
+      <strong>输入 {formatUnitPrice(value.inputPricePerMillion, value.currency)}</strong>
+      <span>{value.cacheHitInputPricePerMillion === undefined ? '缓存价未知' : `缓存命中 ${formatUnitPrice(value.cacheHitInputPricePerMillion, value.currency)}`}</span>
+    </div>
+    <div className="pricing-values"><strong>输出 {formatUnitPrice(value.outputPricePerMillion, value.currency)}</strong><span>每百万 Token</span></div>
+    {value.sourceUrl
+      ? <button className="button ghost official-link" onClick={() => void window.debateStudio.openExternalUrl({ url: value.sourceUrl! })}>官方来源 · {value.sourceVerifiedAt}</button>
+      : <span className="pricing-source">来源未记录</span>}
+    {value.pricingNoteZh && <small className="pricing-note">{value.pricingNoteZh}</small>}
+  </div>
+}
+
+function formatUnitPrice(value: number, currency: string): string {
+  return `${currency === 'CNY' ? '¥' : '$'}${value}`
+}
+
+function formatCurrencyTotals(rows?: Array<{ currency: string; totalCost: number }>): string {
+  if (!rows?.length) return '未知'
+  return rows.map((row) => `${row.currency === 'CNY' ? '¥' : '$'}${row.totalCost.toFixed(4)}`).join(' · ')
+}
+
+function formatUnknown(value?: number): string {
+  return value === undefined ? '未知' : value.toLocaleString()
+}

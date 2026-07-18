@@ -16,7 +16,7 @@ import {
   type ModelProfile,
   type ProviderConnection
 } from '../provider-config'
-import type { ConnectionTestService } from '../providers'
+import type { ConnectionTestService, ProviderModelDiscoveryService } from '../providers'
 import { redactForExport, type CredentialError, type CredentialStore } from '../security'
 import type {
   ConfigurationErrorDto,
@@ -31,6 +31,7 @@ import type {
   ParticipantBindingDto,
   ParticipantBindingInput,
   ProviderConnectionDto,
+  ProviderModelDiscoveryDto,
   ProviderPresetDto,
   SaveModelProfileInput,
   SaveParticipantBindingsInput,
@@ -62,6 +63,7 @@ export interface DebateConfigurationApplicationDependencies {
   persistence: PersistenceContext
   credentialStore: CredentialStore
   connectionTestService: ConnectionTestService
+  modelDiscoveryService: ProviderModelDiscoveryService
   setupApplication: Pick<DebateSetupApplication, 'loadDebateSetup'>
   createId?: () => string
   now?: () => Date
@@ -249,6 +251,14 @@ export class DebateConfigurationApplication {
             error: tested.error
           }
     }
+  }
+
+  async listAvailableProviderModels(connectionId: string): Promise<ConfigurationResultDto<ProviderModelDiscoveryDto>> {
+    const connection = this.dependencies.persistence.repositories.providerConnections.findById(connectionId)
+    if (!connection.ok) return this.persistenceError(connection.error)
+    if (!connection.value) return this.notFound('ProviderConnection', connectionId)
+    const result = await this.dependencies.modelDiscoveryService.list(connection.value)
+    return { ok: true, value: result }
   }
 
   createDebate(input: CreateDebateInput): ConfigurationResultDto<DebateDetailDto> {

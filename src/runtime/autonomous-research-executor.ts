@@ -87,6 +87,15 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
     const researchSession = this.ensureResearchSession(request.sessionId, participant.participant.id, role)
     const settingsResult = this.options.persistence.repositories.settings.get<ResearchRuntimeSettings>('research.runtime.defaults')
     const settings = settingsResult.ok ? settingsResult.value : undefined
+    const configuredLimits = this.normalizedLimits(settings?.limits)
+    const limits = request.stage === 'public_pool'
+      ? {
+          maxToolCalls: Math.min(configuredLimits.maxToolCalls ?? 4, 4),
+          maxSearches: Math.min(configuredLimits.maxSearches ?? 1, 1),
+          maxPageReads: Math.min(configuredLimits.maxPageReads ?? 1, 1),
+          maxBodyCharacters: Math.min(configuredLimits.maxBodyCharacters ?? 12_000, 12_000)
+        }
+      : configuredLimits
     const loop = new ResearchToolLoop({
       adapter: participant.adapter,
       repository: this.options.persistence.repositories.research,
@@ -108,10 +117,22 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
       topic: request.topic,
       goal: request.prompt,
       mode: settings?.mode ?? 'automatic',
-      limits: settings?.limits,
+      limits,
       supportsToolCalling: participant.modelProfile.capabilities.toolCalling
     })
     return result.content
+  }
+
+  private normalizedLimits(limits?: Partial<ResearchToolLimits>): Partial<ResearchToolLimits> {
+    if (!limits) return { maxToolCalls: 7, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 30_000 }
+    // Previous releases exposed only these three presets, so translating their
+    // exact values is safe and prevents an old saved “standard” profile from
+    // silently keeping the former 12-request budget after an app update.
+    const legacy = `${limits.maxToolCalls}/${limits.maxSearches}/${limits.maxPageReads}/${limits.maxBodyCharacters}`
+    if (legacy === '8/2/2/25000') return { maxToolCalls: 5, maxSearches: 1, maxPageReads: 1, maxBodyCharacters: 15_000 }
+    if (legacy === '12/3/3/45000') return { maxToolCalls: 7, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 30_000 }
+    if (legacy === '20/5/5/80000') return { maxToolCalls: 12, maxSearches: 4, maxPageReads: 4, maxBodyCharacters: 60_000 }
+    return limits
   }
 
   private defaultSearchConnection() {

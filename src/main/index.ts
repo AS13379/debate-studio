@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, safeStorage, shell } from 'electron'
 import { join } from 'node:path'
 import {
   initializeDebateDesktopApplication,
@@ -109,9 +109,15 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     logger: desktopApplication.logger,
     errorCenter: desktopApplication.errorCenter,
     getAppVersion: () => app.getVersion(),
+    openExternalUrl: (url) => shell.openExternal(url),
     broadcastRunEvent: (event) => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.runEvent, event)
+      }
+    },
+    broadcastPlannerProgress: (event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.plannerProgress, event)
       }
     }
   })

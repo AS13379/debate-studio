@@ -5,6 +5,7 @@ import type {
   DebatePlanDto,
   DebatePlannerErrorDto,
   DebatePlannerResultDto,
+  DebatePlannerProgressDto,
   DebatePlanningDepthDto,
   DebatePlanningModeDto,
   DebateDetailDto,
@@ -15,6 +16,7 @@ import type {
   DebateTurnPageDto,
   DebateTurnPageInputDto,
   ModelProfileDto,
+  ProviderModelDiscoveryDto,
   PlanDebateInputDto,
   PlannedDebateDto,
   ProviderPresetDto,
@@ -94,6 +96,7 @@ import type {
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
+  openExternalUrl: 'app:open-external-url',
   getOnboardingState: 'workbench:get-onboarding-state',
   saveOnboardingProvider: 'workbench:save-onboarding-provider',
   testOnboardingConnection: 'workbench:test-onboarding-connection',
@@ -118,6 +121,7 @@ export const IPC_CHANNELS = {
   saveProviderConnection: 'configuration:save-provider-connection',
   deleteProviderConnection: 'configuration:delete-provider-connection',
   listModelProfiles: 'configuration:list-model-profiles',
+  listAvailableProviderModels: 'configuration:list-available-provider-models',
   saveModelProfile: 'configuration:save-model-profile',
   deleteModelProfile: 'configuration:delete-model-profile',
   copyModelProfile: 'configuration:copy-model-profile',
@@ -126,12 +130,15 @@ export const IPC_CHANNELS = {
   testConnection: 'configuration:test-connection',
   createDebate: 'configuration:create-debate',
   planDebate: 'configuration:plan-debate',
+  cancelDebatePlanning: 'configuration:cancel-debate-planning',
+  plannerProgress: 'configuration:planner-progress',
   saveParticipantBindings: 'configuration:save-participant-bindings',
   createMockDemoDebate: 'configuration:create-mock-demo-debate',
   startDebate: 'run:start-debate',
   pauseDebate: 'run:pause-debate',
   resumeDebate: 'run:resume-debate',
   stopDebate: 'run:stop-debate',
+  skipDebate: 'run:skip-debate',
   retryFailedTurn: 'run:retry-failed-turn',
   getRunState: 'run:get-state',
   listDebates: 'query:list-debates',
@@ -226,6 +233,7 @@ export type RunEventDto =
 
 export interface DebateStudioApi {
   getAppVersion(): Promise<string>
+  openExternalUrl(input: { url: string }): Promise<WorkbenchResultDto<boolean>>
   getOnboardingState(): Promise<WorkbenchResultDto<OnboardingStateDto>>
   saveOnboardingProvider(input: OnboardingProviderInputDto): Promise<WorkbenchResultDto<OnboardingProviderResultDto>>
   testOnboardingConnection(input: { connectionId: string; modelProfileId?: string }): Promise<ConfigurationResultDto<ConnectionTestDto>>
@@ -250,6 +258,7 @@ export interface DebateStudioApi {
   saveProviderConnection(input: SaveProviderConnectionInput): Promise<ConfigurationResultDto<ProviderConnectionDto>>
   deleteProviderConnection(input: { id: string; deleteCredential: boolean }): Promise<ConfigurationResultDto<boolean>>
   listModelProfiles(): Promise<ConfigurationResultDto<ModelProfileDto[]>>
+  listAvailableProviderModels(input: { connectionId: string }): Promise<ConfigurationResultDto<ProviderModelDiscoveryDto>>
   saveModelProfile(input: SaveModelProfileInput): Promise<ConfigurationResultDto<ModelProfileDto>>
   deleteModelProfile(input: { id: string }): Promise<ConfigurationResultDto<boolean>>
   copyModelProfile(input: { id: string }): Promise<ConfigurationResultDto<ModelProfileDto>>
@@ -257,6 +266,7 @@ export interface DebateStudioApi {
   deleteCredential(input: { connectionId: string }): Promise<ConfigurationResultDto<boolean>>
   testConnection(input: { connectionId: string; modelProfileId?: string }): Promise<ConfigurationResultDto<ConnectionTestDto>>
   planDebate(input: PlanDebateInputDto): Promise<DebatePlannerResultDto>
+  cancelDebatePlanning(input: { operationId: string }): Promise<WorkbenchResultDto<boolean>>
   createDebate(input: CreateDebateInput): Promise<ConfigurationResultDto<DebateDetailDto>>
   saveParticipantBindings(input: SaveParticipantBindingsInput): Promise<ConfigurationResultDto<DebateDetailDto>>
   createMockDemoDebate(): Promise<ConfigurationResultDto<DebateDetailDto>>
@@ -264,6 +274,7 @@ export interface DebateStudioApi {
   pauseDebate(input: { sessionId: string }): Promise<RunCommandResultDto>
   resumeDebate(input: { sessionId: string }): Promise<RunCommandResultDto>
   stopDebate(input: { sessionId: string }): Promise<RunCommandResultDto>
+  skipDebate(input: { sessionId: string }): Promise<RunCommandResultDto>
   retryFailedTurn(input: { sessionId: string }): Promise<RunCommandResultDto>
   getRunState(input: { sessionId: string }): Promise<RunCommandResultDto>
   listDebates(input?: DebateHistoryListQueryDto): Promise<DebateHistoryResultDto<DebateHistorySummaryDto[]>>
@@ -312,6 +323,7 @@ export interface DebateStudioApi {
   deleteExport(input: DeleteExportInputDto): Promise<DebateExportResultDto<{ deleted: boolean }>>
   cancelExport(input: CancelExportInputDto): Promise<DebateExportResultDto<{ cancelled: boolean }>>
   onRunEvent(listener: (event: RunEventDto) => void): () => void
+  onPlannerProgress(listener: (event: DebatePlannerProgressDto) => void): () => void
 }
 
 export type {
@@ -370,6 +382,7 @@ export type {
   DebatePlanDto,
   DebatePlannerErrorDto,
   DebatePlannerResultDto,
+  DebatePlannerProgressDto,
   DebatePlanningDepthDto,
   DebatePlanningModeDto,
   DebateDetailDto,
@@ -386,6 +399,7 @@ export type {
   PlanDebateInputDto,
   PlannedDebateDto,
   ProviderPresetDto,
+  ProviderModelDiscoveryDto,
   ParticipantBindingDto,
   ProtocolTypeDto,
   ProviderConnectionDto,

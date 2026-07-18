@@ -37,8 +37,13 @@ export function applyRunEvent(snapshot: LiveRunSnapshot, event: RunEventDto): Li
       return { ...snapshot, turns: upsertTurn(snapshot.turns, updated) }
     }
     case 'turnCompleted':
-    case 'turnFailed':
       return { ...snapshot, turns: upsertTurn(snapshot.turns, event.turn) }
+    case 'turnFailed': {
+      const updated = { ...snapshot, turns: upsertTurn(snapshot.turns, event.turn) }
+      return event.turn.status === 'failed'
+        ? withStatus(updated, event.sessionId, 'failed', event.turn.stage)
+        : updated
+    }
     case 'sessionPaused':
       return withStatus(snapshot, event.sessionId, 'paused')
     case 'sessionStopped':

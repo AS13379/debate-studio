@@ -90,6 +90,16 @@ export function presentProviderFailure(input: ProviderFailureInput): ProviderFai
       technicalDetails
     )
   }
+  if (/reasoning_content.{0,80}(must be passed back|required)|thinking mode.{0,80}reasoning_content/i.test(source)) {
+    return presentation(
+      'UNKNOWN_PROVIDER_ERROR',
+      '推理模式无法继续工具调用',
+      '服务商要求回传隐藏推理内容，但应用出于隐私与安全原因不会保存该内容。',
+      false,
+      '研究工具会自动关闭该请求的推理模式；请重新运行当前阶段。',
+      technicalDetails
+    )
+  }
   if (/context[_ -]?length|maximum context|max(?:imum)? tokens|上下文.{0,4}(过长|超限)/i.test(source)) {
     return presentation(
       'CONTEXT_TOO_LONG',

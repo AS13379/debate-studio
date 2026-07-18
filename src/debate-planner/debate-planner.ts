@@ -8,6 +8,7 @@ import { DEBATE_PLANNING_PROMPT_VERSION, DebatePlanningPrompt } from './debate-p
 import type {
   DebatePlan,
   DebatePlannerError,
+  DebatePlannerProgressEvent,
   DebatePlannerResult,
   DebatePlanningInput
 } from './types'
@@ -24,6 +25,7 @@ export class DebatePlanner {
   private readonly prompt: DebatePlanningPrompt
   private readonly createId: () => string
   private readonly now: () => Date
+  private readonly activeControllers = new Map<string, AbortController>()
 
   constructor(private readonly options: DebatePlannerOptions) {
     this.prompt = options.prompt ?? new DebatePlanningPrompt()
@@ -31,15 +33,25 @@ export class DebatePlanner {
     this.now = options.now ?? (() => new Date())
   }
 
-  async plan(input: DebatePlanningInput): Promise<DebatePlannerResult> {
+  async plan(input: DebatePlanningInput, onProgress?: (event: DebatePlannerProgressEvent) => void): Promise<DebatePlannerResult> {
+    onProgress?.({ stage: 'preparing', progress: 8, labelZh: '正在检查辩题', detailZh: '确认输入完整，尚未创建 Session。' })
     const invalid = this.validateInput(input)
-    if (invalid) return { ok: false, error: invalid }
+    if (invalid) {
+      onProgress?.({ stage: 'failed', progress: 100, labelZh: invalid.titleZh, detailZh: invalid.descriptionZh })
+      return { ok: false, error: invalid }
+    }
     const route = this.resolveRoute()
-    if (!route.ok) return route
+    if (!route.ok) {
+      onProgress?.({ stage: 'failed', progress: 100, labelZh: route.error.titleZh, detailZh: route.error.descriptionZh })
+      return route
+    }
+    onProgress?.({ stage: 'routing', progress: 20, labelZh: '已选择规划模型', detailZh: `${route.route.modelProfile.displayName} · ${route.route.modelProfile.modelId}` })
     const prompt = this.prompt.build(input)
     const experiment = this.options.promptRuntime?.resolveActive('debate_planning')
     const requestId = this.createId()
     const controller = new AbortController()
+    const operationId = input.operationId ?? requestId
+    this.activeControllers.set(operationId, controller)
     const request: UnifiedRequest = {
       requestId,
       turnId: requestId,
@@ -54,7 +66,7 @@ export class DebatePlanner {
         { role: 'system', content: experiment ? `${prompt.system}\n\nPrompt Studio 当前版本 v${experiment.version.version}：\n${experiment.version.content}` : prompt.system },
         { role: 'user', content: prompt.user }
       ],
-      stream: false,
+      stream: true,
       maxTokens: Math.min(route.route.modelProfile.maxOutputTokens ?? 1_500, 2_000),
       runtimeMetadata: {
         sessionId: 'debate-planner', role: 'moderator', turnId: requestId, stage: 'moderating',
@@ -70,10 +82,44 @@ export class DebatePlanner {
       modelId: route.route.modelProfile.modelId, turnId: requestId
     })
 
+    const rawInput = request.messages.map((message) => `${message.role.toUpperCase()}\n${message.content}`).join('\n\n')
+    onProgress?.({
+      stage: 'requesting', progress: 34, labelZh: '正在把规划要求发送给 AI',
+      detailZh: `请求 ${route.route.providerConnection.displayName}，最大输出 ${request.maxTokens ?? '默认'} Token。`,
+      rawInput: visibleText(rawInput)
+    })
+
     try {
-      const response = await route.route.adapter.complete(request)
-      const parsed = parsePlan(response.content, input.topic.trim())
-      if (!parsed.ok) return parsed
+      let content = ''
+      let streamError: ModelAdapterError | undefined
+      let emittedAtLength = 0
+      for await (const event of route.route.adapter.stream(request)) {
+        if (event.type === 'error') {
+          streamError = new ModelAdapterError(event.error)
+          break
+        }
+        if (event.type === 'textDelta') {
+          content += event.delta
+          if (content.length - emittedAtLength >= 80) {
+            emittedAtLength = content.length
+            onProgress?.({
+              stage: 'streaming', progress: Math.min(84, 44 + Math.floor(content.length / 120)),
+              labelZh: 'AI 正在生成辩论方案', detailZh: `已收到 ${content.length.toLocaleString()} 个字符。`,
+              rawOutput: visibleText(content)
+            })
+          }
+        }
+        if (event.type === 'completed') content = event.response.content || content
+      }
+      if (streamError) throw streamError
+      if (!content.trim()) throw new ModelAdapterError({ code: 'EMPTY_RESPONSE', message: 'Planner stream returned no content.', retryable: true })
+      onProgress?.({ stage: 'parsing', progress: 90, labelZh: '正在整理 AI 返回内容', detailZh: '检查 JSON 字段，不会偷偷补全解析失败的结果。', rawOutput: visibleText(content) })
+      const parsed = parsePlan(content, input.topic.trim())
+      if (!parsed.ok) {
+        onProgress?.({ stage: 'failed', progress: 100, labelZh: parsed.error.titleZh, detailZh: parsed.error.descriptionZh, rawOutput: visibleText(content) })
+        return parsed
+      }
+      onProgress?.({ stage: 'completed', progress: 100, labelZh: '辩论方案已生成', detailZh: '可以关闭窗口并逐项编辑方案。', rawOutput: visibleText(content) })
       return {
         ok: true,
         value: {
@@ -89,7 +135,7 @@ export class DebatePlanner {
       }
     } catch (cause) {
       const detail = cause instanceof ModelAdapterError ? cause.detail : undefined
-      return {
+      const result: DebatePlannerResult = {
         ok: false,
         error: this.error(
           'MODEL_REQUEST_FAILED',
@@ -100,7 +146,18 @@ export class DebatePlanner {
           cause instanceof Error ? cause.message : String(cause)
         )
       }
+      onProgress?.({ stage: 'failed', progress: 100, labelZh: result.error.titleZh, detailZh: result.error.descriptionZh })
+      return result
+    } finally {
+      if (this.activeControllers.get(operationId) === controller) this.activeControllers.delete(operationId)
     }
+  }
+
+  cancel(operationId: string): boolean {
+    const controller = this.activeControllers.get(operationId)
+    if (!controller) return false
+    controller.abort(new Error('Debate planning cancelled by user.'))
+    return true
   }
 
   private resolveRoute(): { ok: true; route: ResolvedModelRoute } | { ok: false; error: DebatePlannerError } {
@@ -131,6 +188,12 @@ export class DebatePlanner {
       technicalDetails: technicalDetails ? redactSensitiveText(technicalDetails) : undefined
     }
   }
+}
+
+function visibleText(value: string): string {
+  const limit = 40_000
+  if (value.length <= limit) return value
+  return `${value.slice(0, 24_000)}\n\n……内容过长，已省略中间部分……\n\n${value.slice(-12_000)}`
 }
 
 function parsePlan(content: string, topic: string): { ok: true; plan: DebatePlan } | { ok: false; error: DebatePlannerError } {

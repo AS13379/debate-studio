@@ -137,6 +137,29 @@ describe('OpenAIChatAdapter', () => {
     expect(transport.requests[0].body).toMatchObject({ thinking: { type: 'disabled' } })
   })
 
+  it('disables DeepSeek thinking for multi-turn tool loops even when the profile supports reasoning', async () => {
+    const transport = new MockHttpTransport({ response: { status: 200, body: {
+      choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
+        id: 'call-search', type: 'function', function: { name: 'searchWeb', arguments: '{"query":"测试"}' }
+      }] }, finish_reason: 'tool_calls' }]
+    } } })
+    await new OpenAIChatAdapter(transport).complete({
+      ...request(),
+      tools: [{ name: 'searchWeb', description: '搜索', parameters: { type: 'object' } }],
+      toolChoice: 'auto',
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'deepseek',
+        reasoningEnabled: true
+      }
+    })
+
+    expect(transport.requests[0].body).toMatchObject({
+      thinking: { type: 'disabled' },
+      tools: [{ type: 'function', function: { name: 'searchWeb' } }]
+    })
+  })
+
   it('maps image input only when a vision request explicitly contains image bytes', async () => {
     const transport = new MockHttpTransport()
     const visionRequest = request()

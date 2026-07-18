@@ -4,11 +4,14 @@ import type {
   ConnectionTestDto,
   ModelCapabilitiesDto,
   ModelProfileDto,
+  ProviderModelDiscoveryDto,
   ProviderConnectionDto,
   ProviderPresetDto,
   ProtocolTypeDto,
   SearchProviderConnectionDto
 } from '../../../shared/ipc-contract'
+import { OperationProgressDialog, type OperationLogItem } from '../components/OperationProgressDialog'
+import { slowModelNotice } from '../model-latency'
 
 const DEFAULT_CAPABILITIES: ModelCapabilitiesDto = {
   textInput: true,
@@ -54,6 +57,9 @@ export function ProviderManagementPage() {
   const [developmentConnectionId, setDevelopmentConnectionId] = useState('')
   const [developmentProfileId, setDevelopmentProfileId] = useState('')
   const [developmentResult, setDevelopmentResult] = useState<ConnectionTestDto>()
+  const [testDialog, setTestDialog] = useState<{
+    open: boolean; running: boolean; title: string; description: string; progress: number; logs: OperationLogItem[]
+  }>({ open: false, running: false, title: '测试模型连接', description: '', progress: 0, logs: [] })
 
   const refresh = async (): Promise<void> => {
     setLoading(true)
@@ -85,15 +91,39 @@ export function ProviderManagementPage() {
     })
   }
 
-  const testConnection = async (connection: ProviderConnectionDto): Promise<void> => {
+  const testConnection = async (connection: ProviderConnectionDto, profileId?: string): Promise<void> => {
     setError(undefined)
-    const profile = profiles.find((candidate) => candidate.connectionId === connection.id)
+    const profile = profiles.find((candidate) => candidate.id === profileId)
+      ?? profiles.find((candidate) => candidate.connectionId === connection.id)
+    setTestDialog({
+      open: true, running: true, title: `测试 ${connection.displayName}`,
+      description: profile ? `正在向 ${profile.modelId} 发送一个最小请求。` : '正在读取服务商当前可用模型列表。',
+      progress: 22,
+      logs: [{ id: 'saved', label: '本地配置已保存', tone: 'success' }, { id: 'request', label: profile ? '正在发送最小模型请求' : '正在读取模型列表', detail: 'API Key 只在主进程内存和请求 Header 中使用。' }]
+    })
     const result = await window.debateStudio.testConnection({
       connectionId: connection.id,
       modelProfileId: profile?.id
     })
-    if (!result.ok) setError(result.error.descriptionZh)
-    else setTests((current) => ({ ...current, [connection.id]: result.value }))
+    if (!result.ok) {
+      setError(result.error.descriptionZh)
+      setTestDialog((current) => ({ ...current, running: false, progress: 100, description: result.error.descriptionZh, logs: [...current.logs, { id: 'failed', label: '连接测试没有完成', detail: result.error.descriptionZh, tone: 'error' }] }))
+    } else {
+      setTests((current) => ({ ...current, [connection.id]: result.value }))
+      setTestDialog((current) => ({
+        ...current, running: false, progress: 100,
+        description: result.value.success ? `连接正常，耗时 ${Math.round(result.value.latencyMs)} ms。` : result.value.error?.descriptionZh ?? '连接测试失败。',
+        logs: [...current.logs, result.value.success
+          ? { id: 'completed', label: '连接测试成功', detail: result.value.responsePreview, tone: 'success' }
+          : { id: 'failed', label: result.value.error?.titleZh ?? '连接测试失败', detail: result.value.error?.descriptionZh, tone: 'error' }]
+      }))
+    }
+  }
+
+  const afterConnectionSaved = async (saved: ProviderConnectionDto): Promise<void> => {
+    setConnectionDraft(undefined)
+    await refresh()
+    await testConnection(saved)
   }
 
   const deleteConnection = async (connection: ProviderConnectionDto, deleteCredential: boolean): Promise<void> => {
@@ -154,7 +184,7 @@ export function ProviderManagementPage() {
           presets={presets}
           onChange={setConnectionDraft}
           onCancel={() => setConnectionDraft(undefined)}
-          onSaved={async () => { setConnectionDraft(undefined); await refresh() }}
+          onSaved={afterConnectionSaved}
           onError={setError}
         />
       )}
@@ -170,6 +200,7 @@ export function ProviderManagementPage() {
       <div className="connection-list">
         {connections.map((connection) => {
           const connectionProfiles = profiles.filter((profile) => profile.connectionId === connection.id)
+          const preset = presets.find((candidate) => candidate.providerId === connection.providerId)
           return (
             <article className="panel connection-card" key={connection.id}>
               <header>
@@ -185,8 +216,9 @@ export function ProviderManagementPage() {
                       </span>
                     )}
                   </div>
-                  <p>{connection.providerId} · {connection.protocolType}</p>
+                  <p>{preset?.displayName ?? connection.displayName} · {connection.protocolType}</p>
                   <code>{connection.baseUrl}</code>
+                  {preset && <OfficialProviderLinks preset={preset} onError={setError} />}
                 </div>
                 <div className="header-actions">
                   <button className="button secondary" onClick={() => editConnection(connection)}>编辑连接</button>
@@ -200,7 +232,7 @@ export function ProviderManagementPage() {
               </header>
 
               {connection.protocolType !== 'mock' && (
-                <CredentialEditor connection={connection} onChanged={refresh} onError={setError} />
+                <CredentialEditor connection={connection} onChanged={async () => { await refresh(); await testConnection(connection) }} onError={setError} />
               )}
               {tests[connection.id] && <ConnectionTestStatus result={tests[connection.id]} />}
 
@@ -241,7 +273,12 @@ export function ProviderManagementPage() {
           profile={editingModel ?? emptyProfile(connections[0]?.id ?? '')}
           connections={connections}
           onCancel={() => setEditingModel(undefined)}
-          onSaved={async () => { setEditingModel(undefined); await refresh() }}
+          onSaved={async (savedProfile) => {
+            setEditingModel(undefined)
+            await refresh()
+            const connection = connections.find((candidate) => candidate.id === savedProfile.connectionId)
+            if (connection) await testConnection(connection, savedProfile.id)
+          }}
           onError={setError}
         />
       )}
@@ -275,6 +312,17 @@ export function ProviderManagementPage() {
           {developmentResult && <ConnectionTestStatus result={developmentResult} />}
         </section>
       )}
+      <OperationProgressDialog
+        open={testDialog.open}
+        running={testDialog.running}
+        title={testDialog.title}
+        description={testDialog.description}
+        progress={testDialog.progress}
+        logs={testDialog.logs}
+        onCancel={() => setTestDialog((current) => ({ ...current, open: false }))}
+        cancelLabel="停止等待"
+        onClose={() => setTestDialog((current) => ({ ...current, open: false }))}
+      />
     </section>
   )
 }
@@ -291,11 +339,12 @@ function ConnectionEditor({
   presets: ProviderPresetDto[]
   onChange(draft: ConnectionDraft): void
   onCancel(): void
-  onSaved(): Promise<void>
+  onSaved(connection: ProviderConnectionDto): Promise<void>
   onError(message: string): void
 }) {
   const [credential, setCredential] = useState('')
   const [saving, setSaving] = useState(false)
+  const selectedPreset = presets.find((candidate) => candidate.providerId === draft.presetId)
   const applyPreset = (providerId: string): void => {
     const preset = presets.find((candidate) => candidate.providerId === providerId)
     if (!preset) return onChange({ ...draft, presetId: '' })
@@ -332,7 +381,7 @@ function ConnectionEditor({
     }
     setCredential('')
     setSaving(false)
-    await onSaved()
+    await onSaved(saved.value)
   }
   return (
     <form className="panel form-grid connection-editor" onSubmit={(event) => void submit(event)}>
@@ -343,6 +392,7 @@ function ConnectionEditor({
           {presets.map((preset) => <option key={preset.providerId} value={preset.providerId}>{preset.displayName}</option>)}
         </select>
       </label>
+      {selectedPreset && <div className="span-2"><OfficialProviderLinks preset={selectedPreset} onError={onError} /></div>}
       <label className="field">Provider ID<input required value={draft.providerId} onChange={(event) => onChange({ ...draft, providerId: event.target.value })} /></label>
       <label className="field">显示名称<input required value={draft.displayName} onChange={(event) => onChange({ ...draft, displayName: event.target.value })} /></label>
       <label className="field">协议
@@ -357,6 +407,18 @@ function ConnectionEditor({
       <div className="form-actions span-2"><button type="button" className="button ghost" onClick={onCancel}>取消</button><button className="button primary" disabled={saving}>{saving ? '正在保存…' : '保存连接'}</button></div>
     </form>
   )
+}
+
+function OfficialProviderLinks({ preset, onError }: { preset: ProviderPresetDto; onError(message: string): void }) {
+  const open = async (url: string): Promise<void> => {
+    const result = await window.debateStudio.openExternalUrl({ url })
+    if (!result.ok) onError(result.error.descriptionZh)
+  }
+  return <div className="provider-official-links" aria-label={`${preset.displayName} 官方链接`}>
+    <button type="button" className="button ghost official-link" onClick={() => void open(preset.platformUrl)}>打开平台 / API Key</button>
+    <button type="button" className="button ghost official-link" onClick={() => void open(preset.documentationUrl)}>接入文档</button>
+    <button type="button" className="button ghost official-link" onClick={() => void open(preset.pricingUrl)}>官方定价</button>
+  </div>
 }
 
 function CredentialEditor({ connection, onChanged, onError }: { connection: ProviderConnectionDto; onChanged(): Promise<void>; onError(message: string): void }) {
@@ -381,17 +443,61 @@ function CredentialEditor({ connection, onChanged, onError }: { connection: Prov
   )
 }
 
-function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }: { profile: ModelProfileDto; connections: ProviderConnectionDto[]; onCancel(): void; onSaved(): Promise<void>; onError(message: string): void }) {
+function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }: { profile: ModelProfileDto; connections: ProviderConnectionDto[]; onCancel(): void; onSaved(profile: ModelProfileDto): Promise<void>; onError(message: string): void }) {
   const [saving, setSaving] = useState(false)
+  const [connectionId, setConnectionId] = useState(profile.connectionId || connections[0]?.id || '')
+  const [catalog, setCatalog] = useState<ProviderModelDiscoveryDto>()
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [modelId, setModelId] = useState(profile.modelId)
+  const [customModel, setCustomModel] = useState(Boolean(profile.modelId))
+  const [displayName, setDisplayName] = useState(profile.displayName)
+
+  useEffect(() => {
+    if (!connectionId) return
+    let active = true
+    setLoadingModels(true)
+    void window.debateStudio.listAvailableProviderModels({ connectionId }).then((result) => {
+      if (!active) return
+      setLoadingModels(false)
+      if (!result.ok) {
+        onError(result.error.descriptionZh)
+        setCatalog(undefined)
+        setCustomModel(true)
+        return
+      }
+      setCatalog(result.value)
+      const known = result.value.models.some((item) => item.id === modelId)
+      setCustomModel(Boolean(modelId) && !known)
+      if (!modelId && result.value.models[0]) {
+        setModelId(result.value.models[0].id)
+        setDisplayName(result.value.models[0].displayName)
+        setCustomModel(false)
+      }
+    })
+    return () => { active = false }
+  }, [connectionId])
+
+  const selectModel = (value: string): void => {
+    if (value === '__custom__') {
+      setCustomModel(true)
+      setModelId('')
+      setDisplayName('')
+      return
+    }
+    const entry = catalog?.models.find((item) => item.id === value)
+    setCustomModel(false)
+    setModelId(value)
+    setDisplayName(entry?.displayName ?? value)
+  }
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     setSaving(true)
     const saved = await window.debateStudio.saveModelProfile({
       id: profile.id || undefined,
-      connectionId: String(form.get('connectionId') ?? ''),
-      modelId: String(form.get('modelId') ?? ''),
-      displayName: String(form.get('displayName') ?? ''),
+      connectionId,
+      modelId,
+      displayName,
       alias: String(form.get('alias') ?? '') || undefined,
       capabilities: {
         ...profile.capabilities,
@@ -406,14 +512,23 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
     })
     setSaving(false)
     if (!saved.ok) onError(saved.error.descriptionZh)
-    else await onSaved()
+    else await onSaved(saved.value)
   }
   return (
     <form className="panel form-grid model-editor" onSubmit={(event) => void submit(event)}>
-      <div className="span-2 section-heading"><div><strong>{profile.id ? '编辑 ModelProfile' : '新建 ModelProfile'}</strong><span>Model ID 继续由用户手动填写</span></div></div>
-      <label className="field">平台连接<select name="connectionId" defaultValue={profile.connectionId} required>{connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName}</option>)}</select></label>
-      <label className="field">Model ID<input name="modelId" required defaultValue={profile.modelId} /></label>
-      <label className="field">显示名称<input name="displayName" required defaultValue={profile.displayName} /></label>
+      <div className="span-2 section-heading"><div><strong>{profile.id ? '编辑 ModelProfile' : '新建 ModelProfile'}</strong><span>优先读取服务商实时模型列表，也支持自定义 ID</span></div></div>
+      <label className="field">平台连接<select value={connectionId} onChange={(event) => { setConnectionId(event.target.value); setModelId(''); setDisplayName(''); setCatalog(undefined) }} required>{connections.map((connection) => <option key={connection.id} value={connection.id}>{connection.displayName}</option>)}</select></label>
+      <label className="field">选择模型
+        <select value={customModel ? '__custom__' : modelId} disabled={loadingModels} onChange={(event) => selectModel(event.target.value)} required>
+          {loadingModels && <option value="">正在读取模型列表…</option>}
+          {!loadingModels && catalog?.models.map((item) => <option key={item.id} value={item.id}>{item.displayName} · {item.id}</option>)}
+          <option value="__custom__">自定义 Model ID…</option>
+        </select>
+      </label>
+      {catalog?.warningZh && <p className="notice warning span-2">{catalog.warningZh}</p>}
+      {slowModelNotice(modelId) && <p className="notice warning span-2">{slowModelNotice(modelId)}</p>}
+      {customModel && <label className="field span-2">自定义 Model ID<input required value={modelId} onChange={(event) => { setModelId(event.target.value); if (!displayName) setDisplayName(event.target.value) }} placeholder="输入服务商文档中的模型 ID" /></label>}
+      <label className="field">显示名称<input required value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
       <label className="field">本地别名<input name="alias" defaultValue={profile.alias} /></label>
       <label className="field">上下文长度<input name="contextWindow" type="number" min="1" defaultValue={profile.contextWindow} /></label>
       <label className="field">最大输出 Token<input name="maxOutputTokens" type="number" min="1" defaultValue={profile.maxOutputTokens} /></label>

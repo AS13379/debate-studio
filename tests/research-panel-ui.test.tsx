@@ -36,6 +36,10 @@ describe('research panel UI', () => {
     expect(html).toContain('更省额度')
     expect(html).not.toContain('type="number"')
     expect(html).toContain('aria-pressed="true"')
+    expect(researchPresetForLimits({ maxToolCalls: 5, maxSearches: 1, maxPageReads: 1, maxBodyCharacters: 15_000 })).toBe('quick')
+    expect(researchPresetForLimits({ maxToolCalls: 12, maxSearches: 4, maxPageReads: 4, maxBodyCharacters: 60_000 })).toBe('deep')
+    // Existing saved v0.2.4 presets keep their selected label and the runtime
+    // translates them to the faster budget automatically.
     expect(researchPresetForLimits({ maxToolCalls: 8, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 25_000 })).toBe('quick')
     expect(researchPresetForLimits({ maxToolCalls: 20, maxSearches: 5, maxPageReads: 5, maxBodyCharacters: 80_000 })).toBe('deep')
   })

@@ -1,12 +1,15 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import type {
   DebateDetailDto,
   DebatePlanningDepthDto,
+  DebatePlannerProgressDto,
   ModelProfileDto,
   PlannedDebateDto,
   ProviderConnectionDto
 } from '../../../shared/ipc-contract'
+import { OperationProgressDialog, type OperationLogItem } from '../components/OperationProgressDialog'
+import { slowModelNotice } from '../model-latency'
 
 export interface NewDebatePageProps {
   onBack(): void
@@ -52,6 +55,10 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
   const [error, setError] = useState<string>()
   const [planning, setPlanning] = useState(false)
   const [saving, setSaving] = useState(false)
+  const activePlanningOperation = useRef<string | undefined>(undefined)
+  const [plannerDialog, setPlannerDialog] = useState<{
+    open: boolean; running: boolean; progress: number; description: string; logs: OperationLogItem[]; rawInput?: string; rawOutput?: string
+  }>({ open: false, running: false, progress: 0, description: '', logs: [] })
 
   const refreshConfiguration = async (): Promise<void> => {
     const [connectionResult, profileResult] = await Promise.all([
@@ -70,6 +77,10 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
   }
 
   useEffect(() => { void refreshConfiguration() }, [])
+  useEffect(() => window.debateStudio.onPlannerProgress((event) => {
+    if (event.operationId !== activePlanningOperation.current) return
+    setPlannerDialog((current) => plannerDialogFromEvent(current, event))
+  }), [])
 
   const generatePlan = async (): Promise<void> => {
     setError(undefined)
@@ -79,9 +90,16 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
       return
     }
     if (mode === 'manual') return
+    const operationId = globalThis.crypto.randomUUID()
+    activePlanningOperation.current = operationId
+    setPlannerDialog({
+      open: true, running: true, progress: 5, description: '正在准备辩题和规划模型。',
+      logs: [{ id: 'started', label: '开始生成辩论方案', detail: `辩题：${topic.trim()}` }]
+    })
     setPlanning(true)
     try {
       const result = await window.debateStudio.planDebate({
+        operationId,
         mode,
         topic,
         background: background || undefined,
@@ -115,6 +133,7 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
     } catch {
       setPlanned(undefined)
       setError('辩题规划服务暂时不可用，请重启应用或检查模型配置后重试。')
+      setPlannerDialog((current) => ({ ...current, running: false, progress: 100, description: '主进程没有返回规划结果。', logs: [...current.logs, { id: 'ipc-failed', label: '规划服务暂时不可用', tone: 'error' }] }))
     } finally {
       setPlanning(false)
     }
@@ -173,6 +192,9 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
   }
 
   const readyForConfiguration = mode === 'manual' || Boolean(planned)
+  const selectedSlowModels = [...new Set(Object.values(roleModels)
+    .map((id) => profiles.find((profile) => profile.id === id)?.modelId)
+    .filter((modelId): modelId is string => Boolean(modelId && slowModelNotice(modelId))))]
   const canCreate = readyForConfiguration && topic.trim() && background.trim() && affirmativePosition.trim()
     && negativePosition.trim() && Number.isInteger(freeDebateRounds) && freeDebateRounds >= 1 && freeDebateRounds <= 20
     && roleModels.affirmative && roleModels.negative && roleModels.moderator
@@ -184,7 +206,32 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
         <button className="button ghost header-back-button" onClick={onBack}>返回列表</button>
       </header>
 
+      <OperationProgressDialog
+        open={plannerDialog.open}
+        running={plannerDialog.running}
+        title="AI 正在规划辩论"
+        description={plannerDialog.description}
+        progress={plannerDialog.progress}
+        logs={plannerDialog.logs}
+        rawInput={plannerDialog.rawInput}
+        rawOutput={plannerDialog.rawOutput}
+        onCancel={() => {
+          const operationId = activePlanningOperation.current
+          if (operationId) void window.debateStudio.cancelDebatePlanning({ operationId })
+          setPlannerDialog((current) => ({
+            ...current,
+            running: false,
+            description: '已请求停止规划；不会创建 Session。',
+            logs: [...current.logs, { id: `cancel-${Date.now()}`, label: '用户停止了当前规划', tone: 'error' }]
+          }))
+        }}
+        onClose={() => setPlannerDialog((current) => ({ ...current, open: false }))}
+      />
+
       {error && <div className="notice error" role="alert">{error}</div>}
+      {selectedSlowModels.length > 0 && <div className="notice warning" role="status">
+        当前选择包含长思考模型（{selectedSlowModels.join('、')}）。生成前可能长时间没有正文，进度窗口会持续显示当前状态。
+      </div>}
 
       <section className="creation-mode-panel panel">
         <div className="section-heading"><div><h2>创建方式</h2><span>AI 只返回最终结构化方案，不保存分析过程</span></div></div>
@@ -249,6 +296,27 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
       </form>
     </section>
   )
+}
+
+function plannerDialogFromEvent(
+  current: { open: boolean; running: boolean; progress: number; description: string; logs: OperationLogItem[]; rawInput?: string; rawOutput?: string },
+  event: DebatePlannerProgressDto
+): typeof current {
+  const tone: OperationLogItem['tone'] = event.stage === 'failed' ? 'error' : event.stage === 'completed' ? 'success' : 'normal'
+  const nextItem: OperationLogItem = { id: `${event.stage}-${event.progress}-${event.rawOutput?.length ?? 0}`, label: event.labelZh, detail: event.detailZh, tone }
+  const withoutPreviousStreaming = event.stage === 'streaming'
+    ? current.logs.filter((item) => !item.id.startsWith('streaming-'))
+    : current.logs
+  return {
+    ...current,
+    open: true,
+    running: event.stage !== 'completed' && event.stage !== 'failed',
+    progress: event.progress,
+    description: event.detailZh ?? event.labelZh,
+    logs: [...withoutPreviousStreaming, nextItem].slice(-12),
+    rawInput: event.rawInput ?? current.rawInput,
+    rawOutput: event.rawOutput ?? current.rawOutput
+  }
 }
 
 interface PlanReviewProps {

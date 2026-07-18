@@ -29,7 +29,9 @@ export class FetchHttpTransport implements HttpTransport {
 
   constructor(options: FetchHttpTransportOptions = {}) {
     this.fetchImplementation = options.fetchImplementation ?? globalThis.fetch.bind(globalThis)
-    this.timeoutMs = options.timeoutMs ?? 30_000
+    // Reasoning models may spend a long time before the first visible token.
+    // Callers can still provide a shorter timeout for tests or connection probes.
+    this.timeoutMs = options.timeoutMs ?? 120_000
     this.logger = options.logger
   }
 

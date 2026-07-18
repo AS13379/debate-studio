@@ -2,6 +2,9 @@ import { z } from 'zod'
 
 const idSchema = z.string().trim().min(1).max(200)
 const optionalIdSchema = idSchema.optional()
+export const externalUrlSchema = z.object({
+  url: z.string().url().refine((value) => new URL(value).protocol === 'https:', 'Only HTTPS URLs are allowed')
+}).strict()
 const protocolSchema = z.enum([
   'mock',
   'openai-chat',
@@ -44,6 +47,8 @@ export const saveModelProfileSchema = z.object({
   maxOutputTokens: z.number().int().positive().max(10_000_000).optional()
 }).strict()
 
+export const providerModelDiscoverySchema = z.object({ connectionId: idSchema }).strict()
+
 const debatePlanSchema = z.object({
   topic: z.string().trim().min(1).max(1_000),
   background: z.string().trim().min(1).max(20_000),
@@ -66,6 +71,7 @@ const plannedDebateSchema = z.object({
 }).strict()
 
 export const planDebateSchema = z.object({
+  operationId: idSchema,
   mode: z.enum(['auto', 'assist']),
   topic: z.string().trim().min(1).max(1_000),
   background: z.string().trim().max(20_000).optional(),
@@ -78,6 +84,8 @@ export const planDebateSchema = z.object({
   if (!value.affirmativePosition) context.addIssue({ code: 'custom', path: ['affirmativePosition'], message: 'AI 辅助模式需要正方初始立场' })
   if (!value.negativePosition) context.addIssue({ code: 'custom', path: ['negativePosition'], message: 'AI 辅助模式需要反方初始立场' })
 })
+
+export const plannerOperationSchema = z.object({ operationId: idSchema }).strict()
 
 export const createDebateSchema = z.object({
   topic: z.string().trim().min(1).max(1_000),

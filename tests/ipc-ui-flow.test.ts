@@ -117,7 +117,8 @@ function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()
     logger: application.logger,
     errorCenter: application.errorCenter,
     getAppVersion: () => '0.1.0-test',
-    broadcastRunEvent: (event) => events.push(event)
+    broadcastRunEvent: (event) => events.push(event),
+    broadcastPlannerProgress: () => undefined
   })
   return { ipc, events, dispose }
 }
@@ -363,6 +364,33 @@ describe('typed IPC UI flow', () => {
     expect(stopped).toMatchObject({ ok: true, state: { status: 'stopped' } })
     expect(adapter.calls).toBe(callsAtStop)
     expect(adapter.aborted).toBe(1)
+    dispose()
+  })
+
+  it('passes skip, aborts the active request and continues from the next stage', async () => {
+    const adapter = new ControlledMockAdapter([1])
+    const app = createApplication(temporaryDirectory(), adapter)
+    const { ipc, dispose } = register(app)
+    const demo = await ipc.invoke<{ ok: true; value: { sessionId: string } }>(IPC_CHANNELS.createMockDemoDebate)
+    const running = ipc.invoke(IPC_CHANNELS.startDebate, { sessionId: demo.value.sessionId })
+    await waitFor(() => adapter.calls === 1)
+
+    const skipped = await ipc.invoke<{ ok: boolean; state: { status: string; currentStage: string } }>(
+      IPC_CHANNELS.skipDebate,
+      { sessionId: demo.value.sessionId }
+    )
+    await running
+    const turns = await ipc.invoke<{ ok: true; value: Array<{ stage: string; status: string }> }>(
+      IPC_CHANNELS.listDebateTurns,
+      { sessionId: demo.value.sessionId }
+    )
+
+    expect(skipped).toMatchObject({ ok: true, state: { status: 'running', currentStage: 'moderating' } })
+    expect(adapter.aborted).toBe(1)
+    expect(turns.value).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: 'validating', status: 'cancelled' }),
+      expect.objectContaining({ stage: 'validating', status: 'skipped' })
+    ]))
     dispose()
   })
 

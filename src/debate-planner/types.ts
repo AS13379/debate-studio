@@ -12,6 +12,7 @@ export interface DebatePlan {
 }
 
 export interface DebatePlanningInput {
+  operationId?: string
   mode: DebatePlanningMode
   topic: string
   background?: string
@@ -19,6 +20,17 @@ export interface DebatePlanningInput {
   depth?: DebatePlanningDepth
   affirmativePosition?: string
   negativePosition?: string
+}
+
+export type DebatePlannerProgressStage = 'preparing' | 'routing' | 'requesting' | 'streaming' | 'parsing' | 'completed' | 'failed'
+
+export interface DebatePlannerProgressEvent {
+  stage: DebatePlannerProgressStage
+  progress: number
+  labelZh: string
+  detailZh?: string
+  rawInput?: string
+  rawOutput?: string
 }
 
 export interface DebatePlanProvenance {

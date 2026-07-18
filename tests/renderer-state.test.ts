@@ -66,4 +66,22 @@ describe('Renderer state', () => {
     expect(isResearchPreparationStage('affirmative_opening')).toBe(false)
     expect(isResearchPreparationStage('free_debate')).toBe(false)
   })
+
+  it('stops presenting a failed model turn as an active run', () => {
+    const failed = applyRunEvent({
+      state: { sessionId: 'session-ui', status: 'streaming', currentStage: 'public_pool', active: true },
+      turns: []
+    }, {
+      id: 'event-failed',
+      type: 'turnFailed',
+      sessionId: 'session-ui',
+      createdAt: '2026-07-13T00:00:02.000Z',
+      turn: {
+        id: 'turn-failed', sessionId: 'session-ui', participantId: 'moderator-ui',
+        stage: 'public_pool', status: 'failed', content: '', createdAt: '2026-07-13T00:00:00.000Z'
+      }
+    })
+
+    expect(failed.state).toMatchObject({ status: 'failed', active: false, currentStage: 'public_pool' })
+  })
 })

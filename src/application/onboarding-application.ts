@@ -9,6 +9,7 @@ import type {
 } from '../shared/workbench-dtos'
 import type { DebateConfigurationApplication } from './debate-configuration-application'
 import type { ModelRoutingService } from '../model-routing'
+import { getFallbackProviderModels, getProviderPreset } from '../provider-config'
 
 const STATE_KEY = 'onboarding.state.v1'
 const DEFAULTS_KEY = 'onboarding.default-models.v1'
@@ -40,12 +41,12 @@ const baseCapabilities: ModelCapabilities = {
 
 const RECOMMENDATIONS: OnboardingProviderRecommendationDto[] = [
   recommendation('deepseek', 'DeepSeek', 'https://api.deepseek.com', 'deepseek-v4-flash', 1_000_000, 800, '按量计费；首次使用前请在服务商控制台确认余额。'),
-  recommendation('openai', 'OpenAI', 'https://api.openai.com/v1', 'gpt-4.1-mini', 1_047_576, 800, '兼容 Chat Completions 的低延迟选项；价格请以 OpenAI 控制台为准。', { imageInput: true }),
-  recommendation('moonshot', 'Moonshot / Kimi', 'https://api.moonshot.cn/v1', 'moonshot-v1-32k', 32_000, 800, '按量计费；Model ID 请以控制台当前可用列表为准。'),
-  recommendation('zhipu', '智谱 BigModel', 'https://open.bigmodel.cn/api/paas/v4', 'glm-5.1', 200_000, 800, 'GLM-5.1 为文本模型；价格和可用额度请以控制台为准。'),
-  recommendation('alibaba-dashscope', '阿里云百炼', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen3.7-plus', 1_000_000, 800, '百炼按模型计费；请在控制台开通所选模型。', { imageInput: true }),
-  recommendation('gemini', 'Gemini OpenAI Compatible', 'https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-3.5-flash', 1_048_576, 800, '可能有免费额度与地区限制，请以 Google AI Studio 为准。', { imageInput: true, documentInput: true }),
-  recommendation('xiaomi-mimo', '小米 MiMo', 'https://api.xiaomimimo.com/v1', 'mimo-v2-flash', 128_000, 800, '模型与价格可能更新，请以平台控制台为准。')
+  recommendation('openai', 'OpenAI', 'https://api.openai.com/v1', 'gpt-4.1-mini', 1_047_576, 800, '官方价：输入 $0.40、缓存 $0.10、输出 $1.60 / 百万 Token。', { imageInput: true }),
+  recommendation('moonshot', 'Moonshot / Kimi', 'https://api.moonshot.cn/v1', 'kimi-k3', 1_000_000, 800, '同一平台同时支持 Kimi 与 Moonshot 系列；Kimi K3：输入 ¥20、缓存 ¥2、输出 ¥100 / 百万 Token。', { imageInput: true, videoInput: true }),
+  recommendation('zhipu', '智谱 BigModel', 'https://open.bigmodel.cn/api/paas/v4', 'glm-5.1', 200_000, 800, 'GLM-5.1 按上下文阶梯计费，应用会按实际输入 Token 选择价格。'),
+  recommendation('alibaba-dashscope', '阿里云百炼', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen3.7-plus', 1_000_000, 800, '千问 Plus 按上下文阶梯计费，限时折扣不计入长期估算。', { imageInput: true }),
+  recommendation('gemini', 'Gemini OpenAI Compatible', 'https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-3.5-flash', 1_048_576, 800, '付费标准价：输入 $1.50、缓存 $0.15、输出 $9.00 / 百万 Token。', { imageInput: true, documentInput: true }),
+  recommendation('xiaomi-mimo', '小米 MiMo', 'https://api.xiaomimimo.com/v1', 'mimo-v2-flash', 128_000, 800, '国内价：输入 ¥0.70、缓存 ¥0.07、输出 ¥2.10 / 百万 Token。')
 ]
 
 export interface OnboardingApplicationDependencies {
@@ -184,8 +185,16 @@ function recommendation(
   costNoticeZh: string,
   capabilities: Partial<ModelCapabilities> = {}
 ): OnboardingProviderRecommendationDto {
+  const preset = getProviderPreset(providerId)
+  if (!preset) throw new Error(`Missing provider preset: ${providerId}`)
   return {
-    providerId, displayName, defaultBaseUrl, recommendedModelId, recommendedContextWindow,
+    providerId, displayName, defaultBaseUrl,
+    platformUrl: preset.platformUrl,
+    documentationUrl: preset.documentationUrl,
+    pricingUrl: preset.pricingUrl,
+    recommendedModelId,
+    modelOptions: getFallbackProviderModels(providerId).map((model) => ({ id: model.id, displayName: model.displayName })),
+    recommendedContextWindow,
     recommendedMaxOutputTokens, costNoticeZh, capabilities: { ...baseCapabilities, ...capabilities }
   }
 }

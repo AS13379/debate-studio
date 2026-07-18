@@ -7,6 +7,8 @@ export type {
 export { AuthenticatedHttpTransport } from './authenticated-http-transport'
 export type { CredentialReferenceResolver } from './authenticated-http-transport'
 export { ConnectionTestService } from './connection-test-service'
+export { ProviderModelDiscoveryService } from './provider-model-discovery-service'
+export type { AvailableProviderModel, ProviderModelDiscoveryResult } from './provider-model-discovery-service'
 export type {
   ConnectionTestError,
   ConnectionTestErrorCode,

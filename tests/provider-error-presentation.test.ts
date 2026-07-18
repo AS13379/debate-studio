@@ -48,6 +48,13 @@ describe('Provider error presentation', () => {
     })
     expect(presentProviderFailure({ providerCode: 'context_length_exceeded' }).failureCode).toBe('CONTEXT_TOO_LONG')
     expect(presentProviderFailure({ message: 'image input is unsupported' }).failureCode).toBe('IMAGE_UNSUPPORTED')
+    expect(presentProviderFailure({
+      statusCode: 400,
+      message: 'The reasoning_content in the thinking mode must be passed back to the API.'
+    })).toMatchObject({
+      titleZh: '推理模式无法继续工具调用',
+      retryable: false
+    })
   })
 
   it('redacts credentials from technical details', () => {

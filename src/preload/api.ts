@@ -1,16 +1,17 @@
 import type { IpcRendererEvent } from 'electron'
 
-import { IPC_CHANNELS, type DebateStudioApi, type RunEventDto } from '../shared/ipc-contract'
+import { IPC_CHANNELS, type DebatePlannerProgressDto, type DebateStudioApi, type RunEventDto } from '../shared/ipc-contract'
 
 export interface IpcRendererLike {
   invoke(channel: string, input?: unknown): Promise<unknown>
-  on(channel: string, listener: (event: IpcRendererEvent, payload: RunEventDto) => void): void
-  removeListener(channel: string, listener: (event: IpcRendererEvent, payload: RunEventDto) => void): void
+  on(channel: string, listener: (event: IpcRendererEvent, payload: RunEventDto | DebatePlannerProgressDto) => void): void
+  removeListener(channel: string, listener: (event: IpcRendererEvent, payload: RunEventDto | DebatePlannerProgressDto) => void): void
 }
 
 export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudioApi {
   return {
     getAppVersion: () => invoke(ipcRenderer, IPC_CHANNELS.getAppVersion),
+    openExternalUrl: (input) => invoke(ipcRenderer, IPC_CHANNELS.openExternalUrl, input),
     getOnboardingState: () => invoke(ipcRenderer, IPC_CHANNELS.getOnboardingState),
     saveOnboardingProvider: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveOnboardingProvider, input),
     testOnboardingConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.testOnboardingConnection, input),
@@ -35,6 +36,7 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     saveProviderConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveProviderConnection, input),
     deleteProviderConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteProviderConnection, input),
     listModelProfiles: () => invoke(ipcRenderer, IPC_CHANNELS.listModelProfiles),
+    listAvailableProviderModels: (input) => invoke(ipcRenderer, IPC_CHANNELS.listAvailableProviderModels, input),
     saveModelProfile: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveModelProfile, input),
     deleteModelProfile: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteModelProfile, input),
     copyModelProfile: (input) => invoke(ipcRenderer, IPC_CHANNELS.copyModelProfile, input),
@@ -42,6 +44,7 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     deleteCredential: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteCredential, input),
     testConnection: (input) => invoke(ipcRenderer, IPC_CHANNELS.testConnection, input),
     planDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.planDebate, input),
+    cancelDebatePlanning: (input) => invoke(ipcRenderer, IPC_CHANNELS.cancelDebatePlanning, input),
     createDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.createDebate, input),
     saveParticipantBindings: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveParticipantBindings, input),
     createMockDemoDebate: () => invoke(ipcRenderer, IPC_CHANNELS.createMockDemoDebate),
@@ -49,6 +52,7 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     pauseDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.pauseDebate, input),
     resumeDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.resumeDebate, input),
     stopDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.stopDebate, input),
+    skipDebate: (input) => invoke(ipcRenderer, IPC_CHANNELS.skipDebate, input),
     retryFailedTurn: (input) => invoke(ipcRenderer, IPC_CHANNELS.retryFailedTurn, input),
     getRunState: (input) => invoke(ipcRenderer, IPC_CHANNELS.getRunState, input),
     listDebates: (input) => invoke(ipcRenderer, IPC_CHANNELS.listDebates, input),
@@ -97,9 +101,14 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     deleteExport: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteExport, input),
     cancelExport: (input) => invoke(ipcRenderer, IPC_CHANNELS.cancelExport, input),
     onRunEvent: (listener) => {
-      const wrapped = (_event: IpcRendererEvent, payload: RunEventDto): void => listener(payload)
+      const wrapped = (_event: IpcRendererEvent, payload: RunEventDto | DebatePlannerProgressDto): void => listener(payload as RunEventDto)
       ipcRenderer.on(IPC_CHANNELS.runEvent, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.runEvent, wrapped)
+    },
+    onPlannerProgress: (listener) => {
+      const wrapped = (_event: IpcRendererEvent, payload: RunEventDto | DebatePlannerProgressDto): void => listener(payload as DebatePlannerProgressDto)
+      ipcRenderer.on(IPC_CHANNELS.plannerProgress, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.plannerProgress, wrapped)
     }
   }
 }

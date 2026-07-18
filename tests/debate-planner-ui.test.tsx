@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import { NewDebatePage, PlanReview } from '../src/renderer/src/pages/NewDebatePage'
+import { OperationProgressDialog } from '../src/renderer/src/components/OperationProgressDialog'
+import { isSlowFirstTokenModel, slowModelNotice } from '../src/renderer/src/model-latency'
 
 describe('Debate Planner creation UI', () => {
   it('uses AI automatic planning as the recommended default and keeps other modes visible', () => {
@@ -26,5 +28,25 @@ describe('Debate Planner creation UI', () => {
     expect(html).toContain('核心争议与潜在漏洞')
     expect(html).toContain('建议证据类型')
     expect(html).toContain('readOnly=""')
+  })
+
+  it('shows plain-language progress plus expandable request and response originals', () => {
+    const html = renderToStaticMarkup(<OperationProgressDialog
+      open title="AI 正在规划辩论" description="AI 正在生成辩论方案" progress={64} running
+      logs={[{ id: 'request', label: '正在把规划要求发送给 AI', detail: '已收到 320 个字符。' }]}
+      rawInput="SYSTEM\n严格返回 JSON" rawOutput='{"background":"背景"}' onCancel={vi.fn()} onClose={vi.fn()}
+    />)
+    expect(html).toContain('进度 64%')
+    expect(html).toContain('正在把规划要求发送给 AI')
+    expect(html).toContain('查看发送给 AI 的原文')
+    expect(html).toContain('查看 AI 返回的原文')
+    expect(html).toContain('停止当前操作')
+  })
+
+  it('marks long-thinking models so the user knows first output may be slow', () => {
+    expect(isSlowFirstTokenModel('kimi-k3')).toBe(true)
+    expect(isSlowFirstTokenModel('deepseek-reasoner')).toBe(true)
+    expect(isSlowFirstTokenModel('deepseek-chat')).toBe(false)
+    expect(slowModelNotice('kimi-k3')).toContain('首段文字可能需要等待较长时间')
   })
 })

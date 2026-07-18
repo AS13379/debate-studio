@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 
 import type { ParticipantRole } from '../domain'
-import { ModelAdapterError, type ModelAdapter, type UnifiedMessage, type UnifiedRequest, type UnifiedToolCall, type UnifiedToolDefinition } from '../providers'
+import { ModelAdapterError, type ModelAdapter, type UnifiedMessage, type UnifiedRequest, type UnifiedResponse, type UnifiedToolCall, type UnifiedToolDefinition } from '../providers'
 import type { ResearchRepository } from '../persistence'
 import type {
   EvidenceStatusHistory,
@@ -27,10 +27,10 @@ import { WebPageFetcher, WebPageFetchError } from './web-page-fetcher'
 import { ResearchApprovalController } from './research-approval-controller'
 
 export const DEFAULT_RESEARCH_TOOL_LIMITS: ResearchToolLimits = {
-  maxToolCalls: 12,
-  maxSearches: 3,
-  maxPageReads: 3,
-  maxBodyCharacters: 45_000
+  maxToolCalls: 7,
+  maxSearches: 2,
+  maxPageReads: 2,
+  maxBodyCharacters: 30_000
 }
 
 export interface ResearchToolLoopContext {
@@ -92,68 +92,146 @@ export class ResearchToolLoop {
       updatedAt: this.timestamp()
     }
     this.persistState(state)
-    const messages: UnifiedMessage[] = [
-      ...baseRequest.messages,
-      { role: 'user', content: this.loopInstructions(context, limits) }
-    ]
-    let finalContent = ''
+    try {
+      const messages: UnifiedMessage[] = [
+        ...baseRequest.messages,
+        { role: 'user', content: this.loopInstructions(context, limits) }
+      ]
+      let finalContent = ''
 
-    while (!baseRequest.signal.aborted && state.toolCallCount < limits.maxToolCalls) {
-      const response = await this.dependencies.adapter.complete({
-        ...baseRequest,
-        stream: false,
-        messages,
-        tools: context.supportsToolCalling ? [...RESEARCH_TOOLS] : undefined,
-        toolChoice: context.supportsToolCalling ? 'auto' : undefined
-      })
-      const toolCalls = context.supportsToolCalling
-        ? response.toolCalls ?? []
-        : [this.parseFallback(response.content)]
-      if (!toolCalls.length) {
-        finalContent = response.content
-        break
-      }
-
-      const selectedToolCalls = toolCalls.slice(0, 1)
-      messages.push({ role: 'assistant', content: response.content, toolCalls: context.supportsToolCalling ? selectedToolCalls : undefined })
-      for (const toolCall of selectedToolCalls) {
-        state = { ...state, toolCallCount: state.toolCallCount + 1, updatedAt: this.timestamp() }
-        const executed = await this.execute(toolCall, context, state, baseRequest.signal)
-        state = executed.state
-        messages.push(context.supportsToolCalling
-          ? { role: 'tool', name: toolCall.name, toolCallId: toolCall.id, content: executed.result.content }
-          : { role: 'user', content: `工具 ${toolCall.name} 返回：${executed.result.content}\n请继续输出下一个 JSON 工具调用，或调用 finishResearch。` })
-        if (executed.result.finished) {
-          finalContent = executed.result.content
+      while (!baseRequest.signal.aborted && state.toolCallCount < limits.maxToolCalls) {
+        state = { ...state, status: 'running', updatedAt: this.timestamp() }
+        this.persistState(state)
+        const response = await this.awaitModelResponse({
+          ...baseRequest,
+          stream: false,
+          messages,
+          tools: context.supportsToolCalling ? [...RESEARCH_TOOLS] : undefined,
+          toolChoice: context.supportsToolCalling ? 'auto' : undefined
+        }, state, this.modelActivity(state, context.role))
+        const toolCalls = context.supportsToolCalling
+          ? response.toolCalls ?? []
+          : [this.parseFallback(response.content)]
+        if (!toolCalls.length) {
+          finalContent = response.content
           break
         }
-      }
-      if (finalContent) break
-    }
 
-    if (baseRequest.signal.aborted) {
-      state = { ...state, status: 'interrupted', updatedAt: this.timestamp() }
+        const candidates = toolCalls.slice(0, Math.min(2, limits.maxToolCalls - state.toolCallCount))
+        const remainingSearches = Math.max(0, limits.maxSearches - state.searchCount)
+        const remainingPageReads = Math.max(0, limits.maxPageReads - state.pageReadCount)
+        const selectedToolCalls = candidates.length > 1 && candidates.every((call) => call.name === 'searchWeb')
+          ? candidates.slice(0, Math.max(1, Math.min(candidates.length, remainingSearches)))
+          : candidates.length > 1 && candidates.every((call) => call.name === 'readWebPage')
+            ? candidates.slice(0, Math.max(1, Math.min(candidates.length, remainingPageReads)))
+            : candidates
+        messages.push({ role: 'assistant', content: response.content, toolCalls: context.supportsToolCalling ? selectedToolCalls : undefined })
+        const parallelTool = selectedToolCalls[0]?.name
+        const canParallelize = context.mode === 'automatic'
+          && context.supportsToolCalling
+          && selectedToolCalls.length > 1
+          && (parallelTool === 'searchWeb' || parallelTool === 'readWebPage')
+          && selectedToolCalls.every((call) => call.name === parallelTool)
+        if (canParallelize) {
+          const before = state
+          const batchState = { ...state, toolCallCount: state.toolCallCount + selectedToolCalls.length, updatedAt: this.timestamp() }
+          const readBudget = Math.max(1, Math.floor(
+            (limits.maxBodyCharacters - before.bodyCharacters) / selectedToolCalls.length
+          ))
+          const executionStates = selectedToolCalls.map(() => parallelTool === 'readWebPage'
+            ? { ...batchState, bodyCharacters: limits.maxBodyCharacters - readBudget }
+            : batchState)
+          this.progress(
+            `模型同时提出了 ${selectedToolCalls.length} 个独立${parallelTool === 'searchWeb' ? '搜索' : '网页读取'}，正在并行执行`,
+            batchState
+          )
+          const executed = await Promise.all(selectedToolCalls.map((toolCall, index) => this.execute(
+            toolCall, context, executionStates[index], baseRequest.signal
+          )))
+          state = {
+            ...batchState,
+            searchCount: Math.min(limits.maxSearches, before.searchCount + executed.reduce(
+              (total, item, index) => total + Math.max(0, item.state.searchCount - executionStates[index].searchCount), 0
+            )),
+            pageReadCount: Math.min(limits.maxPageReads, before.pageReadCount + executed.reduce(
+              (total, item, index) => total + Math.max(0, item.state.pageReadCount - executionStates[index].pageReadCount), 0
+            )),
+            bodyCharacters: Math.min(limits.maxBodyCharacters, before.bodyCharacters + executed.reduce(
+              (total, item, index) => total + Math.max(0, item.state.bodyCharacters - executionStates[index].bodyCharacters), 0
+            )),
+            updatedAt: this.timestamp()
+          }
+          this.persistState(state)
+          executed.forEach((item, index) => messages.push({
+            role: 'tool', name: selectedToolCalls[index].name,
+            toolCallId: selectedToolCalls[index].id, content: item.result.content
+          }))
+        } else {
+          for (const toolCall of selectedToolCalls) {
+            state = { ...state, toolCallCount: state.toolCallCount + 1, updatedAt: this.timestamp() }
+            const executed = await this.execute(toolCall, context, state, baseRequest.signal)
+            state = executed.state
+            messages.push(context.supportsToolCalling
+              ? { role: 'tool', name: toolCall.name, toolCallId: toolCall.id, content: executed.result.content }
+              : { role: 'user', content: `工具 ${toolCall.name} 返回：${executed.result.content}\n请继续输出下一个 JSON 工具调用，或调用 finishResearch。` })
+            if (executed.result.finished) {
+              finalContent = executed.result.content
+              break
+            }
+          }
+        }
+        if (finalContent) break
+      }
+
+      if (baseRequest.signal.aborted) {
+        throw new ModelAdapterError({ code: 'CANCELLED', message: 'Research tool loop was cancelled.', titleZh: '研究已取消', descriptionZh: '已保留完成的搜索、网页和研究记录。', retryable: true })
+      }
+      if (!finalContent) {
+        state = { ...state, status: 'summarizing', updatedAt: this.timestamp() }
+        this.persistState(state)
+        const summary = await this.awaitModelResponse({
+          ...baseRequest,
+          stream: false,
+          tools: undefined,
+          toolChoice: undefined,
+          messages: [...messages, {
+            role: 'user',
+            content: '工具调用已达上限。请基于已有工具结果总结：已选资料、来源评价、暂定主张和未解决问题。不要声称执行了新工具。'
+          }]
+        }, state, '工具预算已用完，正在让模型用现有资料完成总结')
+        finalContent = summary.content
+      }
+      state = { ...state, status: 'completed', updatedAt: this.timestamp() }
       this.persistState(state)
-      throw new ModelAdapterError({ code: 'CANCELLED', message: 'Research tool loop was cancelled.', titleZh: '研究已取消', descriptionZh: '已保留完成的搜索、网页和研究记录。', retryable: true })
-    }
-    if (!finalContent) {
-      state = { ...state, status: 'summarizing', updatedAt: this.timestamp() }
+      return { content: finalContent, state }
+    } catch (cause) {
+      const interrupted = baseRequest.signal.aborted
+        || (cause instanceof ModelAdapterError && cause.detail.code === 'CANCELLED')
+      state = { ...state, status: interrupted ? 'interrupted' : 'failed', updatedAt: this.timestamp() }
       this.persistState(state)
-      const summary = await this.dependencies.adapter.complete({
-        ...baseRequest,
-        stream: false,
-        tools: undefined,
-        toolChoice: undefined,
-        messages: [...messages, {
-          role: 'user',
-          content: '工具调用已达上限。请基于已有工具结果总结：已选资料、来源评价、暂定主张和未解决问题。不要声称执行了新工具。'
-        }]
-      })
-      finalContent = summary.content
+      this.progress(interrupted ? '研究已由用户中断，已完成的资料仍然保留' : '研究请求失败，已经停止等待并保留现有结果', state)
+      throw cause
     }
-    state = { ...state, status: 'completed', updatedAt: this.timestamp() }
-    this.persistState(state)
-    return { content: finalContent, state }
+  }
+
+  private async awaitModelResponse(request: UnifiedRequest, state: ResearchLoopState, activity: string): Promise<UnifiedResponse> {
+    this.progress(activity, state)
+    const heartbeat = setInterval(() => {
+      try { this.persistState({ ...state, updatedAt: this.timestamp() }) } catch { /* the actual request path reports persistence failures */ }
+    }, 5_000)
+    heartbeat.unref?.()
+    try {
+      return await this.dependencies.adapter.complete(request)
+    } finally {
+      clearInterval(heartbeat)
+    }
+  }
+
+  private modelActivity(state: ResearchLoopState, role: ResearchOwnerRole): string {
+    const actor = role === 'moderator' ? '主持人' : role === 'affirmative' ? '正方' : '反方'
+    if (state.pageReadCount > 0) return `${actor}模型正在阅读已取得的正文并决定是否保存主张或发布证据`
+    if (state.searchCount > 0) return `${actor}模型正在查看搜索结果并选择要读取的网页`
+    return `${actor}模型正在制定第一步搜索动作`
   }
 
   private async execute(

@@ -37,8 +37,26 @@ export interface ProviderPresetDto {
   providerId: string
   displayName: string
   defaultBaseUrl: string
+  platformUrl: string
+  documentationUrl: string
+  pricingUrl: string
   supportedProtocols: ProtocolTypeDto[]
   capabilityHints: Partial<ModelCapabilitiesDto>
+}
+
+export interface AvailableProviderModelDto {
+  id: string
+  displayName: string
+  ownedBy?: string
+  contextWindow?: number
+  maxOutputTokens?: number
+  capabilities?: Partial<ModelCapabilitiesDto>
+}
+
+export interface ProviderModelDiscoveryDto {
+  models: AvailableProviderModelDto[]
+  source: 'provider-api' | 'built-in'
+  warningZh?: string
 }
 
 export interface SaveProviderConnectionInput {
@@ -108,6 +126,7 @@ export interface PlannedDebateDto {
 }
 
 export interface PlanDebateInputDto {
+  operationId: string
   mode: DebatePlanningModeDto
   topic: string
   background?: string
@@ -115,6 +134,16 @@ export interface PlanDebateInputDto {
   depth?: DebatePlanningDepthDto
   affirmativePosition?: string
   negativePosition?: string
+}
+
+export interface DebatePlannerProgressDto {
+  operationId: string
+  stage: 'preparing' | 'routing' | 'requesting' | 'streaming' | 'parsing' | 'completed' | 'failed'
+  progress: number
+  labelZh: string
+  detailZh?: string
+  rawInput?: string
+  rawOutput?: string
 }
 
 export interface DebatePlannerErrorDto {

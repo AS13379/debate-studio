@@ -96,6 +96,40 @@ describe('local AI workbench enhancements', () => {
     expect(calculator.calculate({ inputTokens: 10, outputTokens: 20 })).toEqual({ known: false, reason: 'PRICING_NOT_CONFIGURED' })
   })
 
+  it('automatically stores verified official pricing for a known provider model', async () => {
+    const app = createApplication()
+    const recommendation = await app.onboarding.getState()
+    if (!recommendation.ok) throw new Error(recommendation.error.descriptionZh)
+    const deepseek = recommendation.value.recommendations.find((item) => item.providerId === 'deepseek')!
+    const saved = await app.onboarding.saveProvider({
+      providerId: deepseek.providerId,
+      displayName: deepseek.displayName,
+      baseUrl: deepseek.defaultBaseUrl,
+      modelId: 'deepseek-v4-flash',
+      modelDisplayName: 'DeepSeek V4 Flash',
+      apiKey: 'sk-unit-test-never-real',
+      contextWindow: deepseek.recommendedContextWindow,
+      maxOutputTokens: 400,
+      capabilities: deepseek.capabilities
+    })
+    if (!saved.ok) throw new Error(saved.error.descriptionZh)
+
+    const pricing = app.costs.listPricing()
+    expect(pricing).toMatchObject({
+      ok: true,
+      value: [{
+        modelProfileId: saved.value.modelProfileId,
+        modelId: 'deepseek-v4-flash',
+        inputPricePerMillion: 0.14,
+        cacheHitInputPricePerMillion: 0.0028,
+        outputPricePerMillion: 0.28,
+        currency: 'USD',
+        inputPricingBasis: 'cache-miss',
+        sourceLabel: 'DeepSeek 官方 Models & Pricing'
+      }]
+    })
+  })
+
   it('persists image thumbnails and PDF metadata without OCR', async () => {
     const app = createApplication({ createImageThumbnail: () => Uint8Array.from([137, 80, 78, 71]) })
     const demo = await app.configuration.createMockDemoDebate()

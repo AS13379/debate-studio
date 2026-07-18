@@ -16,7 +16,11 @@ export interface OnboardingProviderRecommendationDto {
   providerId: string
   displayName: string
   defaultBaseUrl: string
+  platformUrl: string
+  documentationUrl: string
+  pricingUrl: string
   recommendedModelId: string
+  modelOptions: Array<{ id: string; displayName: string }>
   recommendedContextWindow: number
   recommendedMaxOutputTokens: number
   costNoticeZh: string
@@ -61,6 +65,12 @@ export interface ProviderPricingDto {
   outputPricePerMillion: number
   currency: string
   updatedAt: string
+  sourceLabel?: string
+  sourceUrl?: string
+  sourceVerifiedAt?: string
+  inputPricingBasis?: 'cache-miss'
+  cacheHitInputPricePerMillion?: number
+  pricingNoteZh?: string
 }
 
 export interface SaveProviderPricingInputDto {
@@ -79,11 +89,14 @@ export interface CostSummaryDto {
   totalTokens?: number
   totalCost?: number
   currency: string
+  totalsByCurrency: Array<{ currency: string; totalCost: number }>
   byModel: Array<{
     modelId: string
     calls: number
     totalTokens?: number
     totalCost?: number
+    currency?: string
+    costsByCurrency: Array<{ currency: string; totalCost: number }>
     pricingConfigured: boolean
   }>
   byDebate: Array<{
@@ -92,6 +105,8 @@ export interface CostSummaryDto {
     calls: number
     totalTokens?: number
     totalCost?: number
+    currency?: string
+    costsByCurrency: Array<{ currency: string; totalCost: number }>
   }>
 }
 

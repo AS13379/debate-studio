@@ -19,6 +19,7 @@ import { DebateInlineManagement } from '../components/DebateInlineManagement'
 import { formatDebateSpeechMarkdown } from '../debate-speech'
 import { applyRunEvent, type LiveRunSnapshot } from '../run-state'
 import { stageLabel, statusLabel } from './HomePage'
+import { isSlowFirstTokenModel } from '../model-latency'
 
 export interface LiveDebatePageProps {
   debateId: string
@@ -133,6 +134,8 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
   const startBlocked = isDebateStartBlocked(setup)
   const researchTurns = snapshot.turns.filter((turn) => isResearchPreparationStage(turn.stage))
   const debateTurns = snapshot.turns.filter((turn) => !isResearchPreparationStage(turn.stage))
+  const activeResearchTurn = [...researchTurns].reverse().find((turn) => ['running', 'streaming'].includes(turn.status))
+  const slowProfiles = setup?.modelProfiles.filter((profile) => isSlowFirstTokenModel(profile.modelId)) ?? []
   const renderTurn = (turn: DebateTurnDto) => {
     const participant = participantById.get(turn.participantId)
     return <TurnCard
@@ -163,6 +166,10 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
       <DebateInlineManagement debateId={debateId} onChanged={onHistoryChanged} onExit={onBack} />
 
       <DebateProgress stage={state?.currentStage ?? detail.currentStage} />
+
+      {slowProfiles.length > 0 && ['running', 'streaming'].includes(status) && <div className="notice warning slow-model-runtime-notice" role="status">
+        正在使用长思考模型（{[...new Set(slowProfiles.map((profile) => profile.modelId))].join('、')}）。首段输出可能较慢；页面中的阶段、研究动作和计数仍会持续更新。
+      </div>}
 
       <DebateQualityPanel debateId={debateId} completed={status === 'completed'} refreshKey={qualityVersion} />
 
@@ -202,6 +209,12 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
         >启动</button>
         <button className="button secondary" disabled={!['running', 'streaming'].includes(status)} onClick={() => void runCommand(() => window.debateStudio.pauseDebate({ sessionId }))}>暂停</button>
         <button className="button secondary" disabled={status !== 'paused'} onClick={() => void runCommand(() => window.debateStudio.resumeDebate({ sessionId }))}>继续</button>
+        <button
+          className="button secondary"
+          disabled={!['running', 'streaming', 'failed', 'interrupted'].includes(status)}
+          title="取消当前模型请求，保留已收到的内容，然后从下一阶段继续"
+          onClick={() => void runCommand(() => window.debateStudio.skipDebate({ sessionId }))}
+        >跳过当前阶段</button>
         <button className="button danger" disabled={!['running', 'streaming', 'paused', 'failed', 'interrupted'].includes(status)} onClick={() => void runCommand(() => window.debateStudio.stopDebate({ sessionId }))}>停止</button>
         <button className="button secondary" disabled={!['failed', 'interrupted'].includes(status)} onClick={() => void runCommand(() => window.debateStudio.retryFailedTurn({ sessionId }))}>重试失败轮次</button>
       </div>
@@ -214,13 +227,22 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
             <div className={`participant-chip role-${participant.role}`} key={participant.id}>
               <strong>{roleLabel(participant.role)}</strong>
               <span>{profile?.displayName ?? participant.displayName}</span>
+              {profile && isSlowFirstTokenModel(profile.modelId) && <small className="slow-model-badge">长思考 · 首字较慢</small>}
               {connection && <small>{connection.displayName}</small>}
             </div>
           )
         })}
       </div>
 
-      <ResearchPanel detail={detail} refreshKey={researchVersion} onError={setError} />
+      <ResearchPanel
+        detail={detail}
+        refreshKey={researchVersion}
+        activeTurnStartedAt={activeResearchTurn?.createdAt}
+        onSkipCurrentStage={['running', 'streaming'].includes(status)
+          ? () => runCommand(() => window.debateStudio.skipDebate({ sessionId }))
+          : undefined}
+        onError={setError}
+      />
 
       {olderTurnsCursor && (
         <button className="button ghost load-older-button" disabled={loadingOlderTurns} onClick={() => void loadOlderTurns()}>

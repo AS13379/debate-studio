@@ -6,6 +6,8 @@ export type {
   DebatePlan,
   DebatePlanProvenance,
   DebatePlannerError,
+  DebatePlannerProgressEvent,
+  DebatePlannerProgressStage,
   DebatePlannerErrorCode,
   DebatePlannerResult,
   DebatePlanningDepth,

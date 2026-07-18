@@ -26,11 +26,14 @@ export interface CostSummary {
   totalTokens?: number
   totalCost?: number
   currency: string
+  totalsByCurrency: Array<{ currency: string; totalCost: number }>
   byModel: Array<{
     modelId: string
     calls: number
     totalTokens?: number
     totalCost?: number
+    currency?: string
+    costsByCurrency: Array<{ currency: string; totalCost: number }>
     pricingConfigured: boolean
   }>
   byDebate: Array<{
@@ -39,5 +42,7 @@ export interface CostSummary {
     calls: number
     totalTokens?: number
     totalCost?: number
+    currency?: string
+    costsByCurrency: Array<{ currency: string; totalCost: number }>
   }>
 }

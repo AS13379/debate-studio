@@ -74,6 +74,28 @@ describe('ResearchToolLoop', () => {
     seeded.persistence.database.close()
   })
 
+  it('marks the loop failed when a provider request fails after a successful search', async () => {
+    const seeded = seed()
+    const adapter = new ScriptedAdapter((index) => {
+      if (index === 0) return tool('searchWeb', { query: '先完成搜索' })
+      throw new ModelAdapterError({
+        code: 'REQUEST_FAILED',
+        message: 'The reasoning_content in the thinking mode must be passed back to the API.',
+        retryable: false
+      })
+    })
+
+    await expect(loop(seeded, adapter, new RecordingSearchTool()).run(
+      request(),
+      context(seeded.researchSession, 'automatic')
+    )).rejects.toBeInstanceOf(ModelAdapterError)
+    expect(seeded.persistence.repositories.research.listLoopStates('session-1')).toMatchObject({
+      ok: true,
+      value: [expect.objectContaining({ status: 'failed', searchCount: 1 })]
+    })
+    seeded.persistence.database.close()
+  })
+
   it('enforces limits and reuses successful operations after restart', async () => {
     const seeded = seed()
     const search = new RecordingSearchTool()
@@ -84,6 +106,80 @@ describe('ResearchToolLoop', () => {
     await loop(seeded, makeAdapter(), search).run({ ...request(), requestId: 'request-2', turnId: 'turn-2' }, { ...context(seeded.researchSession, 'automatic'), limits: { maxToolCalls: 3, maxSearches: 1 } })
     expect(search.calls).toBe(1)
     expect(seeded.persistence.repositories.research.listSources('session-1')).toMatchObject({ ok: true, value: [expect.any(Object)] })
+    seeded.persistence.database.close()
+  })
+
+  it('executes two independent searches concurrently when the model requests them together', async () => {
+    const seeded = seed()
+    const search = new ConcurrentSearchTool()
+    const adapter = new ScriptedAdapter((index, currentRequest) => {
+      if (index === 0) return {
+        requestId: 'response', content: '', finishReason: 'tool_calls',
+        toolCalls: [
+          { id: 'search-a', name: 'searchWeb', arguments: { query: '正面资料' } },
+          { id: 'search-b', name: 'searchWeb', arguments: { query: '反面资料' } }
+        ]
+      }
+      expect(currentRequest.messages.filter((message) => message.role === 'tool')).toHaveLength(2)
+      return tool('finishResearch', { summary: '并行搜索完成' })
+    })
+
+    const result = await loop(seeded, adapter, search).run(request(), {
+      ...context(seeded.researchSession, 'automatic'),
+      limits: { maxToolCalls: 4, maxSearches: 2 }
+    })
+
+    expect(result.content).toBe('并行搜索完成')
+    expect(search.calls).toBe(2)
+    expect(search.maxConcurrent).toBe(2)
+    seeded.persistence.database.close()
+  })
+
+  it('reads two independent pages concurrently with a divided body budget', async () => {
+    const seeded = seed()
+    let activeFetches = 0
+    let maxConcurrentFetches = 0
+    const adapter = new ScriptedAdapter((index) => {
+      const sources = seeded.persistence.repositories.research.listSources('session-1')
+      const sourceIds = sources.ok ? sources.value.map((source) => source.id) : []
+      if (index === 0) return tool('searchWeb', { query: '两个来源' })
+      if (index === 1) return {
+        requestId: 'response', content: '', finishReason: 'tool_calls',
+        toolCalls: sourceIds.slice(0, 2).map((sourceId, sourceIndex) => ({
+          id: `read-${sourceIndex}`, name: 'readWebPage', arguments: { sourceId }
+        }))
+      }
+      return tool('finishResearch', { summary: '并行读页完成' })
+    })
+    const custom = new ResearchToolLoop({
+      adapter,
+      repository: seeded.persistence.repositories.research,
+      searchTool: new TwoResultSearchTool(),
+      webPageFetcher: new WebPageFetcher({
+        resolveHost: async () => ['203.0.113.10'],
+        fetchImplementation: async () => {
+          activeFetches += 1
+          maxConcurrentFetches = Math.max(maxConcurrentFetches, activeFetches)
+          await new Promise<void>((resolve) => setTimeout(resolve, 10))
+          activeFetches -= 1
+          return new Response('<html><body><article><p>用于并行读取的网页正文。</p></article></body></html>', {
+            headers: { 'content-type': 'text/html' }
+          })
+        }
+      })
+    })
+
+    const result = await custom.run(request(), {
+      ...context(seeded.researchSession, 'automatic'),
+      limits: { maxToolCalls: 5, maxSearches: 1, maxPageReads: 2, maxBodyCharacters: 10_000 }
+    })
+
+    expect(result.content).toBe('并行读页完成')
+    expect(maxConcurrentFetches).toBe(2)
+    expect(seeded.persistence.repositories.research.listFetchedPages('session-1')).toMatchObject({
+      ok: true,
+      value: [expect.any(Object), expect.any(Object)]
+    })
     seeded.persistence.database.close()
   })
 
@@ -278,6 +374,35 @@ class RecordingSearchTool implements SearchTool {
   async search(request: SearchRequest): Promise<SearchResult[]> {
     this.calls += 1
     return [{ title: '官方报告', url: 'https://example.test/report', summary: `${request.query}摘要`, domain: 'example.test', fetchedAt: timestamp }]
+  }
+}
+
+class ConcurrentSearchTool implements SearchTool {
+  readonly name = 'mock-search'
+  calls = 0
+  active = 0
+  maxConcurrent = 0
+
+  async search(request: SearchRequest): Promise<SearchResult[]> {
+    this.calls += 1
+    this.active += 1
+    this.maxConcurrent = Math.max(this.maxConcurrent, this.active)
+    await new Promise<void>((resolve) => setTimeout(resolve, 10))
+    this.active -= 1
+    return [{
+      title: request.query, url: `https://example.test/${this.calls}`,
+      summary: `${request.query}摘要`, domain: 'example.test', fetchedAt: timestamp
+    }]
+  }
+}
+
+class TwoResultSearchTool implements SearchTool {
+  readonly name = 'mock-search'
+  async search(request: SearchRequest): Promise<SearchResult[]> {
+    return [1, 2].map((index) => ({
+      title: `来源 ${index}`, url: `https://example.test/page-${index}`,
+      summary: `${request.query}摘要 ${index}`, domain: 'example.test', fetchedAt: timestamp
+    }))
   }
 }
 

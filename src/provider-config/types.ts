@@ -48,6 +48,17 @@ export interface ProviderPreset {
   providerId: string
   displayName: string
   defaultBaseUrl: string
+  platformUrl: string
+  documentationUrl: string
+  pricingUrl: string
   supportedProtocols: readonly ProtocolType[]
   capabilityHints: Partial<ModelCapabilities>
+}
+
+export interface ProviderModelCatalogEntry {
+  id: string
+  displayName: string
+  contextWindow?: number
+  maxOutputTokens?: number
+  capabilities?: Partial<ModelCapabilities>
 }

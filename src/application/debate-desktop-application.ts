@@ -7,6 +7,7 @@ import {
   ConnectionTestService,
   FetchHttpTransport,
   MockAdapter,
+  ProviderModelDiscoveryService,
   type HttpTransport
 } from '../providers'
 import {
@@ -149,6 +150,7 @@ export function initializeDebateDesktopApplication(
       persistence,
       credentialStore,
       connectionTestService: new ConnectionTestService({ transport: openAITransport, credentialStore }),
+      modelDiscoveryService: new ProviderModelDiscoveryService(openAITransport, credentialStore),
       setupApplication,
       now: options.now
     })

@@ -187,7 +187,15 @@ export class OpenAIChatAdapter implements ModelAdapter {
       }))
       body.tool_choice = request.toolChoice ?? 'auto'
     }
-    if (request.runtimeMetadata.providerId === 'deepseek' && request.runtimeMetadata.reasoningEnabled === false) {
+    // DeepSeek requires `reasoning_content` from the previous assistant message
+    // to be sent back when a thinking-mode conversation continues with tools.
+    // Debate Studio deliberately does not retain hidden reasoning, so tool
+    // loops must use non-thinking mode instead of starting a conversation that
+    // cannot be continued safely.
+    if (
+      request.runtimeMetadata.providerId === 'deepseek'
+      && (request.runtimeMetadata.reasoningEnabled === false || Boolean(request.tools?.length))
+    ) {
       body.thinking = { type: 'disabled' }
     }
 

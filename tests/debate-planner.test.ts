@@ -33,6 +33,22 @@ describe('Debate Planner', () => {
     expect(after).toEqual(before)
   })
 
+  it('reports plain-language streaming progress without exposing credentials or hidden reasoning', async () => {
+    const { app } = await createApplication(new MockAdapter({ plannerResponse: JSON.stringify({
+      background: '背景', affirmativePosition: '正方', negativePosition: '反方',
+      keyQuestions: ['问题'], researchDirections: ['方向'], evidenceSuggestions: ['证据']
+    }) }))
+    const events: Parameters<NonNullable<Parameters<typeof app.planner.plan>[1]>>[0][] = []
+    const result = await app.planner.plan({ mode: 'auto', topic: '测试进度' }, (event) => events.push(event))
+
+    expect(result.ok).toBe(true)
+    expect(events.map((event) => event.stage)).toEqual(expect.arrayContaining(['preparing', 'routing', 'requesting', 'parsing', 'completed']))
+    expect(events.find((event) => event.stage === 'requesting')?.rawInput).toContain('测试进度')
+    expect(events.at(-1)?.rawOutput).toContain('"background":"背景"')
+    expect(JSON.stringify(events)).not.toContain('Authorization')
+    expect(JSON.stringify(events)).not.toContain('credentialRef')
+  })
+
   it('uses initial positions in assisted mode without exposing secrets in UnifiedRequest', async () => {
     const adapter = new CapturingPlannerAdapter()
     const { app } = await createApplication(adapter)
@@ -71,6 +87,17 @@ describe('Debate Planner', () => {
     await expect(app.planner.plan({ mode: 'auto', topic: '测试失败' })).resolves.toMatchObject({
       ok: false, error: { code: 'MODEL_REQUEST_FAILED', retryable: true }
     })
+  })
+
+  it('allows an in-flight planner request to be cancelled by operation id', async () => {
+    const adapter = new BlockingPlannerAdapter()
+    const { app } = await createApplication(adapter)
+    const pending = app.planner.plan({ operationId: 'planner-cancel', mode: 'auto', topic: '取消中的规划' })
+    await adapter.started
+
+    expect(app.planner.cancel('planner-cancel')).toBe(true)
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { code: 'MODEL_REQUEST_FAILED' } })
+    expect(adapter.aborted).toBe(true)
   })
 
   it('persists only the confirmed final structure and prompt provenance with the Session', async () => {
@@ -118,7 +145,35 @@ class CapturingPlannerAdapter implements ModelAdapter {
       researchDirections: ['核实双方关键假设'], evidenceSuggestions: ['公开数据']
     }) }
   }
-  async *stream(_request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> { throw new Error('Planner should use complete().') }
+  async *stream(request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> {
+    const response = await this.complete(request)
+    yield { type: 'started', requestId: request.requestId }
+    yield { type: 'textDelta', requestId: request.requestId, delta: response.content }
+    yield { type: 'completed', response }
+  }
+}
+
+class BlockingPlannerAdapter implements ModelAdapter {
+  aborted = false
+  private notifyStarted!: () => void
+  readonly started = new Promise<void>((resolve) => { this.notifyStarted = resolve })
+
+  async complete(_request: UnifiedRequest): Promise<UnifiedResponse> {
+    throw new Error('stream only')
+  }
+
+  async *stream(request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> {
+    this.notifyStarted()
+    await new Promise<void>((resolve) => {
+      if (request.signal.aborted) resolve()
+      else request.signal.addEventListener('abort', () => resolve(), { once: true })
+    })
+    this.aborted = request.signal.aborted
+    yield {
+      type: 'error', requestId: request.requestId,
+      error: { code: 'CANCELLED', message: 'Planner cancelled.', retryable: true }
+    }
+  }
 }
 
 async function createApplication(adapter: ModelAdapter = new MockAdapter()): Promise<{ app: DebateDesktopApplication; directory: string }> {

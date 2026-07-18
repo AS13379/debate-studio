@@ -58,6 +58,8 @@ export class SessionRunner {
   private readonly onEvent?: (event: SessionRunnerEvent) => void
   private runPromise?: Promise<SessionRunResult>
   private stepInProgress = false
+  private skipRequest?: { reason?: string; resolve(result: boolean): void }
+  private skipSettlement?: Promise<boolean>
 
   constructor(config: DebateConfig, private readonly turnRunner: TurnRunner, dependencies: SessionRunnerDependencies = {}) {
     this.engine = new DebateEngine(config, dependencies.engine)
@@ -107,6 +109,22 @@ export class SessionRunner {
   }
 
   skip(reason?: string): boolean {
+    if (this.skipRequest) return false
+    let resolveSettlement: (result: boolean) => void = () => undefined
+    const settlement = new Promise<boolean>((resolve) => { resolveSettlement = resolve })
+    this.skipRequest = { reason, resolve: resolveSettlement }
+    this.skipSettlement = settlement
+    if (this.turnRunner.cancelTurn()) return true
+
+    this.clearSkipRequest(false)
+    return this.applySkip(reason)
+  }
+
+  waitForSkipSettlement(): Promise<boolean> | undefined {
+    return this.skipSettlement
+  }
+
+  private applySkip(reason?: string): boolean {
     const result = this.engine.dispatch({ type: 'skip', reason })
     if (!result.ok) return false
     const skippedTurn = result.events.find((event) => event.type === 'stageSkipped')?.turn
@@ -201,6 +219,24 @@ export class SessionRunner {
     else this.emit({ type: 'turnFailed', turn: result.turn })
     this.recordStateChanges(this.engine.getEvents().slice(engineEventOffset))
 
+    if (this.skipRequest) {
+      // The old request has now settled, so advancing the engine cannot race
+      // with stale output being recorded against the next stage. If it happened
+      // to complete just before AbortSignal won, it already advanced normally
+      // and we must not skip the newly entered stage as well.
+      const skipped = result.turn.status === 'completed'
+        ? true
+        : this.applySkip(this.skipRequest.reason)
+      this.clearSkipRequest(skipped)
+      const current = this.engine.getState()
+      if (!skipped) return this.failSession('Skip request could not advance the current stage.', result.turn)
+      if (current.status === 'completed') {
+        this.emit({ type: 'sessionCompleted' })
+        return { outcome: 'completed', state: current, turn: result.turn }
+      }
+      return { outcome: 'turnCompleted', state: current, turn: result.turn }
+    }
+
     if (result.turn.status === 'failed') {
       return this.failSession(result.turn.error ?? 'Turn failed.', result.turn)
     }
@@ -224,6 +260,12 @@ export class SessionRunner {
     for (const event of events) {
       if (event.type === 'stateChanged') this.emit({ type: 'stateChanged', event })
     }
+  }
+
+  private clearSkipRequest(result: boolean): void {
+    const request = this.skipRequest
+    this.skipRequest = undefined
+    request?.resolve(result)
   }
 
   private failSession(error: string, turn?: DebateTurn): { outcome: 'failed'; state: DebateState; turn?: DebateTurn } {

@@ -112,7 +112,7 @@ export class ResearchApplication {
     if (!runtimeSettingsResult.ok) return this.persistenceError(runtimeSettingsResult.error)
     const runtimeSettings = runtimeSettingsResult.value ?? {
       mode: 'automatic' as const,
-      limits: { maxToolCalls: 12, maxSearches: 3, maxPageReads: 3, maxBodyCharacters: 45_000 }
+      limits: { maxToolCalls: 7, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 30_000 }
     }
 
     const ownerFor = (role: DebateParticipantRole) => participants.value.find((item) => item.role === role)?.id

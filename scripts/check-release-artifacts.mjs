@@ -1,13 +1,12 @@
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 const releaseDirectory = join(process.cwd(), 'release')
-const dmg = existsSync(releaseDirectory)
-  ? readdirSync(releaseDirectory).find((name) => /^Debate-Studio-.*-arm64\.dmg$/.test(name))
-  : undefined
+const { version } = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
+const dmg = `Debate-Studio-${version}-arm64.dmg`
 const appPath = join(releaseDirectory, 'mac-arm64', 'Debate Studio.app')
 
-if (!dmg || !existsSync(appPath)) {
+if (!existsSync(join(releaseDirectory, dmg)) || !existsSync(appPath)) {
   console.error('未找到 arm64 DMG 或未打包的 .app 产物。')
   process.exit(1)
 }

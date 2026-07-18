@@ -11,6 +11,7 @@ import {
   IPC_CHANNELS,
   type ConfigurationResultDto,
   type DebateTurnDto,
+  type DebatePlannerProgressDto,
   type RunCommandResultDto,
   type RunEventDto
 } from '../shared/ipc-contract'
@@ -31,7 +32,9 @@ import {
   historyListQuerySchema,
   idInputSchema,
   exportDebateSchema,
+  externalUrlSchema,
   publishEvidenceSchema,
+  providerModelDiscoverySchema,
   researchRuntimeSettingsSchema,
   rendererErrorSchema,
   rendererPerformanceSchema,
@@ -45,6 +48,7 @@ import {
   saveParticipantBindingsSchema,
   saveProviderConnectionSchema,
   planDebateSchema,
+  plannerOperationSchema,
   sessionInputSchema,
   toggleFavoriteSchema,
   updateEvidenceStatusSchema
@@ -79,16 +83,27 @@ export interface DebateIpcDependencies {
   logger: LoggerLike
   errorCenter: ErrorCenter
   getAppVersion(): string
+  openExternalUrl?(url: string): Promise<void>
   broadcastRunEvent(event: RunEventDto): void
+  broadcastPlannerProgress(event: DebatePlannerProgressDto): void
 }
 
-const registeredChannels = Object.values(IPC_CHANNELS).filter((channel) => channel !== IPC_CHANNELS.runEvent)
+const registeredChannels = Object.values(IPC_CHANNELS).filter((channel) => channel !== IPC_CHANNELS.runEvent && channel !== IPC_CHANNELS.plannerProgress)
 
 export function registerDebateIpc(dependencies: DebateIpcDependencies): () => void {
   const { configuration, run, research } = dependencies
   const rawIpcMain = dependencies.ipcMain
   const ipcMain = observedIpcMain(dependencies)
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => dependencies.getAppVersion())
+  ipcMain.handle(IPC_CHANNELS.openExternalUrl, validated(externalUrlSchema, async (input) => {
+    if (!dependencies.openExternalUrl || !isAllowedExternalUrl(input.url)) return externalUrlFailure('EXTERNAL_URL_NOT_ALLOWED', '此链接不在官方平台白名单中。')
+    try {
+      await dependencies.openExternalUrl(input.url)
+      return { ok: true, value: true }
+    } catch {
+      return externalUrlFailure('EXTERNAL_URL_OPEN_FAILED', '无法调用系统浏览器，请稍后重试。')
+    }
+  }))
   ipcMain.handle(IPC_CHANNELS.getOnboardingState, () => dependencies.onboarding?.getState() ?? workbenchUnavailable())
   ipcMain.handle(IPC_CHANNELS.saveOnboardingProvider, validated(onboardingProviderSchema, (input) => dependencies.onboarding?.saveProvider(input) ?? workbenchUnavailable()))
   ipcMain.handle(IPC_CHANNELS.testOnboardingConnection, validated(connectionTestInputSchema, (input) => dependencies.onboarding?.testConnection(input.connectionId, input.modelProfileId) ?? workbenchUnavailable()))
@@ -113,13 +128,20 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.saveProviderConnection, validated(saveProviderConnectionSchema, (input) => configuration.saveProviderConnection(input)))
   ipcMain.handle(IPC_CHANNELS.deleteProviderConnection, validated(deleteProviderConnectionSchema, (input) => configuration.deleteProviderConnection(input.id, input.deleteCredential)))
   ipcMain.handle(IPC_CHANNELS.listModelProfiles, () => configuration.listModelProfiles())
+  ipcMain.handle(IPC_CHANNELS.listAvailableProviderModels, validated(providerModelDiscoverySchema, (input) => configuration.listAvailableProviderModels(input.connectionId)))
   ipcMain.handle(IPC_CHANNELS.saveModelProfile, validated(saveModelProfileSchema, (input) => configuration.saveModelProfile(input)))
   ipcMain.handle(IPC_CHANNELS.deleteModelProfile, validated(idInputSchema, (input) => configuration.deleteModelProfile(input.id)))
   ipcMain.handle(IPC_CHANNELS.copyModelProfile, validated(idInputSchema, (input) => configuration.copyModelProfile(input.id)))
   ipcMain.handle(IPC_CHANNELS.saveCredential, validated(credentialInputSchema, (input) => configuration.saveCredential(input.connectionId, input.credential)))
   ipcMain.handle(IPC_CHANNELS.deleteCredential, validated(connectionInputSchema, (input) => configuration.deleteCredential(input.connectionId)))
   ipcMain.handle(IPC_CHANNELS.testConnection, validated(connectionTestInputSchema, (input) => configuration.testConnection(input.connectionId, input.modelProfileId)))
-  ipcMain.handle(IPC_CHANNELS.planDebate, validated(planDebateSchema, (input) => dependencies.planner?.plan(input) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.planDebate, validated(planDebateSchema, (input) => dependencies.planner?.plan(input, (event) => {
+    dependencies.broadcastPlannerProgress({ operationId: input.operationId, ...event })
+  }) ?? workbenchUnavailable()))
+  ipcMain.handle(IPC_CHANNELS.cancelDebatePlanning, validated(plannerOperationSchema, (input) => ({
+    ok: true,
+    value: dependencies.planner?.cancel(input.operationId) ?? false
+  })))
   ipcMain.handle(IPC_CHANNELS.createDebate, validated(createDebateSchema, (input) => configuration.createDebate(input)))
   ipcMain.handle(IPC_CHANNELS.saveParticipantBindings, validated(saveParticipantBindingsSchema, (input) => configuration.saveParticipantBindings(input)))
   ipcMain.handle(IPC_CHANNELS.createMockDemoDebate, () => configuration.createMockDemoDebate())
@@ -127,6 +149,7 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.pauseDebate, validated(sessionInputSchema, async (input) => mapRunResult(await run.pause(input.sessionId))))
   ipcMain.handle(IPC_CHANNELS.resumeDebate, validated(sessionInputSchema, async (input) => mapRunResult(await run.resume(input.sessionId))))
   ipcMain.handle(IPC_CHANNELS.stopDebate, validated(sessionInputSchema, async (input) => mapRunResult(await run.stop(input.sessionId))))
+  ipcMain.handle(IPC_CHANNELS.skipDebate, validated(sessionInputSchema, async (input) => mapRunResult(await run.skip(input.sessionId, '用户选择强制停止当前请求并进入下一阶段'))))
   ipcMain.handle(IPC_CHANNELS.retryFailedTurn, validated(sessionInputSchema, async (input) => mapRunResult(await run.retryFailedTurn(input.sessionId))))
   ipcMain.handle(IPC_CHANNELS.getRunState, validated(sessionInputSchema, (input) => mapRunResult(run.getRunState(input.sessionId))))
   ipcMain.handle(IPC_CHANNELS.listDebates, validated(historyListQuerySchema, (input) => dependencies.history.listDebates(input)))
@@ -276,6 +299,33 @@ function workbenchUnavailable(): ConfigurationResultDto<never> {
       descriptionZh: '本地工作台应用层尚未完成组合，操作未执行。',
       retryable: false
     }
+  }
+}
+
+const ALLOWED_EXTERNAL_HOSTS = new Set([
+  'platform.openai.com', 'developers.openai.com', 'openai.com',
+  'platform.kimi.com',
+  'platform.deepseek.com', 'api-docs.deepseek.com',
+  'bigmodel.cn', 'docs.bigmodel.cn',
+  'platform.xiaomimimo.com', 'mimo.mi.com',
+  'bailian.console.aliyun.com', 'help.aliyun.com',
+  'aistudio.google.com', 'ai.google.dev',
+  'app.tavily.com', 'docs.tavily.com'
+])
+
+function isAllowedExternalUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && ALLOWED_EXTERNAL_HOSTS.has(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function externalUrlFailure(code: string, descriptionZh: string): ConfigurationResultDto<never> {
+  return {
+    ok: false,
+    error: { code, titleZh: '无法打开官方链接', descriptionZh, retryable: false }
   }
 }
 
