@@ -116,6 +116,10 @@ export class ResearchToolLoop {
           finalContent = response.content
           break
         }
+        const visibleModelProgress = response.content.trim()
+        if (visibleModelProgress) {
+          this.progress(`模型说明：${visibleModelProgress.slice(0, 600)}`, state)
+        }
 
         const candidates = toolCalls.slice(0, Math.min(2, limits.maxToolCalls - state.toolCallCount))
         const remainingSearches = Math.max(0, limits.maxSearches - state.searchCount)
@@ -125,7 +129,12 @@ export class ResearchToolLoop {
           : candidates.length > 1 && candidates.every((call) => call.name === 'readWebPage')
             ? candidates.slice(0, Math.max(1, Math.min(candidates.length, remainingPageReads)))
             : candidates
-        messages.push({ role: 'assistant', content: response.content, toolCalls: context.supportsToolCalling ? selectedToolCalls : undefined })
+        messages.push({
+          role: 'assistant',
+          content: response.content,
+          ...(response.reasoningContent ? { reasoningContent: response.reasoningContent } : {}),
+          toolCalls: context.supportsToolCalling ? selectedToolCalls : undefined
+        })
         const parallelTool = selectedToolCalls[0]?.name
         const canParallelize = context.mode === 'automatic'
           && context.supportsToolCalling
@@ -216,9 +225,12 @@ export class ResearchToolLoop {
 
   private async awaitModelResponse(request: UnifiedRequest, state: ResearchLoopState, activity: string): Promise<UnifiedResponse> {
     this.progress(activity, state)
+    const startedAt = Date.now()
     const heartbeat = setInterval(() => {
       try { this.persistState({ ...state, updatedAt: this.timestamp() }) } catch { /* the actual request path reports persistence failures */ }
-    }, 5_000)
+      const elapsedSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1_000))
+      this.progress(`${activity} · 已等待 ${elapsedSeconds} 秒，服务商仍在处理`, state)
+    }, 10_000)
     heartbeat.unref?.()
     try {
       return await this.dependencies.adapter.complete(request)

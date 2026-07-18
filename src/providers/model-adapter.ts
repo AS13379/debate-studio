@@ -4,6 +4,11 @@ import type { ProviderFailureCode } from './provider-error-presentation'
 export interface UnifiedMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  /**
+   * Opaque provider reasoning required to continue the current tool-call chain.
+   * This value is transient: never persist, log, emit through IPC, or render it.
+   */
+  reasoningContent?: string
   name?: string
   toolCallId?: string
   toolCalls?: UnifiedToolCall[]
@@ -57,6 +62,11 @@ export interface UnifiedResponse {
   requestId: string
   content: string
   finishReason: 'stop' | 'tool_calls'
+  /**
+   * Opaque provider reasoning required to replay an assistant tool-call message.
+   * It is only populated for tool-call responses and must remain in memory.
+   */
+  reasoningContent?: string
   toolCalls?: UnifiedToolCall[]
   usage?: {
     inputTokens?: number

@@ -93,10 +93,10 @@ export function presentProviderFailure(input: ProviderFailureInput): ProviderFai
   if (/reasoning_content.{0,80}(must be passed back|required)|thinking mode.{0,80}reasoning_content/i.test(source)) {
     return presentation(
       'UNKNOWN_PROVIDER_ERROR',
-      '推理模式无法继续工具调用',
-      '服务商要求回传隐藏推理内容，但应用出于隐私与安全原因不会保存该内容。',
-      false,
-      '研究工具会自动关闭该请求的推理模式；请重新运行当前阶段。',
+      '推理上下文衔接失败',
+      '服务商没有收到继续当前工具调用所需的临时推理上下文。',
+      true,
+      '请重试当前阶段；应用只在本轮请求链内短暂回传该上下文，不会写入本地记录。',
       technicalDetails
     )
   }

@@ -2,6 +2,19 @@
 
 本文件记录 Debate Studio 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.3.1] - 2026-07-19
+
+### 修复与改进
+
+- 修复 Kimi K3、Kimi K2.x 与其他 OpenAI Compatible 思考模型在多步工具调用中丢失 `reasoning_content`、导致研究阶段 HTTP 400 或停滞的问题。
+- 工具链现在只在当前内存请求链中原样续传服务商推理上下文；完成、失败或中断后立即释放。
+- 研究期间优先展示服务商放在普通 `content` 中的可见阶段说明，并定期显示等待时长，避免长思考被误认为空转。
+- 更新推理上下文错误的中文说明，使其可重试并明确本地隐私边界。
+
+### 本地数据与隐私
+
+- `reasoning_content` 不进入 Turn、SQLite、日志、IPC、导出或 Renderer；界面只显示公开 `content` 与不含推理正文的活动状态。
+
 ## [0.3.0] - 2026-07-18
 
 ### 新增

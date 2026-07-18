@@ -22,6 +22,7 @@ export interface OpenAIChatMessage {
     | { type: 'image_url'; image_url: { url: string } }
   >
   name?: string
+  reasoning_content?: string
   tool_call_id?: string
   tool_calls?: Array<{
     id: string
@@ -55,6 +56,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
 
       const content = this.responseContent(response.body) ?? ''
       const toolCalls = this.responseToolCalls(response.body)
+      const reasoningContent = toolCalls.length ? this.responseReasoningContent(response.body) : undefined
       if (!content && !toolCalls.length) {
         const finishReason = this.responseFinishReason(response.body)
         if (finishReason === 'length') {
@@ -77,6 +79,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
         requestId: request.requestId,
         content,
         finishReason: toolCalls.length ? 'tool_calls' : 'stop',
+        ...(reasoningContent ? { reasoningContent } : {}),
         toolCalls: toolCalls.length ? toolCalls : undefined,
         usage: this.responseUsage(response.body)
       }
@@ -169,13 +172,20 @@ export class OpenAIChatAdapter implements ModelAdapter {
               }))
             ]
           : message.content,
-        name: message.name,
-        tool_call_id: message.toolCallId,
-        tool_calls: message.toolCalls?.map((call) => ({
-          id: call.id,
-          type: 'function' as const,
-          function: { name: call.name, arguments: JSON.stringify(call.arguments) }
-        }))
+        ...(message.role === 'assistant' && message.reasoningContent
+          ? { reasoning_content: message.reasoningContent }
+          : {}),
+        ...(message.name ? { name: message.name } : {}),
+        ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
+        ...(message.toolCalls?.length
+          ? {
+              tool_calls: message.toolCalls.map((call) => ({
+                id: call.id,
+                type: 'function' as const,
+                function: { name: call.name, arguments: JSON.stringify(call.arguments) }
+              }))
+            }
+          : {})
       })),
       stream
     }
@@ -187,14 +197,12 @@ export class OpenAIChatAdapter implements ModelAdapter {
       }))
       body.tool_choice = request.toolChoice ?? 'auto'
     }
-    // DeepSeek requires `reasoning_content` from the previous assistant message
-    // to be sent back when a thinking-mode conversation continues with tools.
-    // Debate Studio deliberately does not retain hidden reasoning, so tool
-    // loops must use non-thinking mode instead of starting a conversation that
-    // cannot be continued safely.
+    // Providers that allow reasoning to be disabled should honour the profile.
+    // Reasoning-enabled tool loops are continued by transiently replaying the
+    // provider's opaque `reasoning_content`; it is never persisted or rendered.
     if (
       request.runtimeMetadata.providerId === 'deepseek'
-      && (request.runtimeMetadata.reasoningEnabled === false || Boolean(request.tools?.length))
+      && request.runtimeMetadata.reasoningEnabled === false
     ) {
       body.thinking = { type: 'disabled' }
     }
@@ -247,6 +255,15 @@ export class OpenAIChatAdapter implements ModelAdapter {
     return choice && typeof choice.finish_reason === 'string' ? choice.finish_reason : undefined
   }
 
+  private responseReasoningContent(body: unknown): string | undefined {
+    const choice = this.firstChoice(body)
+    if (!choice || !this.isRecord(choice.message)) return undefined
+    const reasoningContent = choice.message.reasoning_content
+    return typeof reasoningContent === 'string' && reasoningContent.length > 0
+      ? reasoningContent
+      : undefined
+  }
+
   private responseUsage(body: unknown): UnifiedResponse['usage'] {
     if (!this.isRecord(body) || !this.isRecord(body.usage)) return undefined
     const inputTokens = typeof body.usage.prompt_tokens === 'number' ? body.usage.prompt_tokens : undefined
@@ -258,8 +275,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
   }
 
   private hasReasoningContent(body: unknown): boolean {
-    const choice = this.firstChoice(body)
-    return Boolean(choice && this.isRecord(choice.message) && typeof choice.message.reasoning_content === 'string' && choice.message.reasoning_content.length)
+    return Boolean(this.responseReasoningContent(body))
   }
 
   private streamDelta(event: Extract<HttpTransportStreamEvent, { type: 'data' }>): string | undefined {

@@ -96,6 +96,45 @@ describe('ResearchToolLoop', () => {
     seeded.persistence.database.close()
   })
 
+  it('keeps reasoning content only in the in-memory assistant tool chain', async () => {
+    const seeded = seed()
+    const reasoningMarker = 'PRIVATE_REASONING_NOT_FOR_STORAGE'
+    const adapter = new ScriptedAdapter((index, currentRequest) => {
+      if (index === 0) {
+        return {
+          ...tool('searchWeb', { query: '思考模式工具链' }),
+          reasoningContent: reasoningMarker
+        }
+      }
+
+      const assistantIndex = currentRequest.messages.findIndex((message) => message.role === 'assistant')
+      expect(assistantIndex).toBeGreaterThan(-1)
+      expect(currentRequest.messages[assistantIndex]).toMatchObject({
+        role: 'assistant',
+        content: '',
+        reasoningContent: reasoningMarker,
+        toolCalls: [expect.objectContaining({ name: 'searchWeb' })]
+      })
+      expect(currentRequest.messages[assistantIndex + 1]).toMatchObject({
+        role: 'tool',
+        name: 'searchWeb',
+        toolCallId: expect.any(String)
+      })
+      return tool('finishResearch', { summary: '工具链已正常继续。' })
+    })
+
+    const result = await loop(seeded, adapter, new RecordingSearchTool()).run(
+      request(),
+      context(seeded.researchSession, 'automatic')
+    )
+
+    expect(result.content).toBe('工具链已正常继续。')
+    expect(JSON.stringify(result)).not.toContain(reasoningMarker)
+    expect(JSON.stringify(seeded.persistence.repositories.research.listToolCalls('session-1'))).not.toContain(reasoningMarker)
+    expect(JSON.stringify(seeded.persistence.repositories.research.listLoopStates('session-1'))).not.toContain(reasoningMarker)
+    seeded.persistence.database.close()
+  })
+
   it('enforces limits and reuses successful operations after restart', async () => {
     const seeded = seed()
     const search = new RecordingSearchTool()

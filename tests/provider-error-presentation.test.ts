@@ -52,8 +52,8 @@ describe('Provider error presentation', () => {
       statusCode: 400,
       message: 'The reasoning_content in the thinking mode must be passed back to the API.'
     })).toMatchObject({
-      titleZh: '推理模式无法继续工具调用',
-      retryable: false
+      titleZh: '推理上下文衔接失败',
+      retryable: true
     })
   })
 

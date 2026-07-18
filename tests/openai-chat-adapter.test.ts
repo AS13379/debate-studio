@@ -123,6 +123,74 @@ describe('OpenAIChatAdapter', () => {
     expect(response).toEqual({ requestId: 'request-openai', content: '', finishReason: 'tool_calls', toolCalls: [{ id: 'call-1', name: 'searchWeb', arguments: { query: '测试' } }] })
   })
 
+  it('round-trips opaque reasoning content for a thinking-mode tool continuation', async () => {
+    const reasoningMarker = 'PRIVATE_REASONING_MUST_STAY_TRANSIENT'
+    const transport = new MockHttpTransport({ response: { status: 200, body: {
+      choices: [{ message: {
+        role: 'assistant',
+        content: null,
+        reasoning_content: reasoningMarker,
+        tool_calls: [{
+          id: 'call-search', type: 'function', function: { name: 'searchWeb', arguments: '{"query":"Kimi 工具链"}' }
+        }]
+      }, finish_reason: 'tool_calls' }]
+    } } })
+    const adapter = new OpenAIChatAdapter(transport)
+    const first = await adapter.complete({
+      ...request(),
+      tools: [{ name: 'searchWeb', description: '搜索', parameters: { type: 'object' } }],
+      toolChoice: 'auto',
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'moonshot',
+        reasoningEnabled: true
+      }
+    })
+
+    expect(first).toMatchObject({
+      content: '',
+      finishReason: 'tool_calls',
+      reasoningContent: reasoningMarker,
+      toolCalls: [{ id: 'call-search', name: 'searchWeb', arguments: { query: 'Kimi 工具链' } }]
+    })
+
+    await adapter.complete({
+      ...request(),
+      messages: [
+        { role: 'user', content: '研究 Kimi 工具链。' },
+        {
+          role: 'assistant',
+          content: first.content,
+          reasoningContent: first.reasoningContent,
+          toolCalls: first.toolCalls
+        },
+        { role: 'tool', content: '搜索结果', name: 'searchWeb', toolCallId: 'call-search' }
+      ],
+      tools: [{ name: 'searchWeb', description: '搜索', parameters: { type: 'object' } }],
+      toolChoice: 'auto',
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'moonshot',
+        reasoningEnabled: true
+      }
+    })
+
+    const continuedBody = transport.requests[1].body as OpenAIChatRequestBody
+    expect(continuedBody.messages).toEqual([
+      { role: 'user', content: '研究 Kimi 工具链。' },
+      {
+        role: 'assistant',
+        content: '',
+        reasoning_content: reasoningMarker,
+        tool_calls: [{
+          id: 'call-search', type: 'function', function: { name: 'searchWeb', arguments: '{"query":"Kimi 工具链"}' }
+        }]
+      },
+      { role: 'tool', content: '搜索结果', name: 'searchWeb', tool_call_id: 'call-search' }
+    ])
+    expect(continuedBody).not.toHaveProperty('thinking')
+  })
+
   it('disables DeepSeek thinking when the ModelProfile does not enable reasoning', async () => {
     const transport = new MockHttpTransport()
     await new OpenAIChatAdapter(transport).complete({
@@ -137,7 +205,7 @@ describe('OpenAIChatAdapter', () => {
     expect(transport.requests[0].body).toMatchObject({ thinking: { type: 'disabled' } })
   })
 
-  it('disables DeepSeek thinking for multi-turn tool loops even when the profile supports reasoning', async () => {
+  it('does not force-disable DeepSeek thinking when a tool loop supports reasoning', async () => {
     const transport = new MockHttpTransport({ response: { status: 200, body: {
       choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
         id: 'call-search', type: 'function', function: { name: 'searchWeb', arguments: '{"query":"测试"}' }
@@ -155,9 +223,9 @@ describe('OpenAIChatAdapter', () => {
     })
 
     expect(transport.requests[0].body).toMatchObject({
-      thinking: { type: 'disabled' },
       tools: [{ type: 'function', function: { name: 'searchWeb' } }]
     })
+    expect(transport.requests[0].body).not.toHaveProperty('thinking')
   })
 
   it('maps image input only when a vision request explicitly contains image bytes', async () => {
@@ -241,6 +309,25 @@ describe('OpenAIChatAdapter', () => {
       response: { requestId: 'request-openai', content: '第一段，第二段', finishReason: 'stop' }
     })
     expect((transport.requests[0].body as OpenAIChatRequestBody).stream).toBe(true)
+  })
+
+  it('does not expose streamed reasoning content as visible text', async () => {
+    const reasoningMarker = 'PRIVATE_STREAM_REASONING'
+    const transport = new MockHttpTransport({
+      streamEvents: [
+        { type: 'data', data: { choices: [{ delta: { reasoning_content: reasoningMarker }, finish_reason: null }] } },
+        { type: 'data', data: { choices: [{ delta: { content: '公开回答' }, finish_reason: 'stop' }] } },
+        { type: 'done' }
+      ]
+    })
+    const events: UnifiedStreamEvent[] = []
+
+    for await (const event of new OpenAIChatAdapter(transport).stream(request())) events.push(event)
+
+    expect(events.filter((event) => event.type === 'textDelta')).toEqual([
+      { type: 'textDelta', requestId: 'request-openai', delta: '公开回答' }
+    ])
+    expect(JSON.stringify(events)).not.toContain(reasoningMarker)
   })
 
   it('keeps usage from the final stream chunk', async () => {
