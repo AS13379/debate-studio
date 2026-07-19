@@ -26,6 +26,8 @@ describe('LAN Web Console UI contracts', () => {
     expect(css).toContain('min-width: 0 !important')
     expect(css).toContain('@media (max-width: 768px)')
     expect(css).toContain('.lan-bottom-nav')
+    expect(css).toContain('.lan-mode-grid, .lan-form-columns, .lan-upload-form, .lan-plan-editor { grid-template-columns: 1fr; }')
+    expect(css).toContain('min-height: 44px')
     expect(css).not.toContain('min-width: 680px')
   })
 })

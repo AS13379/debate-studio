@@ -20,8 +20,16 @@ The user explicitly chooses between `localhost` mode and passwordless LAN mode. 
 
 ## HTTP limitation
 
-Phase A intentionally uses HTTP and no access password. It does not protect against another device on the same LAN, passive sniffing, or an active attacker already present on the network. Passwordless LAN mode must not be enabled on public or untrusted Wi-Fi. A future HTTPS or paired-device mode may be added without changing the application-service boundary.
+The console intentionally uses HTTP and no access password. It does not protect against another device on the same LAN, passive sniffing, or an active attacker already present on the network. Passwordless LAN mode must not be enabled on public or untrusted Wi-Fi.
 
-## Non-goals for Phase A
+## Phase B media and export boundary
 
-The console cannot create debates, configure credentials, upload files, inspect private research, restore databases, access diagnostics, export files, or expose local filesystem paths. Sessions are intentionally invalidated when the server stops or Debate Studio exits.
+Phase B allows debate creation, read-only research/history views, image/PDF uploads, and Markdown/HTML exports through narrow application services. It does not expose repositories or local filesystem paths.
+
+- Uploads accept only PNG, JPEG, GIF, WebP, and PDF content. The declared MIME type must match the file signature.
+- Images are limited to 10 MiB and PDFs to 25 MiB. Filenames are reduced to their basename before the existing `AssetProcessor` stores them.
+- The browser receives an asset ID and safe metadata, never the managed local path.
+- Export records omit `filePath`. Completed files are streamed through an authenticated download route only after their path is verified to remain inside the managed export directory.
+- API keys, credential references, provider authorization headers, diagnostics, database backup/restore, and arbitrary local files remain unavailable to the Web console.
+
+Transient browser sessions are intentionally invalidated when the server stops or Debate Studio exits. These sessions exist only to support CSRF protection and WebSocket continuity; they are created automatically and are not device pairing or an account system.

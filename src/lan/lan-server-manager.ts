@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 import cookie from '@fastify/cookie'
 import helmet from '@fastify/helmet'
@@ -14,7 +14,12 @@ import type { WebSocket } from 'ws'
 import type { LoggerLike } from '../observability'
 import {
   lanCommandSchema,
+  lanCreateDebateSchema,
   lanDebateListQuerySchema,
+  lanExportParamsSchema,
+  lanExportSchema,
+  lanAssetUploadQuerySchema,
+  lanPlanDebateSchema,
   lanSessionParamsSchema,
   lanSnapshotQuerySchema
 } from '../shared/lan-schemas'
@@ -347,6 +352,11 @@ export function createLanHttpServer(options: CreateLanHttpServerOptions): Fastif
   void server.register(rateLimit, { max: 120, timeWindow: '1 minute' })
   void server.register(websocket, { options: { maxPayload: 16 * 1024, perMessageDeflate: false } })
   if (hasWebUi) void server.register(fastifyStatic, { root: options.webRoot, wildcard: false })
+  server.addContentTypeParser(
+    ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf'],
+    { parseAs: 'buffer', bodyLimit: 25 * 1024 * 1024 },
+    (_request, body, done) => done(null, body)
+  )
 
   server.addHook('onRequest', async (request, reply) => {
     const config = options.application.getConfig()
@@ -402,12 +412,53 @@ export function createLanHttpServer(options: CreateLanHttpServerOptions): Fastif
     return options.application.listDebates(parsed.data)
   })
 
+  server.get('/api/v1/model-profiles', async (request, reply) => {
+    if (!authenticateRequest(request, options)) return reply.code(401).send(unauthorized())
+    return options.application.listModelProfiles()
+  })
+
+  server.post('/api/v1/planner', async (request, reply) => {
+    const session = authenticateRequest(request, options)
+    if (!session) return reply.code(401).send(unauthorized())
+    if (!validCsrf(request, session.csrfToken)) return reply.code(403).send(csrfFailure())
+    const parsed = lanPlanDebateSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send(inputFailure())
+    const result = await options.application.planDebate(parsed.data)
+    return result.ok ? result : reply.code(result.error.retryable ? 503 : 400).send(result)
+  })
+
+  server.post('/api/v1/debates', async (request, reply) => {
+    const session = authenticateRequest(request, options)
+    if (!session) return reply.code(401).send(unauthorized())
+    if (!validCsrf(request, session.csrfToken)) return reply.code(403).send(csrfFailure())
+    const parsed = lanCreateDebateSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send(inputFailure())
+    const result = options.application.createDebate(parsed.data)
+    return result.ok ? reply.code(201).send(result) : reply.code(400).send(result)
+  })
+
+  server.post('/api/v1/debates/mock', async (request, reply) => {
+    const session = authenticateRequest(request, options)
+    if (!session) return reply.code(401).send(unauthorized())
+    if (!validCsrf(request, session.csrfToken)) return reply.code(403).send(csrfFailure())
+    const result = options.application.createMockDebate()
+    return result.ok ? reply.code(201).send(result) : reply.code(400).send(result)
+  })
+
   server.get('/api/v1/debates/:id', async (request, reply) => {
     if (!authenticateRequest(request, options)) return reply.code(401).send(unauthorized())
     const id = typeof (request.params as { id?: unknown }).id === 'string' ? (request.params as { id: string }).id : ''
     if (!id || id.length > 200) return reply.code(400).send(inputFailure())
     const result = options.application.getDebate(id)
     return result.ok ? result : reply.code(result.error.code.includes('NOT_FOUND') ? 404 : 400).send(result)
+  })
+
+  server.get('/api/v1/debates/:id/insights', async (request, reply) => {
+    if (!authenticateRequest(request, options)) return reply.code(401).send(unauthorized())
+    const id = typeof (request.params as { id?: unknown }).id === 'string' ? (request.params as { id: string }).id : ''
+    if (!id || id.length > 200) return reply.code(400).send(inputFailure())
+    const result = options.application.getInsights(id)
+    return result.ok ? result : reply.code(400).send(result)
   })
 
   server.get('/api/v1/sessions/:sessionId/snapshot', async (request, reply) => {
@@ -424,6 +475,74 @@ export function createLanHttpServer(options: CreateLanHttpServerOptions): Fastif
     return result.ok ? result : reply.code(404).send(result)
   })
 
+  server.get('/api/v1/sessions/:sessionId/research', async (request, reply) => {
+    if (!authenticateRequest(request, options)) return reply.code(401).send(unauthorized())
+    const params = lanSessionParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(inputFailure())
+    const result = options.application.loadResearch(params.data.sessionId)
+    return result.ok ? result : reply.code(400).send(result)
+  })
+
+  server.post('/api/v1/assets', {
+    bodyLimit: 25 * 1024 * 1024
+  }, async (request, reply) => {
+    const session = authenticateRequest(request, options)
+    if (!session) return reply.code(401).send(unauthorized())
+    if (!validCsrf(request, session.csrfToken)) return reply.code(403).send(csrfFailure())
+    if (!options.application.getConfig().allowFileUpload) return reply.code(403).send(apiFailure('LAN_UPLOAD_DISABLED', '文件上传已关闭', '当前局域网配置不允许上传文件。', false))
+    const query = lanAssetUploadQuerySchema.safeParse(request.query)
+    if (!query.success || !Buffer.isBuffer(request.body)) return reply.code(400).send(inputFailure())
+    const mimeType = String(request.headers['content-type'] ?? '').split(';')[0]!.trim().toLowerCase()
+    const bytes = request.body as Buffer
+    const uploadCheck = validateUpload(bytes, mimeType)
+    if (!uploadCheck.ok) return reply.code(400).send(uploadCheck)
+    const result = options.application.addResearchAsset({
+      sessionId: query.data.sessionId,
+      ownerParticipantId: query.data.ownerParticipantId,
+      visibility: query.data.visibility,
+      kind: mimeType === 'application/pdf' ? 'pdf' : 'image',
+      title: query.data.title,
+      summary: query.data.summary,
+      fileName: basename(query.data.fileName.replace(/\\/g, '/')),
+      mimeType,
+      bytes: [...bytes]
+    })
+    return result.ok ? reply.code(201).send(result) : reply.code(400).send(result)
+  })
+
+  server.get('/api/v1/exports', async (request, reply) => {
+    if (!authenticateRequest(request, options)) return reply.code(401).send(unauthorized())
+    const debateId = typeof (request.query as { debateId?: unknown }).debateId === 'string'
+      ? (request.query as { debateId: string }).debateId.slice(0, 200)
+      : undefined
+    return options.application.listExports(debateId)
+  })
+
+  server.post('/api/v1/debates/:id/exports', async (request, reply) => {
+    const session = authenticateRequest(request, options)
+    if (!session) return reply.code(401).send(unauthorized())
+    if (!validCsrf(request, session.csrfToken)) return reply.code(403).send(csrfFailure())
+    const id = typeof (request.params as { id?: unknown }).id === 'string' ? (request.params as { id: string }).id : ''
+    const body = lanExportSchema.safeParse(request.body)
+    if (!id || id.length > 200 || !body.success) return reply.code(400).send(inputFailure())
+    const result = options.application.createExport(id, body.data.type, body.data.includePrivateResearch)
+    return result.ok ? reply.code(202).send(result) : reply.code(400).send(result)
+  })
+
+  server.get('/api/v1/exports/:exportId/download', async (request, reply) => {
+    if (!authenticateRequest(request, options)) return reply.code(401).send(unauthorized())
+    const params = lanExportParamsSchema.safeParse(request.params)
+    if (!params.success) return reply.code(400).send(inputFailure())
+    const result = options.application.readExport(params.data.exportId)
+    if (!result.ok) return reply.code(result.error.code === 'EXPORT_NOT_READY' ? 409 : 404).send(result)
+    const encodedName = encodeURIComponent(result.value.fileName)
+    return reply
+      .header('Content-Type', result.value.mimeType)
+      .header('Content-Disposition', `attachment; filename="debate-export"; filename*=UTF-8''${encodedName}`)
+      .header('Content-Length', String(result.value.bytes.byteLength))
+      .send(Buffer.from(result.value.bytes))
+  })
+
   server.post('/api/v1/sessions/:sessionId/commands', async (request, reply) => {
     const session = authenticateRequest(request, options)
     if (!session) return reply.code(401).send(unauthorized())
@@ -435,28 +554,32 @@ export function createLanHttpServer(options: CreateLanHttpServerOptions): Fastif
     return result.ok ? result : reply.code(result.error.code.includes('INVALID') || result.error.code.includes('ACTIVE') ? 409 : 400).send(result)
   })
 
-  server.get('/api/v1/sessions/:sessionId/events', {
-    websocket: true,
-    preValidation: async (request, reply) => {
-      if (!hasRequiredOrigin(request, options)) return reply.code(403).send()
-      if (!authenticateRequest(request, options)) return reply.code(401).send()
-      const params = lanSessionParamsSchema.safeParse(request.params)
-      if (!params.success) return reply.code(400).send()
-    }
-  }, (socket: WebSocket, request) => {
-    const params = lanSessionParamsSchema.parse(request.params)
-    const unsubscribe = options.application.subscribe(params.sessionId, (event) => {
-      if (socket.readyState === 1) socket.send(JSON.stringify(event))
+  // Register the route in the next Fastify plugin scope so @fastify/websocket's
+  // onRoute hook is installed before this route is declared during boot.
+  void server.register(async (instance) => {
+    instance.get('/api/v1/sessions/:sessionId/events', {
+      websocket: true,
+      preValidation: async (request, reply) => {
+        if (!hasRequiredOrigin(request, options)) return reply.code(403).send()
+        if (!authenticateRequest(request, options)) return reply.code(401).send()
+        const params = lanSessionParamsSchema.safeParse(request.params)
+        if (!params.success) return reply.code(400).send()
+      }
+    }, (socket: WebSocket, request) => {
+      const params = lanSessionParamsSchema.parse(request.params)
+      const unsubscribe = options.application.subscribe(params.sessionId, (event) => {
+        if (socket.readyState === 1) socket.send(JSON.stringify(event))
+      })
+      socket.send(JSON.stringify({
+        protocolVersion: 1,
+        type: 'ready',
+        streamEpoch: options.application.streamEpoch,
+        sessionId: params.sessionId,
+        latestSequence: options.application.getLatestSequence(params.sessionId)
+      }))
+      socket.once('close', unsubscribe)
+      socket.once('error', unsubscribe)
     })
-    socket.send(JSON.stringify({
-      protocolVersion: 1,
-      type: 'ready',
-      streamEpoch: options.application.streamEpoch,
-      sessionId: params.sessionId,
-      latestSequence: options.application.getLatestSequence(params.sessionId)
-    }))
-    socket.once('close', unsubscribe)
-    socket.once('error', unsubscribe)
   })
 
   if (!hasWebUi) server.get('/', async (_request, reply) =>
@@ -466,15 +589,47 @@ export function createLanHttpServer(options: CreateLanHttpServerOptions): Fastif
     if (request.url.startsWith('/api/')) return reply.code(404).send(apiFailure('LAN_API_NOT_FOUND', '接口不存在', '请求的局域网接口不存在。', false))
     return reply.code(404).type('text/plain; charset=utf-8').send('Not Found')
   })
+  server.setErrorHandler((error, request, reply) => {
+    const normalized = error instanceof Error ? error : new Error(String(error))
+    const details = typeof error === 'object' && error !== null
+      ? error as { code?: string; statusCode?: number }
+      : {}
+    options.logger?.error('局域网 HTTP 请求失败', {
+      source: 'lan-server',
+      metadata: { method: request.method, url: request.url, code: details.code ?? 'UNKNOWN', message: normalized.message }
+    })
+    if (reply.sent) return
+    const statusCode = typeof details.statusCode === 'number' && details.statusCode >= 400 && details.statusCode < 500
+      ? details.statusCode
+      : 500
+    return reply.code(statusCode).send(apiFailure(
+      statusCode === 500 ? 'LAN_SERVER_REQUEST_FAILED' : 'LAN_REQUEST_REJECTED',
+      statusCode === 500 ? '局域网请求处理失败' : '局域网请求被拒绝',
+      statusCode === 500 ? 'Debate Studio 未能完成此请求，请稍后重试。' : '请求不符合当前局域网访问规则。',
+      statusCode >= 500
+    ))
+  })
 
   return server
 }
 
 function authenticateRequest(request: FastifyRequest, options: CreateLanHttpServerOptions) {
-  return options.application.auth.authenticate(request.cookies[SESSION_COOKIE], {
+  const token = request.cookies?.[SESSION_COOKIE] ?? readCookie(request.headers.cookie, SESSION_COOKIE)
+  return options.application.auth.authenticate(token, {
     address: normalizeRemoteAddress(request.socket.remoteAddress ?? ''),
     label: coarseDeviceLabel(request.headers['user-agent'])
   })
+}
+
+function readCookie(header: string | undefined, name: string): string | undefined {
+  if (!header) return undefined
+  for (const item of header.split(';')) {
+    const separator = item.indexOf('=')
+    if (separator < 0 || item.slice(0, separator).trim() !== name) continue
+    const value = item.slice(separator + 1).trim()
+    try { return decodeURIComponent(value) } catch { return value }
+  }
+  return undefined
 }
 
 function authSessionDto(session: { id: string; expiresAt: string; csrfToken: string }): LanAuthSessionDto {
@@ -529,6 +684,26 @@ function csrfFailure() {
 
 function inputFailure() {
   return apiFailure('LAN_INPUT_INVALID', '请求参数无效', '请刷新页面后重试。', false)
+}
+
+function validateUpload(bytes: Buffer, mimeType: string): { ok: true } | ReturnType<typeof apiFailure> {
+  const maximum = mimeType === 'application/pdf' ? 25 * 1024 * 1024 : 10 * 1024 * 1024
+  if (!bytes.byteLength) return apiFailure('LAN_UPLOAD_EMPTY', '文件为空', '请选择包含内容的图片或 PDF。', false)
+  if (bytes.byteLength > maximum) return apiFailure('LAN_UPLOAD_TOO_LARGE', '文件过大', `图片不得超过 10 MB，PDF 不得超过 25 MB。`, false)
+  const matches = mimeType === 'application/pdf'
+    ? bytes.subarray(0, 5).toString('ascii') === '%PDF-'
+    : mimeType === 'image/png'
+      ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      : mimeType === 'image/jpeg'
+        ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+        : mimeType === 'image/gif'
+          ? ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))
+          : mimeType === 'image/webp'
+            ? bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+            : false
+  return matches
+    ? { ok: true }
+    : apiFailure('LAN_UPLOAD_INVALID', '文件内容无效', '文件头与声明的图片或 PDF 类型不一致，未保存。', false)
 }
 
 function apiFailure(code: string, titleZh: string, descriptionZh: string, retryable: boolean) {

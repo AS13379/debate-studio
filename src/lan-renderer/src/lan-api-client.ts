@@ -1,8 +1,15 @@
 import type {
   LanAuthSessionDto,
+  LanCreateDebateInputDto,
   LanDebateDetailDto,
+  LanDebateInsightsDto,
   LanDebateListDto,
   LanEventEnvelopeDto,
+  LanExportRecordDto,
+  LanModelProfileDto,
+  LanPlanDebateInputDto,
+  LanResearchAssetDto,
+  LanResearchWorkspaceDto,
   LanResultDto,
   LanRunCommand,
   LanSessionSnapshotDto
@@ -32,8 +39,68 @@ export class LanApiClient {
     return this.request(`/api/v1/debates/${encodeURIComponent(id)}`)
   }
 
-  getSnapshot(sessionId: string, limit = 40): Promise<LanResultDto<LanSessionSnapshotDto>> {
-    return this.request(`/api/v1/sessions/${encodeURIComponent(sessionId)}/snapshot?limit=${limit}`)
+  listModelProfiles(): Promise<LanResultDto<LanModelProfileDto[]>> {
+    return this.request('/api/v1/model-profiles')
+  }
+
+  planDebate(input: LanPlanDebateInputDto): Promise<LanResultDto<import('../../shared/debate-dtos').PlannedDebateDto>> {
+    return this.write('/api/v1/planner', input)
+  }
+
+  createDebate(input: LanCreateDebateInputDto): Promise<LanResultDto<LanDebateDetailDto>> {
+    return this.write('/api/v1/debates', input)
+  }
+
+  createMockDebate(): Promise<LanResultDto<LanDebateDetailDto>> {
+    return this.write('/api/v1/debates/mock', {})
+  }
+
+  getResearch(sessionId: string): Promise<LanResultDto<LanResearchWorkspaceDto>> {
+    return this.request(`/api/v1/sessions/${encodeURIComponent(sessionId)}/research`)
+  }
+
+  getInsights(debateId: string): Promise<LanResultDto<LanDebateInsightsDto>> {
+    return this.request(`/api/v1/debates/${encodeURIComponent(debateId)}/insights`)
+  }
+
+  uploadAsset(input: {
+    sessionId: string
+    ownerParticipantId: string
+    visibility: 'public' | 'affirmative-private' | 'negative-private' | 'moderator-private'
+    title: string
+    summary?: string
+    file: File
+  }): Promise<LanResultDto<LanResearchAssetDto>> {
+    const query = new URLSearchParams({
+      sessionId: input.sessionId,
+      ownerParticipantId: input.ownerParticipantId,
+      visibility: input.visibility,
+      title: input.title,
+      fileName: input.file.name
+    })
+    if (input.summary) query.set('summary', input.summary)
+    return this.writeRaw(`/api/v1/assets?${query}`, input.file, input.file.type)
+  }
+
+  createExport(debateId: string, type: 'markdown' | 'html', includePrivateResearch = false): Promise<LanResultDto<LanExportRecordDto>> {
+    return this.write(`/api/v1/debates/${encodeURIComponent(debateId)}/exports`, { type, includePrivateResearch })
+  }
+
+  listExports(debateId: string): Promise<LanResultDto<LanExportRecordDto[]>> {
+    return this.request(`/api/v1/exports?debateId=${encodeURIComponent(debateId)}`)
+  }
+
+  exportDownloadUrl(exportId: string): string {
+    return `/api/v1/exports/${encodeURIComponent(exportId)}/download`
+  }
+
+  getSnapshot(sessionId: string, limit = 40, before?: { createdAt: string; id: string }): Promise<LanResultDto<LanSessionSnapshotDto>> {
+    const query = new URLSearchParams({ limit: String(limit) })
+    if (before) {
+      query.set('beforeCreatedAt', before.createdAt)
+      query.set('beforeId', before.id)
+    }
+    return this.request(`/api/v1/sessions/${encodeURIComponent(sessionId)}/snapshot?${query}`)
   }
 
   command(sessionId: string, command: LanRunCommand) {
@@ -81,6 +148,15 @@ export class LanApiClient {
 
   private write<T>(path: string, body: unknown): Promise<LanResultDto<T>> {
     const send = () => this.request<T>(path, { method: 'POST', headers: { 'X-CSRF-Token': this.csrfToken }, body: JSON.stringify(body) })
+    return send().then(async (result) => {
+      if (result.ok || result.error.code !== 'LAN_SESSION_REQUIRED') return result
+      const session = await this.session()
+      return session.ok ? send() : result
+    })
+  }
+
+  private writeRaw<T>(path: string, body: BodyInit, contentType: string): Promise<LanResultDto<T>> {
+    const send = () => this.request<T>(path, { method: 'POST', headers: { 'X-CSRF-Token': this.csrfToken, 'Content-Type': contentType }, body })
     return send().then(async (result) => {
       if (result.ok || result.error.code !== 'LAN_SESSION_REQUIRED') return result
       const session = await this.session()

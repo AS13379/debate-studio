@@ -219,6 +219,11 @@ export function initializeDebateDesktopApplication(
       configuration,
       history,
       run,
+      planner,
+      research,
+      quality,
+      costs,
+      exports,
       logger,
       now: options.now
     })

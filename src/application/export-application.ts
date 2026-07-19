@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { basename, join, resolve, sep } from 'node:path'
 
 import {
@@ -77,6 +78,26 @@ export class ExportApplication {
       titles.set(record.debateId, detail.ok ? detail.value.displayTitle : record.debateId)
     }
     return { ok: true, value: result.value.map((record) => this.recordDto(record, titles.get(record.debateId))) }
+  }
+
+  readCompletedExport(exportId: string): DebateExportResultDto<{ fileName: string; mimeType: string; bytes: Uint8Array }> {
+    const found = this.dependencies.persistence.repositories.exports.findById(exportId)
+    if (!found.ok) return this.persistenceFailure(found.error)
+    if (!found.value) return this.failure('EXPORT_NOT_FOUND', '没有找到导出记录', '这条导出记录可能已经被删除。', false)
+    if (found.value.status !== 'completed') return this.failure('EXPORT_NOT_READY', '导出文件尚未就绪', '请等待后台生成完成后再下载。', true)
+    if (!this.isManagedPath(found.value.filePath)) return this.failure('EXPORT_PATH_REJECTED', '导出路径不安全', '只能下载应用管理的导出文件。', false)
+    try {
+      return {
+        ok: true,
+        value: {
+          fileName: basename(found.value.filePath),
+          mimeType: found.value.type === 'html' ? 'text/html; charset=utf-8' : 'text/markdown; charset=utf-8',
+          bytes: readFileSync(found.value.filePath)
+        }
+      }
+    } catch {
+      return this.failure('EXPORT_FILE_READ_FAILED', '无法读取导出文件', '文件可能已被移动或删除，请重新导出。', true)
+    }
   }
 
   async cancelExport(exportId: string): Promise<DebateExportResultDto<{ cancelled: boolean }>> {

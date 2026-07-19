@@ -1,5 +1,17 @@
 import type { DebateHistorySummaryDto } from './history-dtos'
-import type { DebateDetailDto, DebateTurnDto, DebateTurnPageDto } from './debate-dtos'
+import type {
+  CreateDebateInput,
+  DebateDetailDto,
+  DebatePlannerResultDto,
+  DebateTurnDto,
+  DebateTurnPageDto,
+  ModelProfileDto,
+  PlanDebateInputDto
+} from './debate-dtos'
+import type { DebateQualitySnapshotDto } from './quality-dtos'
+import type { ResearchAssetDto, ResearchWorkspaceDto } from './research-dtos'
+import type { CostSummaryDto } from './workbench-dtos'
+import type { DebateExportRecordDto, DebateExportTypeDto } from './export-dtos'
 import type { RunEventDto, RunStateDto } from './ipc-contract'
 
 export type LanAuthenticationMode = 'none'
@@ -19,7 +31,7 @@ export interface LanServerConfigDto {
   port: number
   authenticationMode: LanAuthenticationMode
   sessionTimeoutMinutes: number
-  allowFileUpload: false
+  allowFileUpload: boolean
   autoPort: boolean
 }
 
@@ -92,6 +104,34 @@ export interface LanEventEnvelopeDto {
 export interface LanDebateListDto {
   debates: DebateHistorySummaryDto[]
   hasMore: boolean
+}
+
+export interface LanCreateDebateInputDto {
+  debate: CreateDebateInput
+  bindings: {
+    affirmativeModelProfileId: string
+    negativeModelProfileId: string
+    moderatorModelProfileId: string
+    judgeModelProfileId?: string
+  }
+}
+
+export type LanPlanDebateInputDto = PlanDebateInputDto
+export type LanPlanDebateResultDto = DebatePlannerResultDto
+export type LanModelProfileDto = ModelProfileDto
+export type LanResearchWorkspaceDto = ResearchWorkspaceDto
+export type LanResearchAssetDto = ResearchAssetDto
+
+export interface LanDebateInsightsDto {
+  quality?: DebateQualitySnapshotDto
+  cost?: CostSummaryDto['byDebate'][number]
+}
+
+export type LanExportRecordDto = Omit<DebateExportRecordDto, 'filePath'>
+
+export interface LanCreateExportInputDto {
+  type: DebateExportTypeDto
+  includePrivateResearch: boolean
 }
 
 export type LanSafeTurnDto = DebateTurnDto

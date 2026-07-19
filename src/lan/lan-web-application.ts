@@ -1,17 +1,26 @@
 import { randomUUID } from 'node:crypto'
 
 import type { DebateConfigurationApplication } from '../application/debate-configuration-application'
+import type { CostApplication } from '../application/cost-application'
+import type { DebateQualityApplication } from '../application/debate-quality-application'
+import type { ExportApplication } from '../application/export-application'
 import type { DebateHistoryApplication } from '../application/debate-history-application'
+import type { ResearchApplication } from '../application/research-application'
 import type { DebateRunApplication, DebateRunEvent } from '../application/debate-run-application'
+import type { DebatePlanner } from '../debate-planner'
 import type { DebateTurn } from '../domain'
 import type { LoggerLike } from '../observability'
 import type { PersistenceContext } from '../persistence'
-import type { DebateTurnDto } from '../shared/debate-dtos'
+import type { DebateTurnDto, ModelProfileDto, PlanDebateInputDto, PlannedDebateDto } from '../shared/debate-dtos'
 import type { DebateHistoryListQueryDto } from '../shared/history-dtos'
+import type { AddResearchAssetInput, ResearchAssetDto, ResearchWorkspaceDto } from '../shared/research-dtos'
 import type {
   LanDebateDetailDto,
+  LanDebateInsightsDto,
   LanDebateListDto,
+  LanCreateDebateInputDto,
   LanEventEnvelopeDto,
+  LanExportRecordDto,
   LanResultDto,
   LanRunCommand,
   LanServerConfigDto,
@@ -28,7 +37,7 @@ export const DEFAULT_LAN_SERVER_CONFIG: LanServerConfigDto = {
   port: 27180,
   authenticationMode: 'none',
   sessionTimeoutMinutes: 1440,
-  allowFileUpload: false,
+  allowFileUpload: true,
   autoPort: false
 }
 
@@ -37,6 +46,11 @@ export interface LanWebApplicationDependencies {
   configuration: DebateConfigurationApplication
   history: DebateHistoryApplication
   run: DebateRunApplication
+  planner: DebatePlanner
+  research: ResearchApplication
+  quality: DebateQualityApplication
+  costs: CostApplication
+  exports: ExportApplication
   logger?: LoggerLike
   now?: () => Date
 }
@@ -94,6 +108,95 @@ export class LanWebApplication {
         displayTitle: history.ok ? history.value.displayTitle : detail.value.topic
       }
     }
+  }
+
+  listModelProfiles(): LanResultDto<ModelProfileDto[]> {
+    const result = this.dependencies.configuration.listModelProfiles()
+    return result.ok
+      ? { ok: true, value: result.value.map((profile) => ({ ...profile, capabilities: { ...profile.capabilities } })) }
+      : { ok: false, error: { ...result.error } }
+  }
+
+  async planDebate(input: PlanDebateInputDto): Promise<LanResultDto<PlannedDebateDto>> {
+    const result = await this.dependencies.planner.plan(input)
+    return result.ok
+      ? { ok: true, value: result.value }
+      : { ok: false, error: {
+          code: result.error.code,
+          titleZh: result.error.titleZh,
+          descriptionZh: result.error.descriptionZh,
+          retryable: result.error.retryable
+        } }
+  }
+
+  createDebate(input: LanCreateDebateInputDto): LanResultDto<LanDebateDetailDto> {
+    const profiles = this.dependencies.configuration.listModelProfiles()
+    if (!profiles.ok) return { ok: false, error: { ...profiles.error } }
+    const findProfile = (id: string) => profiles.value.find((profile) => profile.id === id)
+    const affirmative = findProfile(input.bindings.affirmativeModelProfileId)
+    const negative = findProfile(input.bindings.negativeModelProfileId)
+    const moderator = findProfile(input.bindings.moderatorModelProfileId)
+    const judge = input.bindings.judgeModelProfileId ? findProfile(input.bindings.judgeModelProfileId) : undefined
+    if (!affirmative || !negative || !moderator || (input.bindings.judgeModelProfileId && !judge)) {
+      return lanFailure('LAN_MODEL_PROFILE_NOT_FOUND', '模型配置不存在', '所选模型可能已在 Mac 客户端中被删除，请刷新后重选。', false)
+    }
+    const created = this.dependencies.configuration.createDebate(input.debate)
+    if (!created.ok) return { ok: false, error: { ...created.error } }
+    const bound = this.dependencies.configuration.saveParticipantBindings({
+      sessionId: created.value.sessionId,
+      affirmative: bindingFor(affirmative),
+      negative: bindingFor(negative),
+      moderator: bindingFor(moderator),
+      judge: judge ? bindingFor(judge) : undefined
+    })
+    if (!bound.ok) return { ok: false, error: { ...bound.error } }
+    return this.getDebate(bound.value.id)
+  }
+
+  createMockDebate(): LanResultDto<LanDebateDetailDto> {
+    const result = this.dependencies.configuration.createMockDemoDebate()
+    return result.ok ? this.getDebate(result.value.id) : { ok: false, error: { ...result.error } }
+  }
+
+  loadResearch(sessionId: string): LanResultDto<ResearchWorkspaceDto> {
+    const result = this.dependencies.research.loadWorkspace(sessionId)
+    return result.ok ? result : { ok: false, error: { ...result.error } }
+  }
+
+  addResearchAsset(input: AddResearchAssetInput): LanResultDto<ResearchAssetDto> {
+    const result = this.dependencies.research.addAsset(input)
+    return result.ok ? result : { ok: false, error: { ...result.error } }
+  }
+
+  getInsights(debateId: string): LanResultDto<LanDebateInsightsDto> {
+    const quality = this.dependencies.quality.getByDebate(debateId)
+    const costs = this.dependencies.costs.getSummary()
+    if (!costs.ok) return { ok: false, error: { ...costs.error } }
+    return {
+      ok: true,
+      value: {
+        quality: quality.ok ? quality.value : undefined,
+        cost: costs.value.byDebate.find((entry) => entry.debateId === debateId)
+      }
+    }
+  }
+
+  createExport(debateId: string, type: 'markdown' | 'html', includePrivateResearch: boolean): LanResultDto<LanExportRecordDto> {
+    const result = type === 'html'
+      ? this.dependencies.exports.exportDebateHtml(debateId, { includePrivateResearch })
+      : this.dependencies.exports.exportDebateMarkdown(debateId, { includePrivateResearch })
+    return result.ok ? { ok: true, value: safeExportRecord(result.value) } : { ok: false, error: { ...result.error } }
+  }
+
+  listExports(debateId?: string): LanResultDto<LanExportRecordDto[]> {
+    const result = this.dependencies.exports.getExportHistory()
+    if (!result.ok) return { ok: false, error: { ...result.error } }
+    return { ok: true, value: result.value.filter((record) => !debateId || record.debateId === debateId).map(safeExportRecord) }
+  }
+
+  readExport(exportId: string) {
+    const result = this.dependencies.exports.readCompletedExport(exportId)
+    return result.ok ? result : { ok: false as const, error: { ...result.error } }
   }
 
   getSnapshot(
@@ -257,7 +360,25 @@ function normalizeConfig(value?: Partial<LanServerConfigDto>): LanServerConfigDt
     accessMode,
     host: accessMode === 'lan' ? '0.0.0.0' : '127.0.0.1',
     authenticationMode: 'none',
-    allowFileUpload: false
+    allowFileUpload: true
+  }
+}
+
+function bindingFor(profile: ModelProfileDto) {
+  return {
+    modelProfileId: profile.id,
+    displayName: profile.alias?.trim() || profile.displayName
+  }
+}
+
+function safeExportRecord(record: import('../shared/export-dtos').DebateExportRecordDto): LanExportRecordDto {
+  const { filePath: _filePath, ...safe } = record
+  return {
+    ...safe,
+    error: safe.error ? {
+      titleZh: safe.error.titleZh,
+      descriptionZh: safe.error.descriptionZh
+    } : undefined
   }
 }
 

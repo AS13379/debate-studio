@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { createDebateSchema, planDebateSchema } from './ipc-schemas'
 
 export const lanDebateListQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
@@ -31,3 +32,31 @@ export const lanConfigUpdateSchema = z.object({
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one setting is required.')
 
 export const lanDeviceSchema = z.object({ deviceId: z.string().uuid() }).strict()
+
+export const lanPlanDebateSchema = planDebateSchema
+
+export const lanCreateDebateSchema = z.object({
+  debate: createDebateSchema,
+  bindings: z.object({
+    affirmativeModelProfileId: z.string().trim().min(1).max(200),
+    negativeModelProfileId: z.string().trim().min(1).max(200),
+    moderatorModelProfileId: z.string().trim().min(1).max(200),
+    judgeModelProfileId: z.string().trim().min(1).max(200).optional()
+  }).strict()
+}).strict()
+
+export const lanExportSchema = z.object({
+  type: z.enum(['markdown', 'html']),
+  includePrivateResearch: z.boolean().default(false)
+}).strict()
+
+export const lanExportParamsSchema = z.object({ exportId: z.string().trim().min(1).max(200) }).strict()
+
+export const lanAssetUploadQuerySchema = z.object({
+  sessionId: z.string().trim().min(1).max(200),
+  ownerParticipantId: z.string().trim().min(1).max(200),
+  visibility: z.enum(['public', 'affirmative-private', 'negative-private', 'moderator-private']),
+  title: z.string().trim().min(1).max(500),
+  fileName: z.string().trim().min(1).max(500),
+  summary: z.string().trim().max(20_000).optional()
+}).strict()

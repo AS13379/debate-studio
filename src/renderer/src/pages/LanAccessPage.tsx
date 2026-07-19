@@ -88,15 +88,6 @@ export function LanAccessPage() {
         </section>
       </div>
 
-      <section className="panel">
-        <div className="section-heading-row"><div><h3>当前 Web 设备</h3><p className="muted">打开页面时会自动建立本地会话；服务重启或关闭后全部失效。</p></div><button className="button ghost" disabled={!status?.devices.length} onClick={() => void run(async () => showResult(await window.debateStudio.logoutAllLanDevices(), setMessage, '所有设备已断开。'))}>断开全部</button></div>
-        <div className="lan-device-list">
-          {status?.devices.length ? status.devices.map((device) => (
-            <article key={device.id} className="lan-device-row"><div><strong>{device.label}</strong><small>{device.address} · 最近访问 {formatTime(device.lastAccessAt)}</small></div><button className="button ghost" onClick={() => void run(async () => showResult(await window.debateStudio.kickLanDevice({ deviceId: device.id }), setMessage, '设备已断开。'))}>断开</button></article>
-          )) : <p className="empty-inline">暂无 Web 设备。</p>}
-        </div>
-      </section>
-
       {message && <p className="inline-message" role="status">{message}</p>}
     </section>
   )
