@@ -1,6 +1,9 @@
 name: macOS arm64 release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -50,9 +53,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Attach DMG to GitHub Release
-        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+      - name: Create GitHub Release for a version tag
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release view "$RELEASE_TAG" || gh release create "$RELEASE_TAG" --title "Debate Studio $RELEASE_TAG" --generate-notes
+
+      - name: Attach DMG to GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag || github.ref_name }}
         run: gh release upload "$RELEASE_TAG" release/Debate-Studio-*-arm64.dmg --clobber
