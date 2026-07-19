@@ -31,6 +31,8 @@ export interface DebatePlannerProgressEvent {
   detailZh?: string
   rawInput?: string
   rawOutput?: string
+  /** Transient provider reasoning for the live progress dialog only. */
+  rawReasoning?: string
 }
 
 export interface DebatePlanProvenance {

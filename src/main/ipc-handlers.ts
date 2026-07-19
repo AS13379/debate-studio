@@ -377,6 +377,15 @@ function mapRunEvent(event: DebateRunEvent): RunEventDto {
         delta: event.delta,
         content: event.content
       }
+    case 'turnReasoningUpdated':
+      return {
+        ...base,
+        type: event.type,
+        turnId: event.turnId,
+        stage: event.stage,
+        participantId: event.participantId,
+        delta: redactSensitiveText(event.delta)
+      }
     case 'sessionPaused':
     case 'sessionStopped':
     case 'sessionCompleted':

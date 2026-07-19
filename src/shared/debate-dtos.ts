@@ -144,6 +144,7 @@ export interface DebatePlannerProgressDto {
   detailZh?: string
   rawInput?: string
   rawOutput?: string
+  rawReasoning?: string
 }
 
 export interface DebatePlannerErrorDto {

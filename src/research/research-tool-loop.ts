@@ -53,6 +53,8 @@ export interface ResearchToolLoopDependencies {
   createId?: () => string
   now?: () => Date
   onProgress?: (message: string, state: ResearchLoopState) => void
+  /** Transient provider reasoning. Never persisted as research content. */
+  onReasoning?: (delta: string) => void
 }
 
 export interface ResearchToolLoopResult {
@@ -104,7 +106,7 @@ export class ResearchToolLoop {
         this.persistState(state)
         const response = await this.awaitModelResponse({
           ...baseRequest,
-          stream: false,
+          stream: true,
           messages,
           tools: context.supportsToolCalling ? [...RESEARCH_TOOLS] : undefined,
           toolChoice: context.supportsToolCalling ? 'auto' : undefined
@@ -200,7 +202,7 @@ export class ResearchToolLoop {
         this.persistState(state)
         const summary = await this.awaitModelResponse({
           ...baseRequest,
-          stream: false,
+          stream: true,
           tools: undefined,
           toolChoice: undefined,
           messages: [...messages, {
@@ -233,7 +235,31 @@ export class ResearchToolLoop {
     }, 10_000)
     heartbeat.unref?.()
     try {
-      return await this.dependencies.adapter.complete(request)
+      let content = ''
+      let reasoningContent = ''
+      let response: UnifiedResponse | undefined
+      for await (const event of this.dependencies.adapter.stream({ ...request, stream: true })) {
+        if (event.type === 'textDelta') content += event.delta
+        if (event.type === 'reasoningDelta') {
+          reasoningContent += event.delta
+          this.dependencies.onReasoning?.(event.delta)
+        }
+        if (event.type === 'completed') response = event.response
+        if (event.type === 'error') throw new ModelAdapterError(event.error)
+      }
+      if (!response && !content) {
+        throw new ModelAdapterError({
+          code: 'EMPTY_RESPONSE',
+          message: 'Research model stream completed without a response.',
+          retryable: true
+        })
+      }
+      const resolved: UnifiedResponse = response
+        ? { ...response, content: response.content || content }
+        : { requestId: request.requestId, content, finishReason: 'stop' }
+      return reasoningContent && resolved.toolCalls?.length
+        ? { ...resolved, reasoningContent: resolved.reasoningContent ?? reasoningContent }
+        : resolved
     } finally {
       clearInterval(heartbeat)
     }

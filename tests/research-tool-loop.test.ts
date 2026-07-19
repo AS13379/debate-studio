@@ -99,6 +99,7 @@ describe('ResearchToolLoop', () => {
   it('keeps reasoning content only in the in-memory assistant tool chain', async () => {
     const seeded = seed()
     const reasoningMarker = 'PRIVATE_REASONING_NOT_FOR_STORAGE'
+    const liveReasoning: string[] = []
     const adapter = new ScriptedAdapter((index, currentRequest) => {
       if (index === 0) {
         return {
@@ -123,12 +124,13 @@ describe('ResearchToolLoop', () => {
       return tool('finishResearch', { summary: '工具链已正常继续。' })
     })
 
-    const result = await loop(seeded, adapter, new RecordingSearchTool()).run(
+    const result = await loop(seeded, adapter, new RecordingSearchTool(), undefined, (delta) => liveReasoning.push(delta)).run(
       request(),
       context(seeded.researchSession, 'automatic')
     )
 
     expect(result.content).toBe('工具链已正常继续。')
+    expect(liveReasoning.join('')).toContain(reasoningMarker)
     expect(JSON.stringify(result)).not.toContain(reasoningMarker)
     expect(JSON.stringify(seeded.persistence.repositories.research.listToolCalls('session-1'))).not.toContain(reasoningMarker)
     expect(JSON.stringify(seeded.persistence.repositories.research.listLoopStates('session-1'))).not.toContain(reasoningMarker)
@@ -379,13 +381,19 @@ function context(session: ResearchSession, mode: 'automatic' | 'step-confirmatio
   return { debateSessionId: 'session-1', researchSession: session, role: 'affirmative' as const, topic: '公交投入', mode, supportsToolCalling: true }
 }
 
-function loop(seeded: ReturnType<typeof seed>, adapter: ModelAdapter, searchTool: SearchTool, approvalController?: ResearchApprovalController): ResearchToolLoop {
+function loop(
+  seeded: ReturnType<typeof seed>,
+  adapter: ModelAdapter,
+  searchTool: SearchTool,
+  approvalController?: ResearchApprovalController,
+  onReasoning?: (delta: string) => void
+): ResearchToolLoop {
   return new ResearchToolLoop({
     adapter, repository: seeded.persistence.repositories.research, searchTool,
     webPageFetcher: new WebPageFetcher({ resolveHost: async () => ['203.0.113.10'], fetchImplementation: async () => new Response(
       '<html><head><title>官方报告</title></head><body><article><p>这是用于研究的官方报告正文，包含充足的可读取内容和数据说明。</p></article></body></html>',
       { headers: { 'content-type': 'text/html' } }
-    ) }), approvalController
+    ) }), approvalController, onReasoning
   })
 }
 
@@ -397,14 +405,27 @@ class ScriptedAdapter implements ModelAdapter {
   private index = 0
   constructor(private readonly next: (index: number, request: UnifiedRequest) => UnifiedResponse) {}
   async complete(request: UnifiedRequest): Promise<UnifiedResponse> { return this.next(this.index++, request) }
-  async *stream(_request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> { throw new Error('not used') }
+  async *stream(request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> {
+    const response = await this.complete(request)
+    yield { type: 'started', requestId: request.requestId }
+    if (response.reasoningContent) {
+      yield { type: 'reasoningDelta', requestId: request.requestId, delta: response.reasoningContent }
+    }
+    if (response.content) yield { type: 'textDelta', requestId: request.requestId, delta: response.content }
+    yield { type: 'completed', response }
+  }
 }
 
 class TextAdapter implements ModelAdapter {
   private index = 0
   constructor(private readonly values: string[]) {}
   async complete(request: UnifiedRequest): Promise<UnifiedResponse> { return { requestId: request.requestId, content: this.values[this.index++] ?? '', finishReason: 'stop' } }
-  async *stream(_request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> { throw new Error('not used') }
+  async *stream(request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> {
+    const response = await this.complete(request)
+    yield { type: 'started', requestId: request.requestId }
+    if (response.content) yield { type: 'textDelta', requestId: request.requestId, delta: response.content }
+    yield { type: 'completed', response }
+  }
 }
 
 class RecordingSearchTool implements SearchTool {

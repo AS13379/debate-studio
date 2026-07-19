@@ -10,6 +10,7 @@ import {
 export interface MockAdapterOptions {
   responseText?: string
   chunks?: string[]
+  reasoningChunks?: string[]
   delayMs?: number
   error?: {
     message?: string
@@ -22,6 +23,7 @@ export interface MockAdapterOptions {
 
 export class MockAdapter implements ModelAdapter {
   private readonly chunks: string[]
+  private readonly reasoningChunks: string[]
   private readonly delayMs: number
   private readonly simulatedError?: MockAdapterOptions['error']
   private readonly plannerResponse?: string
@@ -30,6 +32,7 @@ export class MockAdapter implements ModelAdapter {
 
   constructor(options: MockAdapterOptions = {}) {
     this.chunks = options.chunks ?? [options.responseText ?? '[Mock] 模拟模型发言']
+    this.reasoningChunks = options.reasoningChunks ?? []
     this.delayMs = options.delayMs ?? 0
     this.simulatedError = options.error
     this.plannerResponse = options.plannerResponse
@@ -59,6 +62,7 @@ export class MockAdapter implements ModelAdapter {
     }
 
     let content = ''
+    let reasoningContent = ''
     const chunks = request.runtimeMetadata.purpose === 'debate-planning'
       ? [this.plannerResponse ?? mockPlanResponse(request.topic)]
       : request.runtimeMetadata.purpose === 'debate-evaluation'
@@ -66,6 +70,15 @@ export class MockAdapter implements ModelAdapter {
         : request.runtimeMetadata.purpose === 'debate-review'
           ? [this.reviewResponse ?? mockReviewResponse()]
           : this.chunks
+    for (const chunk of this.reasoningChunks) {
+      if (request.signal.aborted || (await this.waitForDelay(request.signal))) {
+        yield this.cancelledEvent(request)
+        return
+      }
+      reasoningContent += chunk
+      yield { type: 'reasoningDelta', requestId: request.requestId, delta: chunk }
+    }
+
     for (const [index, chunk] of chunks.entries()) {
       if (request.signal.aborted || (await this.waitForDelay(request.signal))) {
         yield this.cancelledEvent(request)
@@ -87,7 +100,12 @@ export class MockAdapter implements ModelAdapter {
 
     yield {
       type: 'completed',
-      response: { requestId: request.requestId, content, finishReason: 'stop' }
+      response: {
+        requestId: request.requestId,
+        content,
+        finishReason: 'stop',
+        ...(reasoningContent ? { reasoningContent } : {})
+      }
     }
   }
 

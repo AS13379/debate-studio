@@ -74,6 +74,7 @@ type PublicRunEventType =
   | 'stateChanged'
   | 'turnStarted'
   | 'turnUpdated'
+  | 'turnReasoningUpdated'
   | 'turnCompleted'
   | 'turnFailed'
   | 'sessionPaused'

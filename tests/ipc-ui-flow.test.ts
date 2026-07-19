@@ -424,6 +424,28 @@ describe('typed IPC UI flow', () => {
     dispose()
   })
 
+  it('redacts credential-like text from transient reasoning before IPC broadcast', async () => {
+    const secret = 'sk-reasoning-secret-123456'
+    const app = createApplication(temporaryDirectory(), new MockAdapter({
+      reasoningChunks: [`检查 Authorization: Bearer ${secret}`],
+      chunks: ['可公开回答']
+    }))
+    const { ipc, events, dispose } = register(app)
+    const demo = await ipc.invoke<{ ok: true; value: { sessionId: string } }>(IPC_CHANNELS.createMockDemoDebate)
+
+    await ipc.invoke(IPC_CHANNELS.startDebate, { sessionId: demo.value.sessionId })
+    const reasoningEvents = events.filter((event) => event.type === 'turnReasoningUpdated')
+    const turns = await ipc.invoke<{ ok: true; value: unknown[] }>(IPC_CHANNELS.listDebateTurns, {
+      sessionId: demo.value.sessionId
+    })
+
+    expect(reasoningEvents.length).toBeGreaterThan(0)
+    expect(JSON.stringify(reasoningEvents)).toContain('[REDACTED]')
+    expect(JSON.stringify(reasoningEvents)).not.toContain(secret)
+    expect(JSON.stringify(turns)).not.toContain(secret)
+    dispose()
+  })
+
   it('accepts only a bounded renderer error summary and categorizes it', async () => {
     const app = createApplication(temporaryDirectory())
     const { ipc, dispose } = register(app)

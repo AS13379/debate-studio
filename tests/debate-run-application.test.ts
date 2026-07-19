@@ -110,6 +110,7 @@ class ScriptedAdapter implements ModelAdapter {
 
     const chunks = [`${request.stage}:`, '模拟发言']
     let content = ''
+    yield { type: 'reasoningDelta', requestId: request.requestId, delta: '仅用于实时界面的思考标记' }
     for (const delta of chunks) {
       content += delta
       yield { type: 'textDelta', requestId: request.requestId, delta }
@@ -280,7 +281,10 @@ describe('DebateRunApplication headless integration', () => {
     const usage = inspected.repositories.usage.listBySession('session-headless')
     expect(turns.ok && turns.value).toHaveLength(20)
     expect(turns.ok && turns.value.every((turn) => turn.status === 'completed' && Boolean(turn.content))).toBe(true)
-    expect(events.ok && events.value.map((event) => event.id)).toEqual(receivedEvents.map((event) => event.id))
+    expect(receivedEvents.some((event) => event.type === 'turnReasoningUpdated')).toBe(true)
+    expect(events.ok && events.value.map((event) => event.id)).toEqual(
+      receivedEvents.filter((event) => event.type !== 'turnReasoningUpdated').map((event) => event.id)
+    )
     expect(events.ok && events.value.map((event) => event.type)).toEqual(expect.arrayContaining([
       'stateChanged',
       'turnStarted',
@@ -291,6 +295,8 @@ describe('DebateRunApplication headless integration', () => {
     expect(JSON.stringify(turns)).not.toContain('mock:no-key-read')
     expect(JSON.stringify(events)).not.toContain('mock:no-key-read')
     expect(JSON.stringify(usage)).not.toContain('mock:no-key-read')
+    expect(JSON.stringify(turns)).not.toContain('仅用于实时界面的思考标记')
+    expect(JSON.stringify(events)).not.toContain('仅用于实时界面的思考标记')
     expect(usage.ok && usage.value).toHaveLength(20)
     inspected.database.close()
   })

@@ -34,12 +34,14 @@ describe('Debate Planner creation UI', () => {
     const html = renderToStaticMarkup(<OperationProgressDialog
       open title="AI 正在规划辩论" description="AI 正在生成辩论方案" progress={64} running
       logs={[{ id: 'request', label: '正在把规划要求发送给 AI', detail: '已收到 320 个字符。' }]}
-      rawInput="SYSTEM\n严格返回 JSON" rawOutput='{"background":"背景"}' onCancel={vi.fn()} onClose={vi.fn()}
+      rawInput="SYSTEM\n严格返回 JSON" reasoningOutput="正在分析双方立场" rawOutput='{"background":"背景"}' onCancel={vi.fn()} onClose={vi.fn()}
     />)
     expect(html).toContain('进度 64%')
     expect(html).toContain('正在把规划要求发送给 AI')
     expect(html).toContain('查看发送给 AI 的原文')
     expect(html).toContain('查看 AI 返回的原文')
+    expect(html).toContain('查看服务商返回的思考内容 / 摘要（实时）')
+    expect(html).toContain('正在分析双方立场')
     expect(html).toContain('停止当前操作')
   })
 

@@ -5,8 +5,9 @@ export interface UnifiedMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
   /**
-   * Opaque provider reasoning required to continue the current tool-call chain.
-   * This value is transient: never persist, log, emit through IPC, or render it.
+   * Provider-supplied reasoning text required to continue a tool-call chain.
+   * This value is transient: it may be shown while a request is active, but it
+   * must never be persisted, logged, or included in an export.
    */
   reasoningContent?: string
   name?: string
@@ -25,6 +26,10 @@ export interface UnifiedToolCall {
   id: string
   name: string
   arguments: Record<string, unknown>
+  /** Opaque provider continuation state. Never persist, log, or render it. */
+  providerMetadata?: {
+    googleThoughtSignature?: string
+  }
 }
 
 export interface UnifiedRuntimeMetadata {
@@ -63,8 +68,8 @@ export interface UnifiedResponse {
   content: string
   finishReason: 'stop' | 'tool_calls'
   /**
-   * Opaque provider reasoning required to replay an assistant tool-call message.
-   * It is only populated for tool-call responses and must remain in memory.
+   * Provider-supplied reasoning text. It may be exposed through transient
+   * runtime events, but must never be persisted, logged, or exported.
    */
   reasoningContent?: string
   toolCalls?: UnifiedToolCall[]
@@ -94,6 +99,7 @@ export interface UnifiedError {
 
 export type UnifiedStreamEvent =
   | { type: 'started'; requestId: string }
+  | { type: 'reasoningDelta'; requestId: string; delta: string }
   | { type: 'textDelta'; requestId: string; delta: string }
   | { type: 'completed'; response: UnifiedResponse }
   | { type: 'error'; requestId: string; error: UnifiedError }

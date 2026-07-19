@@ -49,6 +49,21 @@ describe('Debate Planner', () => {
     expect(JSON.stringify(events)).not.toContain('credentialRef')
   })
 
+  it('streams provider reasoning to transient planner progress without mixing it into the JSON plan', async () => {
+    const reasoningMarker = '正在比较辩题边界和双方立场'
+    const adapter = new ReasoningPlannerAdapter(reasoningMarker)
+    const { app } = await createApplication(adapter)
+    const events: Parameters<NonNullable<Parameters<typeof app.planner.plan>[1]>>[0][] = []
+
+    const result = await app.planner.plan({ mode: 'auto', topic: '思考过程展示测试' }, (event) => events.push(event))
+
+    expect(result).toMatchObject({ ok: true, value: { plan: { background: '背景' } } })
+    expect(events.some((event) => event.rawReasoning?.includes(reasoningMarker))).toBe(true)
+    expect(events.at(-1)?.rawOutput).not.toContain(reasoningMarker)
+    expect(JSON.stringify(result)).not.toContain(reasoningMarker)
+    expect(adapter.request?.runtimeMetadata.reasoningEnabled).toBe(true)
+  })
+
   it('uses initial positions in assisted mode without exposing secrets in UnifiedRequest', async () => {
     const adapter = new CapturingPlannerAdapter()
     const { app } = await createApplication(adapter)
@@ -173,6 +188,33 @@ class BlockingPlannerAdapter implements ModelAdapter {
       type: 'error', requestId: request.requestId,
       error: { code: 'CANCELLED', message: 'Planner cancelled.', retryable: true }
     }
+  }
+}
+
+class ReasoningPlannerAdapter implements ModelAdapter {
+  request?: UnifiedRequest
+
+  constructor(private readonly reasoning: string) {}
+
+  async complete(request: UnifiedRequest): Promise<UnifiedResponse> {
+    this.request = request
+    return {
+      requestId: request.requestId,
+      finishReason: 'stop',
+      content: JSON.stringify({
+        background: '背景', affirmativePosition: '正方', negativePosition: '反方',
+        keyQuestions: ['问题'], researchDirections: ['方向'], evidenceSuggestions: ['证据']
+      })
+    }
+  }
+
+  async *stream(request: UnifiedRequest): AsyncIterable<UnifiedStreamEvent> {
+    this.request = request
+    const response = await this.complete(request)
+    yield { type: 'started', requestId: request.requestId }
+    yield { type: 'reasoningDelta', requestId: request.requestId, delta: this.reasoning }
+    yield { type: 'textDelta', requestId: request.requestId, delta: response.content }
+    yield { type: 'completed', response }
   }
 }
 

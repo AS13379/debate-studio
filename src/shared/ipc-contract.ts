@@ -227,6 +227,13 @@ export type RunEventDto =
       delta: string
       content: string
     })
+  | (RunEventBase & {
+      type: 'turnReasoningUpdated'
+      turnId: string
+      stage: string
+      participantId: string
+      delta: string
+    })
   | (RunEventBase & { type: 'turnCompleted'; turn: DebateTurnDto })
   | (RunEventBase & { type: 'turnFailed'; turn: DebateTurnDto })
   | (RunEventBase & { type: 'sessionPaused' | 'sessionStopped' | 'sessionCompleted' })

@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 export interface OperationLogItem {
   id: string
   label: string
@@ -14,6 +16,7 @@ export function OperationProgressDialog({
   logs,
   rawInput,
   rawOutput,
+  reasoningOutput,
   onCancel,
   cancelLabel = '停止当前操作',
   onClose
@@ -26,15 +29,27 @@ export function OperationProgressDialog({
   logs: OperationLogItem[]
   rawInput?: string
   rawOutput?: string
+  reasoningOutput?: string
   onCancel?(): void
   cancelLabel?: string
   onClose(): void
 }) {
+  const [startedAt, setStartedAt] = useState(() => Date.now())
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!open || !running) return undefined
+    const nextStartedAt = Date.now()
+    setStartedAt(nextStartedAt)
+    setNow(nextStartedAt)
+    const timer = setInterval(() => setNow(Date.now()), 1_000)
+    return () => clearInterval(timer)
+  }, [open, running])
   if (!open) return null
+  const elapsedSeconds = Math.max(0, Math.floor((now - startedAt) / 1_000))
   return <div className="modal-backdrop operation-backdrop" role="presentation">
     <section className="operation-dialog" role="dialog" aria-modal="true" aria-labelledby="operation-dialog-title">
       <header>
-        <div><p className="eyebrow">正在处理</p><h2 id="operation-dialog-title">{title}</h2><p>{description}</p></div>
+        <div><p className="eyebrow">正在处理</p><h2 id="operation-dialog-title">{title}</h2><p>{description}</p>{running && <small className="operation-elapsed" role="status">已运行 {elapsedSeconds} 秒，没有新内容时仍会持续计时</small>}</div>
         <div className="compact-actions">
           {running && onCancel && <button className="button danger" onClick={onCancel}>{cancelLabel}</button>}
           {!running && <button className="button ghost" onClick={onClose}>关闭</button>}
@@ -49,8 +64,9 @@ export function OperationProgressDialog({
           <div><strong>{item.label}</strong>{item.detail && <p>{item.detail}</p>}</div>
         </div>)}
       </div>
-      {(rawInput || rawOutput) && <div className="operation-raw">
+      {(rawInput || rawOutput || reasoningOutput) && <div className="operation-raw">
         {rawInput && <details><summary>查看发送给 AI 的原文</summary><pre>{rawInput}</pre></details>}
+        {reasoningOutput && <details open={running}><summary>{running ? '查看服务商返回的思考内容 / 摘要（实时）' : '查看服务商返回的思考内容 / 摘要'}</summary><pre>{reasoningOutput}</pre></details>}
         {rawOutput && <details open={!running}><summary>查看 AI 返回的原文</summary><pre>{rawOutput}</pre></details>}
       </div>}
     </section>

@@ -28,6 +28,11 @@ export interface OpenAIChatMessage {
     id: string
     type: 'function'
     function: { name: string; arguments: string }
+    extra_content?: {
+      google?: {
+        thought_signature?: string
+      }
+    }
   }>
 }
 
@@ -42,6 +47,22 @@ export interface OpenAIChatRequestBody {
   }>
   tool_choice?: 'auto' | 'none'
   thinking?: { type: 'enabled' | 'disabled' }
+  enable_thinking?: boolean
+  reasoning_effort?: 'max'
+  extra_body?: {
+    google: {
+      thinking_config: {
+        include_thoughts: boolean
+      }
+    }
+  }
+}
+
+interface StreamToolCallAccumulator {
+  id: string
+  name: string
+  arguments: string
+  googleThoughtSignature?: string
 }
 
 export class OpenAIChatAdapter implements ModelAdapter {
@@ -56,7 +77,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
 
       const content = this.responseContent(response.body) ?? ''
       const toolCalls = this.responseToolCalls(response.body)
-      const reasoningContent = toolCalls.length ? this.responseReasoningContent(response.body) : undefined
+      const reasoningContent = this.responseReasoningContent(response.body)
       if (!content && !toolCalls.length) {
         const finishReason = this.responseFinishReason(response.body)
         if (finishReason === 'length') {
@@ -101,6 +122,9 @@ export class OpenAIChatAdapter implements ModelAdapter {
     }
 
     let content = ''
+    let reasoningContent = ''
+    const streamedToolCalls = new Map<number, StreamToolCallAccumulator>()
+    let finishReason: string | undefined
     let usage: UnifiedResponse['usage']
     try {
       for await (const event of this.transport.stream(transportRequest)) {
@@ -115,23 +139,41 @@ export class OpenAIChatAdapter implements ModelAdapter {
         if (event.type === 'done') break
 
         usage = this.responseUsage(event.data) ?? usage
-        const delta = this.streamDelta(event)
-        if (!delta) continue
-        content += delta
-        yield { type: 'textDelta', requestId: request.requestId, delta }
+        finishReason = this.streamFinishReason(event) ?? finishReason
+        this.accumulateStreamToolCalls(event, streamedToolCalls)
+
+        const reasoningDelta = this.streamReasoningDelta(event)
+        if (reasoningDelta) {
+          reasoningContent += reasoningDelta
+          yield { type: 'reasoningDelta', requestId: request.requestId, delta: reasoningDelta }
+        }
+
+        const textDelta = this.streamTextDelta(event)
+        if (textDelta) {
+          content += textDelta
+          yield { type: 'textDelta', requestId: request.requestId, delta: textDelta }
+        }
       }
     } catch (cause) {
       yield this.errorEvent(request, cause)
       return
     }
 
-    if (!content) {
+    let toolCalls: UnifiedToolCall[]
+    try {
+      toolCalls = this.streamToolCalls(streamedToolCalls)
+    } catch (cause) {
+      yield this.errorEvent(request, cause)
+      return
+    }
+
+    if (!content && !toolCalls.length) {
       yield {
         type: 'error',
         requestId: request.requestId,
         error: {
           code: 'EMPTY_RESPONSE',
-          message: 'OpenAI Chat stream ended without assistant content.',
+          message: `OpenAI Chat stream ended without assistant content (finish_reason=${finishReason ?? 'missing'}, reasoning_content=${reasoningContent ? 'present' : 'absent'}).`,
           retryable: false
         }
       }
@@ -140,7 +182,14 @@ export class OpenAIChatAdapter implements ModelAdapter {
 
     yield {
       type: 'completed',
-      response: { requestId: request.requestId, content, finishReason: 'stop', usage }
+      response: {
+        requestId: request.requestId,
+        content,
+        finishReason: toolCalls.length || finishReason === 'tool_calls' ? 'tool_calls' : 'stop',
+        ...(reasoningContent ? { reasoningContent } : {}),
+        ...(toolCalls.length ? { toolCalls } : {}),
+        usage
+      }
     }
   }
 
@@ -182,7 +231,14 @@ export class OpenAIChatAdapter implements ModelAdapter {
               tool_calls: message.toolCalls.map((call) => ({
                 id: call.id,
                 type: 'function' as const,
-                function: { name: call.name, arguments: JSON.stringify(call.arguments) }
+                function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+                ...(call.providerMetadata?.googleThoughtSignature
+                  ? {
+                      extra_content: {
+                        google: { thought_signature: call.providerMetadata.googleThoughtSignature }
+                      }
+                    }
+                  : {})
               }))
             }
           : {})
@@ -197,15 +253,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
       }))
       body.tool_choice = request.toolChoice ?? 'auto'
     }
-    // Providers that allow reasoning to be disabled should honour the profile.
-    // Reasoning-enabled tool loops are continued by transiently replaying the
-    // provider's opaque `reasoning_content`; it is never persisted or rendered.
-    if (
-      request.runtimeMetadata.providerId === 'deepseek'
-      && request.runtimeMetadata.reasoningEnabled === false
-    ) {
-      body.thinking = { type: 'disabled' }
-    }
+    this.applyReasoningConfiguration(body, request)
 
     return {
       method: 'POST',
@@ -216,6 +264,42 @@ export class OpenAIChatAdapter implements ModelAdapter {
       metadata: {
         providerConnectionId: request.runtimeMetadata.providerConnectionId
       }
+    }
+  }
+
+  private applyReasoningConfiguration(body: OpenAIChatRequestBody, request: UnifiedRequest): void {
+    const enabled = request.runtimeMetadata.reasoningEnabled
+    if (enabled === undefined) return
+
+    const providerId = request.runtimeMetadata.providerId?.toLowerCase()
+    const modelId = request.modelId.toLowerCase()
+    if (providerId === 'deepseek' || providerId === 'zhipu' || providerId === 'xiaomi-mimo') {
+      body.thinking = { type: enabled ? 'enabled' : 'disabled' }
+      return
+    }
+    if (providerId === 'alibaba-dashscope') {
+      body.enable_thinking = enabled
+      return
+    }
+    if (providerId === 'gemini') {
+      if (enabled) {
+        body.extra_body = {
+          google: { thinking_config: { include_thoughts: true } }
+        }
+      }
+      return
+    }
+    if (providerId !== 'moonshot' && providerId !== 'kimi') return
+
+    // Kimi families expose different control fields on the same compatible
+    // endpoint. K3 uses reasoning_effort, K2.5/K2.6 use thinking, while the
+    // K2.7 coding model must be left at its service-side default.
+    if (/^kimi-k3(?:$|[-.])/.test(modelId)) {
+      if (enabled) body.reasoning_effort = 'max'
+      return
+    }
+    if (/^kimi-k2\.(?:5|6)(?:$|[-.])/.test(modelId)) {
+      body.thinking = { type: enabled ? 'enabled' : 'disabled' }
     }
   }
 
@@ -231,22 +315,16 @@ export class OpenAIChatAdapter implements ModelAdapter {
     return choice.message.tool_calls.flatMap((item): UnifiedToolCall[] => {
       if (!this.isRecord(item) || typeof item.id !== 'string' || !this.isRecord(item.function) || typeof item.function.name !== 'string') return []
       const rawArguments = typeof item.function.arguments === 'string' ? item.function.arguments : '{}'
-      try {
-        const parsed: unknown = JSON.parse(rawArguments)
-        if (!this.isRecord(parsed)) return []
-        return [{ id: item.id, name: item.function.name, arguments: parsed }]
-      } catch (cause) {
-        const trimmedArguments = rawArguments.trim()
-        const parseError = cause instanceof Error ? cause.message.replace(/\s+/g, ' ').slice(0, 160) : 'unknown'
-        const hasObjectEnvelope = trimmedArguments.startsWith('{') && trimmedArguments.endsWith('}')
-        throw new ModelAdapterError({
-          code: 'REQUEST_FAILED',
-          message: `Tool call ${item.function.name} returned invalid JSON arguments (arguments_length=${rawArguments.length}, object_envelope=${hasObjectEnvelope}, parse_error=${parseError}).`,
-          titleZh: '工具参数无法解析',
-          descriptionZh: '模型返回的结构化工具参数不是有效 JSON。',
-          retryable: true
-        })
-      }
+      const argumentsObject = this.parseToolArguments(item.function.name, rawArguments)
+      const googleThoughtSignature = this.toolCallThoughtSignature(item)
+      return [{
+        id: item.id,
+        name: item.function.name,
+        arguments: argumentsObject,
+        ...(googleThoughtSignature
+          ? { providerMetadata: { googleThoughtSignature } }
+          : {})
+      }]
     })
   }
 
@@ -278,10 +356,85 @@ export class OpenAIChatAdapter implements ModelAdapter {
     return Boolean(this.responseReasoningContent(body))
   }
 
-  private streamDelta(event: Extract<HttpTransportStreamEvent, { type: 'data' }>): string | undefined {
+  private streamTextDelta(event: Extract<HttpTransportStreamEvent, { type: 'data' }>): string | undefined {
     const choice = this.firstChoice(event.data)
     if (!choice || !this.isRecord(choice.delta)) return undefined
     return typeof choice.delta.content === 'string' ? choice.delta.content : undefined
+  }
+
+  private streamReasoningDelta(event: Extract<HttpTransportStreamEvent, { type: 'data' }>): string | undefined {
+    const choice = this.firstChoice(event.data)
+    if (!choice || !this.isRecord(choice.delta)) return undefined
+    if (typeof choice.delta.reasoning_content === 'string') return choice.delta.reasoning_content
+    return typeof choice.delta.reasoning === 'string' ? choice.delta.reasoning : undefined
+  }
+
+  private streamFinishReason(event: Extract<HttpTransportStreamEvent, { type: 'data' }>): string | undefined {
+    const choice = this.firstChoice(event.data)
+    return choice && typeof choice.finish_reason === 'string' ? choice.finish_reason : undefined
+  }
+
+  private accumulateStreamToolCalls(
+    event: Extract<HttpTransportStreamEvent, { type: 'data' }>,
+    target: Map<number, StreamToolCallAccumulator>
+  ): void {
+    const choice = this.firstChoice(event.data)
+    if (!choice || !this.isRecord(choice.delta) || !Array.isArray(choice.delta.tool_calls)) return
+
+    choice.delta.tool_calls.forEach((item, arrayIndex) => {
+      if (!this.isRecord(item)) return
+      const index = typeof item.index === 'number' ? item.index : arrayIndex
+      const current = target.get(index) ?? { id: '', name: '', arguments: '' }
+      if (typeof item.id === 'string' && item.id) current.id = item.id
+      if (this.isRecord(item.function)) {
+        if (typeof item.function.name === 'string' && item.function.name) current.name = item.function.name
+        if (typeof item.function.arguments === 'string') current.arguments += item.function.arguments
+      }
+      const signature = this.toolCallThoughtSignature(item)
+      if (signature) current.googleThoughtSignature = signature
+      target.set(index, current)
+    })
+  }
+
+  private streamToolCalls(source: Map<number, StreamToolCallAccumulator>): UnifiedToolCall[] {
+    return [...source.entries()]
+      .sort(([left], [right]) => left - right)
+      .flatMap(([, item], index): UnifiedToolCall[] => {
+        if (!item.name) return []
+        return [{
+          id: item.id || `tool-call-${index + 1}`,
+          name: item.name,
+          arguments: this.parseToolArguments(item.name, item.arguments || '{}'),
+          ...(item.googleThoughtSignature
+            ? { providerMetadata: { googleThoughtSignature: item.googleThoughtSignature } }
+            : {})
+        }]
+      })
+  }
+
+  private parseToolArguments(name: string, rawArguments: string): Record<string, unknown> {
+    try {
+      const parsed: unknown = JSON.parse(rawArguments)
+      if (this.isRecord(parsed)) return parsed
+      throw new Error('parsed value is not an object')
+    } catch (cause) {
+      const trimmedArguments = rawArguments.trim()
+      const parseError = cause instanceof Error ? cause.message.replace(/\s+/g, ' ').slice(0, 160) : 'unknown'
+      const hasObjectEnvelope = trimmedArguments.startsWith('{') && trimmedArguments.endsWith('}')
+      throw new ModelAdapterError({
+        code: 'REQUEST_FAILED',
+        message: `Tool call ${name} returned invalid JSON arguments (arguments_length=${rawArguments.length}, object_envelope=${hasObjectEnvelope}, parse_error=${parseError}).`,
+        titleZh: '工具参数无法解析',
+        descriptionZh: '模型返回的结构化工具参数不是有效 JSON。',
+        retryable: true
+      })
+    }
+  }
+
+  private toolCallThoughtSignature(item: Record<string, unknown>): string | undefined {
+    if (!this.isRecord(item.extra_content) || !this.isRecord(item.extra_content.google)) return undefined
+    const signature = item.extra_content.google.thought_signature
+    return typeof signature === 'string' && signature.length > 0 ? signature : undefined
   }
 
   private firstChoice(body: unknown): Record<string, unknown> | undefined {

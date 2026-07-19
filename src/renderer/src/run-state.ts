@@ -3,7 +3,18 @@ import type { DebateTurnDto, RunEventDto, RunStateDto } from '../../shared/ipc-c
 export interface LiveRunSnapshot {
   state?: RunStateDto
   turns: DebateTurnDto[]
+  reasoningByTurn?: Record<string, LiveReasoningSnapshot>
 }
+
+export interface LiveReasoningSnapshot {
+  content: string
+  updatedAt: string
+  truncated: boolean
+  receivedCharacters: number
+}
+
+const MAX_TRANSIENT_REASONING_CHARACTERS = 120_000
+const TRUNCATION_NOTICE = '……较早的思考内容已因界面长度上限折叠……\n\n'
 
 export function applyRunEvent(snapshot: LiveRunSnapshot, event: RunEventDto): LiveRunSnapshot {
   switch (event.type) {
@@ -35,6 +46,26 @@ export function applyRunEvent(snapshot: LiveRunSnapshot, event: RunEventDto): Li
             createdAt: event.createdAt
           }
       return { ...snapshot, turns: upsertTurn(snapshot.turns, updated) }
+    }
+    case 'turnReasoningUpdated': {
+      const previous = snapshot.reasoningByTurn?.[event.turnId]
+      const combined = `${previous?.content ?? ''}${event.delta}`
+      const truncated = Boolean(previous?.truncated) || combined.length > MAX_TRANSIENT_REASONING_CHARACTERS
+      const content = combined.length > MAX_TRANSIENT_REASONING_CHARACTERS
+        ? `${TRUNCATION_NOTICE}${combined.slice(-(MAX_TRANSIENT_REASONING_CHARACTERS - TRUNCATION_NOTICE.length))}`
+        : combined
+      return {
+        ...snapshot,
+        reasoningByTurn: {
+          ...snapshot.reasoningByTurn,
+          [event.turnId]: {
+            content,
+            updatedAt: event.createdAt,
+            truncated,
+            receivedCharacters: (previous?.receivedCharacters ?? 0) + event.delta.length
+          }
+        }
+      }
     }
     case 'turnCompleted':
       return { ...snapshot, turns: upsertTurn(snapshot.turns, event.turn) }

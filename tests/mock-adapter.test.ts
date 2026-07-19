@@ -40,4 +40,21 @@ describe('MockAdapter', () => {
       finishReason: 'stop'
     })
   })
+
+  it('simulates provider reasoning without mixing it into visible content', async () => {
+    const adapter = new MockAdapter({
+      reasoningChunks: ['正在检查前提', '与证据边界。'],
+      chunks: ['公开结论']
+    })
+    const events: UnifiedStreamEvent[] = []
+
+    for await (const event of adapter.stream(createRequest())) events.push(event)
+
+    expect(events.filter((event) => event.type === 'reasoningDelta').map((event) => event.delta).join('')).toBe('正在检查前提与证据边界。')
+    expect(events.filter((event) => event.type === 'textDelta').map((event) => event.delta).join('')).toBe('公开结论')
+    expect(events.at(-1)).toMatchObject({
+      type: 'completed',
+      response: { content: '公开结论', reasoningContent: '正在检查前提与证据边界。' }
+    })
+  })
 })

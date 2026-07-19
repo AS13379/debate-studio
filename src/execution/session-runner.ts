@@ -16,6 +16,7 @@ export type SessionRunnerEvent =
   | { id: string; type: 'stateChanged'; sessionId: string; createdAt: string; event: StateChangedEvent }
   | { id: string; type: 'turnStarted'; sessionId: string; createdAt: string; turn: DebateTurn }
   | { id: string; type: 'turnUpdated'; sessionId: string; createdAt: string; turnId: string; stage: DebateTurn['stage']; participantId: string; delta: string; content: string }
+  | { id: string; type: 'turnReasoningUpdated'; sessionId: string; createdAt: string; turnId: string; stage: DebateTurn['stage']; participantId: string; delta: string }
   | { id: string; type: 'turnCompleted'; sessionId: string; createdAt: string; turn: DebateTurn }
   | { id: string; type: 'turnFailed'; sessionId: string; createdAt: string; turn: DebateTurn }
   | { id: string; type: 'sessionPaused'; sessionId: string; createdAt: string }
@@ -209,6 +210,13 @@ export class SessionRunner {
         participantId: turn.participantId,
         delta,
         content: turn.content ?? ''
+      }),
+      onReasoningUpdated: (turn, delta) => this.emit({
+        type: 'turnReasoningUpdated',
+        turnId: turn.id,
+        stage: turn.stage,
+        participantId: turn.participantId,
+        delta
       })
     }
     const result = previousTurn
@@ -286,7 +294,10 @@ export class SessionRunner {
       sessionId: this.engine.session.id,
       createdAt: this.now().toISOString()
     } as SessionRunnerEvent
-    this.eventLog.push(completeEvent)
+    // Raw reasoning can be large and may contain provider-only intermediate
+    // output. It is forwarded live but intentionally omitted from retained
+    // SessionRunner history.
+    if (completeEvent.type !== 'turnReasoningUpdated') this.eventLog.push(completeEvent)
     this.onEvent?.(completeEvent)
   }
 }

@@ -17,6 +17,7 @@ export interface TurnRunResult {
 export interface TurnRunObserver {
   onStarted?(turn: DebateTurn): void
   onUpdated?(turn: DebateTurn, delta: string): void
+  onReasoningUpdated?(turn: DebateTurn, delta: string): void
 }
 
 interface ActiveRun {
@@ -93,8 +94,15 @@ export class TurnRunner {
     try {
       observer?.onStarted?.({ ...runningTurn() })
       for await (const event of this.adapter.stream(request)) {
-        streamEvents.push(event)
-        this.onStreamEvent?.(event)
+        if (event.type === 'reasoningDelta') {
+          // Reasoning is deliberately transient: notify the live observer, but
+          // never add it to Turn content or the retained stream event list.
+          observer?.onReasoningUpdated?.({ ...runningTurn() }, event.delta)
+          continue
+        }
+        const retainedEvent = this.withoutTransientProviderState(event)
+        streamEvents.push(retainedEvent)
+        this.onStreamEvent?.(retainedEvent)
 
         if (event.type === 'textDelta') {
           content += event.delta
@@ -175,6 +183,22 @@ export class TurnRunner {
       throw new Error('Only failed, cancelled or interrupted turns can be retried.')
     }
     return this.startTurn(engine, prompt, previousTurn.id, observer)
+  }
+
+  private withoutTransientProviderState(event: UnifiedStreamEvent): UnifiedStreamEvent {
+    if (event.type !== 'completed') return event
+    const { reasoningContent: _reasoningContent, toolCalls, ...response } = event.response
+    return {
+      type: 'completed',
+      response: {
+        ...response,
+        ...(toolCalls?.length
+          ? {
+              toolCalls: toolCalls.map(({ providerMetadata: _providerMetadata, ...toolCall }) => toolCall)
+            }
+          : {})
+      }
+    }
   }
 
   private failedTurn(

@@ -74,6 +74,7 @@ export class DebatePlanner {
         providerConnectionId: route.route.providerConnection.id,
         providerId: route.route.providerConnection.providerId,
         baseUrl: route.route.providerConnection.baseUrl,
+        reasoningEnabled: route.route.modelProfile.capabilities.reasoning,
         purpose: 'debate-planning'
       }
     }
@@ -91,8 +92,11 @@ export class DebatePlanner {
 
     try {
       let content = ''
+      let reasoningContent = ''
       let streamError: ModelAdapterError | undefined
       let emittedAtLength = 0
+      let reasoningEmittedAtLength = 0
+      let reasoningEmittedAt = 0
       for await (const event of route.route.adapter.stream(request)) {
         if (event.type === 'error') {
           streamError = new ModelAdapterError(event.error)
@@ -109,17 +113,36 @@ export class DebatePlanner {
             })
           }
         }
+        if (event.type === 'reasoningDelta') {
+          reasoningContent += event.delta
+          const now = Date.now()
+          if (reasoningContent.length - reasoningEmittedAtLength >= 32 || now - reasoningEmittedAt >= 250) {
+            reasoningEmittedAtLength = reasoningContent.length
+            reasoningEmittedAt = now
+            onProgress?.({
+              stage: 'streaming', progress: Math.min(72, 40 + Math.floor(reasoningContent.length / 180)),
+              labelZh: 'AI 正在思考辩题', detailZh: `已收到 ${reasoningContent.length.toLocaleString()} 个思考字符，模型仍在运行。`,
+              rawReasoning: visibleText(reasoningContent)
+            })
+          }
+        }
         if (event.type === 'completed') content = event.response.content || content
+      }
+      if (reasoningContent.length > reasoningEmittedAtLength) {
+        onProgress?.({
+          stage: 'streaming', progress: 84, labelZh: 'AI 已完成思考',
+          detailZh: '正在整理最终结构化方案。', rawReasoning: visibleText(reasoningContent)
+        })
       }
       if (streamError) throw streamError
       if (!content.trim()) throw new ModelAdapterError({ code: 'EMPTY_RESPONSE', message: 'Planner stream returned no content.', retryable: true })
-      onProgress?.({ stage: 'parsing', progress: 90, labelZh: '正在整理 AI 返回内容', detailZh: '检查 JSON 字段，不会偷偷补全解析失败的结果。', rawOutput: visibleText(content) })
+      onProgress?.({ stage: 'parsing', progress: 90, labelZh: '正在整理 AI 返回内容', detailZh: '检查 JSON 字段，不会偷偷补全解析失败的结果。', rawOutput: visibleText(content), rawReasoning: reasoningContent ? visibleText(reasoningContent) : undefined })
       const parsed = parsePlan(content, input.topic.trim())
       if (!parsed.ok) {
-        onProgress?.({ stage: 'failed', progress: 100, labelZh: parsed.error.titleZh, detailZh: parsed.error.descriptionZh, rawOutput: visibleText(content) })
+        onProgress?.({ stage: 'failed', progress: 100, labelZh: parsed.error.titleZh, detailZh: parsed.error.descriptionZh, rawOutput: visibleText(content), rawReasoning: reasoningContent ? visibleText(reasoningContent) : undefined })
         return parsed
       }
-      onProgress?.({ stage: 'completed', progress: 100, labelZh: '辩论方案已生成', detailZh: '可以关闭窗口并逐项编辑方案。', rawOutput: visibleText(content) })
+      onProgress?.({ stage: 'completed', progress: 100, labelZh: '辩论方案已生成', detailZh: '可以关闭窗口并逐项编辑方案。', rawOutput: visibleText(content), rawReasoning: reasoningContent ? visibleText(reasoningContent) : undefined })
       return {
         ok: true,
         value: {

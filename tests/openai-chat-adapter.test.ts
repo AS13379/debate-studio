@@ -225,7 +225,78 @@ describe('OpenAIChatAdapter', () => {
     expect(transport.requests[0].body).toMatchObject({
       tools: [{ type: 'function', function: { name: 'searchWeb' } }]
     })
-    expect(transport.requests[0].body).not.toHaveProperty('thinking')
+    expect(transport.requests[0].body).toMatchObject({ thinking: { type: 'enabled' } })
+  })
+
+  it('maps provider-specific thinking controls without guessing for unknown providers', async () => {
+    const scenarios = [
+      { providerId: 'zhipu', modelId: 'glm-5.1', reasoningEnabled: true, expected: { thinking: { type: 'enabled' } } },
+      { providerId: 'xiaomi-mimo', modelId: 'mimo-v2-flash', reasoningEnabled: false, expected: { thinking: { type: 'disabled' } } },
+      { providerId: 'alibaba-dashscope', modelId: 'qwen3.7-plus', reasoningEnabled: true, expected: { enable_thinking: true } },
+      {
+        providerId: 'gemini', modelId: 'gemini-3.5-flash', reasoningEnabled: true,
+        expected: { extra_body: { google: { thinking_config: { include_thoughts: true } } } }
+      },
+      { providerId: 'moonshot', modelId: 'kimi-k3', reasoningEnabled: true, expected: { reasoning_effort: 'max' } },
+      { providerId: 'moonshot', modelId: 'kimi-k2.6', reasoningEnabled: true, expected: { thinking: { type: 'enabled' } } }
+    ] as const
+
+    for (const scenario of scenarios) {
+      const transport = new MockHttpTransport()
+      await new OpenAIChatAdapter(transport).complete({
+        ...request(),
+        modelId: scenario.modelId,
+        runtimeMetadata: {
+          ...request().runtimeMetadata,
+          providerId: scenario.providerId,
+          reasoningEnabled: scenario.reasoningEnabled
+        }
+      })
+      expect(transport.requests[0].body).toMatchObject(scenario.expected)
+    }
+
+    const noGuessTransport = new MockHttpTransport()
+    await new OpenAIChatAdapter(noGuessTransport).complete({
+      ...request(),
+      modelId: 'custom-reasoner',
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'custom-compatible',
+        reasoningEnabled: true
+      }
+    })
+    expect(noGuessTransport.requests[0].body).not.toHaveProperty('thinking')
+    expect(noGuessTransport.requests[0].body).not.toHaveProperty('enable_thinking')
+    expect(noGuessTransport.requests[0].body).not.toHaveProperty('reasoning_effort')
+    expect(noGuessTransport.requests[0].body).not.toHaveProperty('extra_body')
+  })
+
+  it('does not send incompatible thinking fields to Kimi K3 or K2.7 Code', async () => {
+    const k3Transport = new MockHttpTransport()
+    await new OpenAIChatAdapter(k3Transport).complete({
+      ...request(),
+      modelId: 'kimi-k3',
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'moonshot',
+        reasoningEnabled: true
+      }
+    })
+    expect(k3Transport.requests[0].body).toMatchObject({ reasoning_effort: 'max' })
+    expect(k3Transport.requests[0].body).not.toHaveProperty('thinking')
+
+    const codeTransport = new MockHttpTransport()
+    await new OpenAIChatAdapter(codeTransport).complete({
+      ...request(),
+      modelId: 'kimi-k2.7-code',
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'moonshot',
+        reasoningEnabled: true
+      }
+    })
+    expect(codeTransport.requests[0].body).not.toHaveProperty('thinking')
+    expect(codeTransport.requests[0].body).not.toHaveProperty('reasoning_effort')
   })
 
   it('maps image input only when a vision request explicitly contains image bytes', async () => {
@@ -311,7 +382,7 @@ describe('OpenAIChatAdapter', () => {
     expect((transport.requests[0].body as OpenAIChatRequestBody).stream).toBe(true)
   })
 
-  it('does not expose streamed reasoning content as visible text', async () => {
+  it('emits streamed reasoning separately from visible assistant text', async () => {
     const reasoningMarker = 'PRIVATE_STREAM_REASONING'
     const transport = new MockHttpTransport({
       streamEvents: [
@@ -327,7 +398,96 @@ describe('OpenAIChatAdapter', () => {
     expect(events.filter((event) => event.type === 'textDelta')).toEqual([
       { type: 'textDelta', requestId: 'request-openai', delta: '公开回答' }
     ])
-    expect(JSON.stringify(events)).not.toContain(reasoningMarker)
+    expect(events.filter((event) => event.type === 'reasoningDelta')).toEqual([
+      { type: 'reasoningDelta', requestId: 'request-openai', delta: reasoningMarker }
+    ])
+    expect(events.at(-1)).toMatchObject({
+      type: 'completed',
+      response: { content: '公开回答', reasoningContent: reasoningMarker }
+    })
+  })
+
+  it('assembles streamed tool calls and preserves Gemini thought signatures for replay', async () => {
+    const transport = new MockHttpTransport({
+      streamEvents: [
+        { type: 'data', data: { choices: [{ delta: {
+          reasoning_content: '正在决定搜索词。',
+          tool_calls: [{
+            index: 0,
+            id: 'call-search',
+            type: 'function',
+            function: { name: 'searchWeb', arguments: '{"query":"' },
+            extra_content: { google: { thought_signature: 'gemini-signature' } }
+          }]
+        }, finish_reason: null }] } },
+        { type: 'data', data: { choices: [{ delta: {
+          tool_calls: [{ index: 0, function: { arguments: '辩论证据"}' } }]
+        }, finish_reason: 'tool_calls' }] } },
+        { type: 'done' }
+      ]
+    })
+    const adapter = new OpenAIChatAdapter(transport)
+    const events: UnifiedStreamEvent[] = []
+
+    for await (const event of adapter.stream({
+      ...request(),
+      tools: [{ name: 'searchWeb', description: '搜索', parameters: { type: 'object' } }],
+      toolChoice: 'auto'
+    })) events.push(event)
+
+    expect(events.map((event) => event.type)).toEqual(['started', 'reasoningDelta', 'completed'])
+    expect(events.at(-1)).toMatchObject({
+      type: 'completed',
+      response: {
+        content: '',
+        reasoningContent: '正在决定搜索词。',
+        finishReason: 'tool_calls',
+        toolCalls: [{
+          id: 'call-search',
+          name: 'searchWeb',
+          arguments: { query: '辩论证据' },
+          providerMetadata: { googleThoughtSignature: 'gemini-signature' }
+        }]
+      }
+    })
+
+    const completed = events.at(-1)
+    if (!completed || completed.type !== 'completed') throw new Error('Expected completed stream event.')
+    await adapter.complete({
+      ...request(),
+      messages: [
+        { role: 'user', content: '搜索辩论证据。' },
+        {
+          role: 'assistant',
+          content: completed.response.content,
+          reasoningContent: completed.response.reasoningContent,
+          toolCalls: completed.response.toolCalls
+        },
+        { role: 'tool', content: '搜索结果', toolCallId: 'call-search', name: 'searchWeb' }
+      ]
+    })
+
+    const continuedBody = transport.requests[1].body as OpenAIChatRequestBody
+    expect(continuedBody.messages[1]).toMatchObject({
+      reasoning_content: '正在决定搜索词。',
+      tool_calls: [{
+        id: 'call-search',
+        extra_content: { google: { thought_signature: 'gemini-signature' } }
+      }]
+    })
+  })
+
+  it('keeps non-tool completion reasoning transiently without mixing it into content', async () => {
+    const transport = new MockHttpTransport({ response: { status: 200, body: {
+      choices: [{ message: {
+        role: 'assistant', content: '公开结论', reasoning_content: '服务商可见思考摘要'
+      }, finish_reason: 'stop' }]
+    } } })
+
+    await expect(new OpenAIChatAdapter(transport).complete(request())).resolves.toMatchObject({
+      content: '公开结论',
+      reasoningContent: '服务商可见思考摘要'
+    })
   })
 
   it('keeps usage from the final stream chunk', async () => {

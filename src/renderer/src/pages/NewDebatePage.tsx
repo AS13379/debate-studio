@@ -57,7 +57,7 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
   const [saving, setSaving] = useState(false)
   const activePlanningOperation = useRef<string | undefined>(undefined)
   const [plannerDialog, setPlannerDialog] = useState<{
-    open: boolean; running: boolean; progress: number; description: string; logs: OperationLogItem[]; rawInput?: string; rawOutput?: string
+    open: boolean; running: boolean; progress: number; description: string; logs: OperationLogItem[]; rawInput?: string; rawOutput?: string; rawReasoning?: string
   }>({ open: false, running: false, progress: 0, description: '', logs: [] })
 
   const refreshConfiguration = async (): Promise<void> => {
@@ -215,6 +215,7 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
         logs={plannerDialog.logs}
         rawInput={plannerDialog.rawInput}
         rawOutput={plannerDialog.rawOutput}
+        reasoningOutput={plannerDialog.rawReasoning}
         onCancel={() => {
           const operationId = activePlanningOperation.current
           if (operationId) void window.debateStudio.cancelDebatePlanning({ operationId })
@@ -299,7 +300,7 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
 }
 
 function plannerDialogFromEvent(
-  current: { open: boolean; running: boolean; progress: number; description: string; logs: OperationLogItem[]; rawInput?: string; rawOutput?: string },
+  current: { open: boolean; running: boolean; progress: number; description: string; logs: OperationLogItem[]; rawInput?: string; rawOutput?: string; rawReasoning?: string },
   event: DebatePlannerProgressDto
 ): typeof current {
   const tone: OperationLogItem['tone'] = event.stage === 'failed' ? 'error' : event.stage === 'completed' ? 'success' : 'normal'
@@ -315,7 +316,8 @@ function plannerDialogFromEvent(
     description: event.detailZh ?? event.labelZh,
     logs: [...withoutPreviousStreaming, nextItem].slice(-12),
     rawInput: event.rawInput ?? current.rawInput,
-    rawOutput: event.rawOutput ?? current.rawOutput
+    rawOutput: event.rawOutput ?? current.rawOutput,
+    rawReasoning: event.rawReasoning ?? current.rawReasoning
   }
 }
 

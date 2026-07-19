@@ -58,13 +58,22 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
     yield { type: 'started', requestId: request.requestId }
     const queue = new ProgressQueue()
     void queue.result.catch(() => undefined)
-    const running = this.execute(request, participant, (message) => queue.push(`\n[研究工具] ${message}\n`))
+    const running = this.execute(
+      request,
+      participant,
+      (message) => queue.push({ type: 'text', delta: `\n[研究工具] ${message}\n` }),
+      (delta) => queue.push({ type: 'reasoning', delta })
+    )
       .then((content) => queue.complete(content), (cause) => queue.fail(cause))
     let collected = ''
     try {
       for await (const item of queue) {
-        collected += item
-        yield { type: 'textDelta', requestId: request.requestId, delta: item }
+        if (item.type === 'reasoning') {
+          yield { type: 'reasoningDelta', requestId: request.requestId, delta: item.delta }
+          continue
+        }
+        collected += item.delta
+        yield { type: 'textDelta', requestId: request.requestId, delta: item.delta }
       }
       const content = await queue.result
       if (content && !collected.includes(content)) {
@@ -81,7 +90,12 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
     }
   }
 
-  private async execute(request: UnifiedRequest, participant: RuntimeParticipant, onProgress?: (message: string) => void): Promise<string> {
+  private async execute(
+    request: UnifiedRequest,
+    participant: RuntimeParticipant,
+    onProgress?: (message: string) => void,
+    onReasoning?: (delta: string) => void
+  ): Promise<string> {
     const role = participant.role as ResearchOwnerRole
     const searchConnection = this.defaultSearchConnection()
     const researchSession = this.ensureResearchSession(request.sessionId, participant.participant.id, role)
@@ -108,7 +122,8 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
       approvalController: this.options.approvalController,
       createId: this.createId,
       now: this.now,
-      onProgress: (message) => onProgress?.(message)
+      onProgress: (message) => onProgress?.(message),
+      onReasoning
     })
     const result = await loop.run(request, {
       debateSessionId: request.sessionId,
@@ -158,8 +173,12 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
   }
 }
 
-class ProgressQueue implements AsyncIterable<string> {
-  private readonly values: string[] = []
+type ProgressQueueItem =
+  | { type: 'text'; delta: string }
+  | { type: 'reasoning'; delta: string }
+
+class ProgressQueue implements AsyncIterable<ProgressQueueItem> {
+  private readonly values: ProgressQueueItem[] = []
   private waiter?: () => void
   private finished = false
   private failure?: unknown
@@ -167,11 +186,11 @@ class ProgressQueue implements AsyncIterable<string> {
   private rejectResult!: (cause: unknown) => void
   readonly result = new Promise<string>((resolve, reject) => { this.resolveResult = resolve; this.rejectResult = reject })
 
-  push(value: string): void { this.values.push(value); this.waiter?.(); this.waiter = undefined }
+  push(value: ProgressQueueItem): void { this.values.push(value); this.waiter?.(); this.waiter = undefined }
   complete(content: string): void { this.finished = true; this.resolveResult(content); this.waiter?.(); this.waiter = undefined }
   fail(cause: unknown): void { this.failure = cause; this.finished = true; this.rejectResult(cause); this.waiter?.(); this.waiter = undefined }
 
-  async *[Symbol.asyncIterator](): AsyncIterator<string> {
+  async *[Symbol.asyncIterator](): AsyncIterator<ProgressQueueItem> {
     while (!this.finished || this.values.length) {
       if (this.values.length) { yield this.values.shift()!; continue }
       await new Promise<void>((resolve) => { this.waiter = resolve })

@@ -42,6 +42,9 @@ export class DebateRunPersistence {
   }
 
   handle(event: SessionRunnerEvent): PersistenceResult<void> {
+    // Provider reasoning is a live-only UX signal. Never serialize it into
+    // the event table, Turn records, logs, exports or diagnostic reports.
+    if (event.type === 'turnReasoningUpdated') return { ok: true, value: undefined }
     if (this.asynchronousError) return { ok: false, error: this.asynchronousError }
 
     const businessResult = this.persistBusinessState(event)
@@ -112,6 +115,9 @@ export class DebateRunPersistence {
         this.pendingUpdates.set(event.turnId, updated)
         return this.scheduleFlush(event.turnId)
       }
+
+      case 'turnReasoningUpdated':
+        return { ok: true, value: undefined }
 
       case 'turnCompleted':
       case 'turnFailed':
@@ -232,7 +238,7 @@ export class DebateRunPersistence {
   }
 
   private turnIdFor(event: SessionRunnerEvent): string | undefined {
-    if (event.type === 'turnUpdated') return event.turnId
+    if (event.type === 'turnUpdated' || event.type === 'turnReasoningUpdated') return event.turnId
     if (event.type === 'turnStarted' || event.type === 'turnCompleted' || event.type === 'turnFailed') {
       return event.turn.id
     }

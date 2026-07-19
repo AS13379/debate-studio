@@ -181,7 +181,8 @@ describe('local AI workbench enhancements', () => {
       modelId: 'mock-vision',
       mimeType: 'image/png',
       sessionId: demo.value.sessionId,
-      participantRole: 'affirmative'
+      participantRole: 'affirmative',
+      reasoningEnabled: true
     })
   })
 

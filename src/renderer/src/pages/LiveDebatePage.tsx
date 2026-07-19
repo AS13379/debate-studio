@@ -17,7 +17,7 @@ import { ResearchPanel } from '../components/ResearchPanel'
 import { DebateQualityPanel } from '../components/DebateQualityPanel'
 import { DebateInlineManagement } from '../components/DebateInlineManagement'
 import { formatDebateSpeechMarkdown } from '../debate-speech'
-import { applyRunEvent, type LiveRunSnapshot } from '../run-state'
+import { applyRunEvent, type LiveReasoningSnapshot, type LiveRunSnapshot } from '../run-state'
 import { stageLabel, statusLabel } from './HomePage'
 import { isSlowFirstTokenModel } from '../model-latency'
 
@@ -135,6 +135,13 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
   const researchTurns = snapshot.turns.filter((turn) => isResearchPreparationStage(turn.stage))
   const debateTurns = snapshot.turns.filter((turn) => !isResearchPreparationStage(turn.stage))
   const activeResearchTurn = [...researchTurns].reverse().find((turn) => ['running', 'streaming'].includes(turn.status))
+  const activeTurn = [...snapshot.turns].reverse().find((turn) => ['running', 'streaming'].includes(turn.status))
+  const activeParticipant = activeTurn ? participantById.get(activeTurn.participantId) : undefined
+  const activeProfile = activeParticipant
+    ? setup?.modelProfiles.find((profile) => profile.id === activeParticipant.modelProfileId)
+    : undefined
+  const activeReasoning = activeTurn ? snapshot.reasoningByTurn?.[activeTurn.id] : undefined
+  const activeMayReason = Boolean(activeProfile?.capabilities.reasoning || (activeProfile && isSlowFirstTokenModel(activeProfile.modelId)))
   const slowProfiles = setup?.modelProfiles.filter((profile) => isSlowFirstTokenModel(profile.modelId)) ?? []
   const renderTurn = (turn: DebateTurnDto) => {
     const participant = participantById.get(turn.participantId)
@@ -143,6 +150,7 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
       turn={turn}
       role={participant?.role ?? 'moderator'}
       name={participant?.displayName ?? turn.participantId}
+      reasoning={turn.id === activeTurn?.id ? undefined : snapshot.reasoningByTurn?.[turn.id]}
       onRetry={turn.id === retryableTurnId ? () => void runCommand(() => window.debateStudio.retryFailedTurn({ sessionId })) : undefined}
       onChangeModel={() => setShowRoleEditor(true)}
       onOpenModels={onOpenModels}
@@ -170,6 +178,16 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
       {slowProfiles.length > 0 && ['running', 'streaming'].includes(status) && <div className="notice warning slow-model-runtime-notice" role="status">
         正在使用长思考模型（{[...new Set(slowProfiles.map((profile) => profile.modelId))].join('、')}）。首段输出可能较慢；页面中的阶段、研究动作和计数仍会持续更新。
       </div>}
+
+      {activeTurn && (
+        <ReasoningActivityPanel
+          reasoning={activeReasoning}
+          active
+          startedAt={activeTurn.createdAt}
+          modelId={activeProfile?.modelId}
+          possiblyReasoning={activeMayReason}
+        />
+      )}
 
       <DebateQualityPanel debateId={debateId} completed={status === 'completed'} refreshKey={qualityVersion} />
 
@@ -324,10 +342,11 @@ function RoleModelEditor({ sessionId, participants, profiles, onCancel, onSaved,
   )
 }
 
-function TurnCard({ turn, role, name, onRetry, onChangeModel, onOpenModels }: {
+function TurnCard({ turn, role, name, reasoning, onRetry, onChangeModel, onOpenModels }: {
   turn: DebateTurnDto
   role: string
   name: string
+  reasoning?: LiveReasoningSnapshot
   onRetry?(): void
   onChangeModel(): void
   onOpenModels(): void
@@ -348,11 +367,63 @@ function TurnCard({ turn, role, name, onRetry, onChangeModel, onOpenModels }: {
         <div><strong>{name}</strong><span>{stageLabel(turn.stage)}</span></div>
         <span className={`turn-status status-${turn.status}`}>{statusLabel(turn.status)}</span>
       </header>
+      {reasoning && (
+        <ReasoningActivityPanel
+          reasoning={reasoning}
+          active={false}
+          startedAt={turn.createdAt}
+        />
+      )}
       <div className="turn-content"><MarkdownContent content={visibleContent} /></div>
       <small>Token 用量：未知</small>
       {failure && <ErrorRecoveryPanel failure={failure} onRetry={onRetry} onChangeModel={onChangeModel} onOpenConnection={onOpenModels} />}
       {turn.retryOfTurnId && <small>重试自 Turn {turn.retryOfTurnId}</small>}
     </article>
+  )
+}
+
+export function ReasoningActivityPanel({ reasoning, active, startedAt, modelId, possiblyReasoning = true }: {
+  reasoning?: LiveReasoningSnapshot
+  active: boolean
+  startedAt: string
+  modelId?: string
+  possiblyReasoning?: boolean
+}) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active) return undefined
+    const timer = setInterval(() => setNow(Date.now()), 1_000)
+    return () => clearInterval(timer)
+  }, [active])
+
+  const startedAtMs = Date.parse(startedAt)
+  const elapsedSeconds = Number.isFinite(startedAtMs) ? Math.max(0, Math.floor((now - startedAtMs) / 1_000)) : 0
+  const title = active
+    ? (possiblyReasoning || reasoning ? '模型思考中…' : '模型生成中…')
+    : '服务商返回的思考内容 / 摘要'
+  return (
+    <details className={`reasoning-activity ${active ? 'is-active' : ''}`} open={active || undefined}>
+      <summary>
+        <div>
+          <strong className={active ? 'reasoning-shimmer-text' : undefined}>{title}</strong>
+          <span>
+            {active
+              ? `已运行 ${elapsedSeconds} 秒${modelId ? ` · ${modelId}` : ''}`
+              : `本页内收到 ${reasoning?.receivedCharacters ?? 0} 个字符`}
+          </span>
+        </div>
+        <span className="reasoning-live-status" role="status">
+          {active ? <><i aria-hidden="true" />实时</> : '仅本次运行可见'}
+        </span>
+      </summary>
+      <div className="reasoning-activity-body" aria-live="polite">
+        {reasoning?.content
+          ? <pre>{reasoning.content}</pre>
+          : <p>API 暂未返回可见的思考文本，但请求仍在运行。这里会持续计时，收到内容后立即显示。</p>}
+        {reasoning?.truncated && <small>思考文本超过界面 12 万字符上限，较早内容已折叠，最新内容仍在持续显示。</small>}
+        <small>这是服务商实际返回的思考内容或思考摘要，不代表完整内部推理。它只保留在当前页面内存中，不写入辩论正文、SQLite、日志或导出文件。</small>
+      </div>
+    </details>
   )
 }
 

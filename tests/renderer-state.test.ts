@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { HomePage } from '../src/renderer/src/pages/HomePage'
-import { isResearchPreparationStage } from '../src/renderer/src/pages/LiveDebatePage'
+import { isResearchPreparationStage, ReasoningActivityPanel } from '../src/renderer/src/pages/LiveDebatePage'
 import { applyRunEvent } from '../src/renderer/src/run-state'
 
 describe('Renderer state', () => {
@@ -57,6 +57,76 @@ describe('Renderer state', () => {
 
     expect(streamed.turns).toEqual([expect.objectContaining({ id: 'turn-ui', status: 'streaming', content: '流式内容' })])
     expect(completed.turns).toEqual([expect.objectContaining({ id: 'turn-ui', status: 'completed', content: '流式内容' })])
+  })
+
+  it('keeps provider reasoning in bounded renderer memory without changing Turn content', () => {
+    const started = applyRunEvent({ turns: [] }, {
+      id: 'event-start',
+      type: 'turnStarted',
+      sessionId: 'session-ui',
+      createdAt: '2026-07-13T00:00:00.000Z',
+      turn: {
+        id: 'turn-reasoning', sessionId: 'session-ui', participantId: 'participant-ui',
+        stage: 'validating', status: 'running', content: '', createdAt: '2026-07-13T00:00:00.000Z'
+      }
+    })
+    const reasoned = applyRunEvent(started, {
+      id: 'event-reasoning',
+      type: 'turnReasoningUpdated',
+      sessionId: 'session-ui',
+      createdAt: '2026-07-13T00:00:01.000Z',
+      turnId: 'turn-reasoning',
+      participantId: 'participant-ui',
+      stage: 'validating',
+      delta: '这是服务商返回的思考文本'
+    })
+
+    expect(reasoned.turns[0].content).toBe('')
+    expect(reasoned.reasoningByTurn?.['turn-reasoning']).toMatchObject({
+      content: '这是服务商返回的思考文本',
+      truncated: false,
+      receivedCharacters: 12
+    })
+  })
+
+  it('bounds very long transient reasoning while retaining its latest content', () => {
+    const longDelta = `起点${'x'.repeat(125_000)}最新思考`
+    const snapshot = applyRunEvent({ turns: [] }, {
+      id: 'event-reasoning-long',
+      type: 'turnReasoningUpdated',
+      sessionId: 'session-ui',
+      createdAt: '2026-07-13T00:00:01.000Z',
+      turnId: 'turn-long',
+      participantId: 'participant-ui',
+      stage: 'validating',
+      delta: longDelta
+    })
+    const reasoning = snapshot.reasoningByTurn?.['turn-long']
+
+    expect(reasoning?.truncated).toBe(true)
+    expect(reasoning?.receivedCharacters).toBe(longDelta.length)
+    expect(reasoning?.content.length).toBeLessThanOrEqual(120_000)
+    expect(reasoning?.content).toContain('最新思考')
+  })
+
+  it('renders an active, collapsible provider reasoning area with elapsed activity context', () => {
+    const html = renderToStaticMarkup(createElement(ReasoningActivityPanel, {
+      active: true,
+      startedAt: new Date().toISOString(),
+      modelId: 'kimi-k3-thinking',
+      reasoning: {
+        content: '正在核对证据边界',
+        updatedAt: new Date().toISOString(),
+        truncated: false,
+        receivedCharacters: 8
+      }
+    }))
+
+    expect(html).toContain('模型思考中')
+    expect(html).toContain('kimi-k3-thinking')
+    expect(html).toContain('正在核对证据边界')
+    expect(html).toContain('不代表完整内部推理')
+    expect(html).toContain('open=""')
   })
 
   it('separates research preparation from the formal debate timeline', () => {

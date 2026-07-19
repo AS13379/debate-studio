@@ -21,6 +21,7 @@ export interface VisionAnalysisRequest {
   providerConnectionId?: string
   providerId?: string
   baseUrl?: string
+  reasoningEnabled?: boolean
   maxTokens?: number
 }
 
@@ -79,7 +80,9 @@ export class OpenAICompatibleVisionAdapter implements VisionAdapter {
       runtimeMetadata: {
         sessionId: request.sessionId, role: request.participantRole, turnId: requestId, stage,
         modelProfileId: request.modelProfileId, providerConnectionId: request.providerConnectionId,
-        providerId: request.providerId, baseUrl: request.baseUrl, purpose: 'vision-analysis'
+        providerId: request.providerId, baseUrl: request.baseUrl,
+        reasoningEnabled: request.reasoningEnabled,
+        purpose: 'vision-analysis'
       }
     }
     const response = await this.adapter.complete(unified)
@@ -157,6 +160,7 @@ export class VisionAnalysisService {
         providerConnectionId: route.route.providerConnection.id,
         providerId: route.route.providerConnection.providerId,
         baseUrl: route.route.providerConnection.baseUrl,
+        reasoningEnabled: route.route.modelProfile.capabilities.reasoning,
         maxTokens: route.route.modelProfile.maxOutputTokens
       })
       const researchSession = asset.value.researchSessionId

@@ -39,6 +39,22 @@ describe('TurnRunner', () => {
     expect(engine.getTurns()).toEqual([expect.objectContaining({ id: result.turn.id })])
   })
 
+  it('forwards reasoning only to the live observer and removes it from retained events', async () => {
+    const engine = createEngine()
+    const marker = '仅当前页面可见的思考内容'
+    const runner = createRunner(new MockAdapter({ reasoningChunks: [marker], chunks: ['公开回答'] }))
+    const received: string[] = []
+
+    const result = await runner.startTurn(engine, undefined, undefined, {
+      onReasoningUpdated: (_turn, delta) => received.push(delta)
+    })
+
+    expect(received.join('')).toBe(marker)
+    expect(result.turn.content).toBe('公开回答')
+    expect(JSON.stringify(result.streamEvents)).not.toContain(marker)
+    expect(JSON.stringify(result.streamEvents)).not.toContain('reasoningContent')
+  })
+
   it('converts an adapter error into a failed turn without advancing', async () => {
     const engine = createEngine()
     const runner = createRunner(new MockAdapter({ error: { message: '模拟请求失败' } }))
