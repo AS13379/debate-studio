@@ -12,11 +12,10 @@ import type {
 } from '../../../shared/ipc-contract'
 import { ErrorRecoveryPanel } from '../components/ErrorRecoveryPanel'
 import { DebateProgress } from '../components/DebateProgress'
-import { MarkdownContent } from '../components/MarkdownContent'
 import { ResearchPanel } from '../components/ResearchPanel'
 import { DebateQualityPanel } from '../components/DebateQualityPanel'
 import { DebateInlineManagement } from '../components/DebateInlineManagement'
-import { formatDebateSpeechMarkdown } from '../debate-speech'
+import { DebateTurnCard, PageHeader, ParticipantStrip, RunControlBar } from '../components/UnifiedWorkbench'
 import { applyRunEvent, type LiveReasoningSnapshot, type LiveRunSnapshot } from '../run-state'
 import { stageLabel, statusLabel } from './HomePage'
 import { isSlowFirstTokenModel } from '../model-latency'
@@ -159,17 +158,13 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
 
   return (
     <section className="page-stack live-page" aria-labelledby="live-title">
-      <header className="page-header compact">
-        <div>
-          <p className="eyebrow">实时辩论</p>
-          <h1 id="live-title">{detail.topic}</h1>
-          <div className="live-meta">
-            <span className={`status-pill status-${status}`}>{statusLabel(status)}</span>
-            <span>阶段：{stageLabel(state?.currentStage ?? detail.currentStage)}</span>
-          </div>
-        </div>
-        <button className="button ghost" onClick={onBack}>返回列表</button>
-      </header>
+      <PageHeader
+        id="live-title"
+        eyebrow="实时辩论"
+        title={detail.topic}
+        description={`${statusLabel(status)} · 阶段：${stageLabel(state?.currentStage ?? detail.currentStage)}`}
+        actions={<button className="button ghost header-back-button" onClick={onBack}>返回列表</button>}
+      />
 
       <DebateInlineManagement debateId={debateId} onChanged={onHistoryChanged} onExit={onBack} />
 
@@ -220,39 +215,20 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
         />
       )}
 
-      <div className="control-bar panel">
-        <button
-          className="button primary"
-          disabled={status !== 'draft' || startBlocked}
-          title={startBlocked ? '请先修正启动前检查中的错误' : undefined}
-          onClick={() => void runCommand(() => window.debateStudio.startDebate({ sessionId }))}
-        >启动</button>
-        <button className="button secondary" disabled={!['running', 'streaming'].includes(status)} onClick={() => void runCommand(() => window.debateStudio.pauseDebate({ sessionId }))}>暂停</button>
-        <button className="button secondary" disabled={status !== 'paused'} onClick={() => void runCommand(() => window.debateStudio.resumeDebate({ sessionId }))}>继续</button>
-        <button
-          className="button secondary"
-          disabled={!['running', 'streaming', 'failed', 'interrupted'].includes(status)}
-          title="取消当前模型请求，保留已收到的内容，然后从下一阶段继续"
-          onClick={() => void runCommand(() => window.debateStudio.skipDebate({ sessionId }))}
-        >跳过当前阶段</button>
-        <button className="button danger" disabled={!['running', 'streaming', 'paused', 'failed', 'interrupted'].includes(status)} onClick={() => void runCommand(() => window.debateStudio.stopDebate({ sessionId }))}>停止</button>
-        <button className="button secondary" disabled={!['failed', 'interrupted'].includes(status)} onClick={() => void runCommand(() => window.debateStudio.retryFailedTurn({ sessionId }))}>重试失败轮次</button>
-      </div>
+      <RunControlBar status={status} statusText={statusLabel(status)} actions={[
+        { id: 'start', label: '启动', tone: 'primary', disabled: status !== 'draft' || startBlocked, title: startBlocked ? '请先修正启动前检查中的错误' : undefined, onClick: () => void runCommand(() => window.debateStudio.startDebate({ sessionId })) },
+        { id: 'pause', label: '暂停', disabled: !['running', 'streaming'].includes(status), onClick: () => void runCommand(() => window.debateStudio.pauseDebate({ sessionId })) },
+        { id: 'resume', label: '继续', disabled: status !== 'paused', onClick: () => void runCommand(() => window.debateStudio.resumeDebate({ sessionId })) },
+        { id: 'skip', label: '跳过当前阶段', disabled: !['running', 'streaming', 'failed', 'interrupted'].includes(status), title: '取消当前模型请求，保留已收到的内容，然后从下一阶段继续', onClick: () => void runCommand(() => window.debateStudio.skipDebate({ sessionId })) },
+        { id: 'stop', label: '停止', tone: 'danger', disabled: !['running', 'streaming', 'paused', 'failed', 'interrupted'].includes(status), onClick: () => void runCommand(() => window.debateStudio.stopDebate({ sessionId })) },
+        { id: 'retry', label: '重试失败轮次', disabled: !['failed', 'interrupted'].includes(status), onClick: () => void runCommand(() => window.debateStudio.retryFailedTurn({ sessionId })) }
+      ]} />
 
-      <div className="participant-strip">
-        {detail.participants.map((participant) => {
+      <ParticipantStrip participants={detail.participants.map((participant) => {
           const profile = setup?.modelProfiles.find((model) => model.id === participant.modelProfileId)
           const connection = profile ? setup?.providerConnections.find((candidate) => candidate.id === profile.connectionId) : undefined
-          return (
-            <div className={`participant-chip role-${participant.role}`} key={participant.id}>
-              <strong>{roleLabel(participant.role)}</strong>
-              <span>{profile?.displayName ?? participant.displayName}</span>
-              {profile && isSlowFirstTokenModel(profile.modelId) && <small className="slow-model-badge">长思考 · 首字较慢</small>}
-              {connection && <small>{connection.displayName}</small>}
-            </div>
-          )
-        })}
-      </div>
+          return { id: participant.id, role: participant.role, roleLabel: roleLabel(participant.role), name: profile?.displayName ?? participant.displayName, slow: Boolean(profile && isSlowFirstTokenModel(profile.modelId)), detail: connection?.displayName }
+        })} />
 
       <ResearchPanel
         detail={detail}
@@ -353,8 +329,6 @@ function TurnCard({ turn, role, name, reasoning, onRetry, onChangeModel, onOpenM
   onChangeModel(): void
   onOpenModels(): void
 }) {
-  const speech = formatDebateSpeechMarkdown(turn.content, turn.stage)
-  const visibleContent = speech || (['running', 'streaming'].includes(turn.status) ? '正在整理发言…' : '无文本')
   const failure = turn.failure ?? (turn.error ? {
     code: 'TURN_FAILED',
     titleZh: '模型请求失败',
@@ -363,25 +337,22 @@ function TurnCard({ turn, role, name, reasoning, onRetry, onChangeModel, onOpenM
     suggestedActionZh: '检查连接后重试，或更换模型。',
     technicalDetails: turn.error
   } : undefined)
-  return (
-    <article className={`turn-card role-${role}`}>
-      <header>
-        <div><strong>{name}</strong><span>{stageLabel(turn.stage)}</span></div>
-        <span className={`turn-status status-${turn.status}`}>{statusLabel(turn.status)}</span>
-      </header>
-      {reasoning && (
+  return <DebateTurnCard
+    turn={turn}
+    role={role}
+    name={name}
+    stageText={stageLabel(turn.stage)}
+    statusText={statusLabel(turn.status)}
+    reasoning={reasoning ? (
         <ReasoningActivityPanel
           reasoning={reasoning}
           active={false}
           startedAt={turn.createdAt}
         />
-      )}
-      <div className="turn-content"><MarkdownContent content={visibleContent} /></div>
-      <small>Token 用量：未知</small>
-      {failure && <ErrorRecoveryPanel failure={failure} onRetry={onRetry} onChangeModel={onChangeModel} onOpenConnection={onOpenModels} />}
-      {turn.retryOfTurnId && <small>重试自 Turn {turn.retryOfTurnId}</small>}
-    </article>
-  )
+      ) : undefined}
+    failure={failure ? <ErrorRecoveryPanel failure={failure} onRetry={onRetry} onChangeModel={onChangeModel} onOpenConnection={onOpenModels} /> : undefined}
+    footer={<><small>Token 用量：未知</small>{turn.retryOfTurnId && <small>重试自 Turn {turn.retryOfTurnId}</small>}</>}
+  />
 }
 
 export function ReasoningActivityPanel({ reasoning, active, startedAt, modelId, possiblyReasoning = true }: {

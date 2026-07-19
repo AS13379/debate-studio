@@ -5,7 +5,15 @@ import type { LanDebateInsightsDto, LanExportRecordDto, LanModelProfileDto, LanR
 import type { PlannedDebateDto } from '../../shared/debate-dtos'
 import type { DebateEvaluationDto } from '../../shared/quality-dtos'
 import { DebateProgress } from '../../renderer/src/components/DebateProgress'
-import { MarkdownContent } from '../../renderer/src/components/MarkdownContent'
+import {
+  CreationModeSelector,
+  DebateTurnCard,
+  PageHeader,
+  ParticipantStrip,
+  RunControlBar,
+  WorkbenchShell,
+  type CreationMode
+} from '../../renderer/src/components/UnifiedWorkbench'
 import { applyRunEvent, type LiveRunSnapshot } from '../../renderer/src/run-state'
 import { LanApiClient } from './lan-api-client'
 
@@ -16,23 +24,30 @@ export function LanApp() {
   const [ready, setReady] = useState(false)
   const [connectionError, setConnectionError] = useState('')
   const [view, setView] = useState<View>({ type: 'list' })
+  const [version, setVersion] = useState('…')
 
   const connect = () => void client.session().then((result) => {
     if (result.ok) { setReady(true); setConnectionError('') }
     else setConnectionError(`${result.error.titleZh}：${result.error.descriptionZh}`)
   })
   useEffect(connect, [client])
+  useEffect(() => { void client.publicStatus().then((result) => result.ok && setVersion(result.value.version)) }, [client])
 
   if (!ready) return <div className="lan-centered"><div className="lan-spinner" /><p>{connectionError || '正在连接 Debate Studio…'}</p>{connectionError && <button className="button primary" onClick={connect}>重试连接</button>}</div>
-  return <div className="lan-shell">
-    <aside className="lan-nav"><strong>Debate Studio</strong><small>Web 控制台</small><button className={view.type === 'list' ? 'active' : ''} onClick={() => setView({ type: 'list' })}>辩论</button><button className={view.type === 'create' ? 'active' : ''} onClick={() => setView({ type: 'create' })}>新建辩论</button><p>无需密码 · 仅用于可信网络</p></aside>
-    <main>{view.type === 'list'
+  return <WorkbenchShell
+    subtitle="局域网 Web 控制台"
+    version={`v${version}`}
+    mobileNavigation
+    primaryNav={[
+      { id: 'list', label: '辩论列表', active: view.type === 'list', onSelect: () => setView({ type: 'list' }) },
+      { id: 'create', label: '新建辩论', active: view.type === 'create', onSelect: () => setView({ type: 'create' }) }
+    ]}
+  >{view.type === 'list'
       ? <DebateListPage client={client} onCreate={() => setView({ type: 'create' })} onOpen={(debate) => setView({ type: 'live', debateId: debate.id, sessionId: debate.sessionId })} />
       : view.type === 'create'
         ? <NewDebatePage client={client} onCancel={() => setView({ type: 'list' })} onCreated={(debate) => setView({ type: 'live', debateId: debate.id, sessionId: debate.sessionId })} />
-        : <LivePage client={client} {...view} onBack={() => setView({ type: 'list' })} />}</main>
-    <nav className="lan-bottom-nav"><button className={view.type === 'list' ? 'active' : ''} onClick={() => setView({ type: 'list' })}>辩论列表</button><button className={view.type === 'create' ? 'active' : ''} onClick={() => setView({ type: 'create' })}>新建辩论</button></nav>
-  </div>
+        : <LivePage client={client} {...view} onBack={() => setView({ type: 'list' })} />}
+  </WorkbenchShell>
 }
 
 function DebateListPage({ client, onCreate, onOpen }: { client: LanApiClient; onCreate(): void; onOpen(debate: Pick<DebateHistorySummaryDto, 'id' | 'sessionId'>): void }) {
@@ -47,16 +62,27 @@ function DebateListPage({ client, onCreate, onOpen }: { client: LanApiClient; on
   })
   useEffect(() => load(0), [])
   const createMock = () => void client.createMockDebate().then((result) => result.ok ? onOpen(result.value) : setMessage(`${result.error.titleZh}：${result.error.descriptionZh}`))
-  return <section className="lan-page"><header className="lan-page-header"><div><span className="eyebrow">本地工作台</span><h1>辩论列表</h1><p>查看和控制 Mac 上已有的辩论。</p></div><div className="lan-header-actions"><button className="button ghost" onClick={createMock}>创建 Mock 示例</button><button className="button primary" onClick={onCreate}>新建辩论</button></div></header>
-    <form className="lan-search" onSubmit={(event) => { event.preventDefault(); load(0) }}><input aria-label="搜索辩论" placeholder="搜索辩题或名称" value={search} onChange={(event) => setSearch(event.target.value)} /><button className="button primary">搜索</button></form>
-    {message && <p className="lan-empty">{message}</p>}
-    <div className="lan-debate-grid">{items.map((debate) => <button className="lan-debate-card" key={debate.id} onClick={() => onOpen(debate)}><span className={`status-pill status-${debate.status}`}>{statusLabel(debate.status)}</span><h2>{debate.displayTitle}</h2><p>{debate.topic}</p><small>{stageLabel(debate.currentStage)} · {new Date(debate.updatedAt).toLocaleString('zh-CN')}</small></button>)}</div>
+  return <section className="page-stack" aria-labelledby="lan-home-title">
+    <PageHeader id="lan-home-title" eyebrow="本地辩论工作台" title="辩论历史" description="查看和控制这台 Mac 上保存的辩论。" actions={<><button className="button secondary" onClick={onCreate}>新建辩论</button><button className="button primary" onClick={createMock}>创建 Mock 示例辩论</button></>} />
+    <form className="panel history-toolbar web-history-toolbar" onSubmit={(event) => { event.preventDefault(); load(0) }}>
+      <label className="field history-search">搜索<input type="search" aria-label="搜索辩论" placeholder="搜索自定义名称或辩题" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+      <button className="button primary">搜索</button>
+    </form>
+    {message && <div className="empty-state compact"><h2>{message}</h2><p>可返回 Mac 客户端检查记录，或创建一场新的辩论。</p></div>}
+    <div className="debate-grid">{items.map((debate) => <article className="debate-card" key={debate.id}>
+      <div className="card-topline"><span className={`status-pill status-${debate.status}`}>{statusLabel(debate.status)}</span></div>
+      <h2>{debate.displayTitle}</h2>
+      {debate.displayTitle !== debate.topic && <p className="history-topic">原辩题：{debate.topic}</p>}
+      <div className="history-card-facts"><span>当前阶段：{stageLabel(debate.currentStage)}</span><span>创建：{new Date(debate.createdAt).toLocaleString('zh-CN')}</span><span>更新：{new Date(debate.updatedAt).toLocaleString('zh-CN')}</span></div>
+      {debate.tags.length > 0 && <div className="tag-list">{debate.tags.map((tag) => <span className="tag-pill" key={tag}>{tag}</span>)}</div>}
+      <div className="compact-actions history-card-actions"><button className="button secondary" onClick={() => onOpen(debate)}>继续查看或运行</button></div>
+    </article>)}</div>
     <div className="lan-pagination"><button className="button ghost" disabled={offset === 0} onClick={() => load(Math.max(0, offset - 20))}>上一页</button><span>第 {Math.floor(offset / 20) + 1} 页</span><button className="button ghost" disabled={!hasMore} onClick={() => load(offset + 20)}>下一页</button></div>
   </section>
 }
 
 function NewDebatePage({ client, onCancel, onCreated }: { client: LanApiClient; onCancel(): void; onCreated(debate: LanDebateDetailDto): void }) {
-  const [mode, setMode] = useState<'auto' | 'assist' | 'manual'>('auto')
+  const [mode, setMode] = useState<CreationMode>('auto')
   const [topic, setTopic] = useState('')
   const [background, setBackground] = useState('')
   const [affirmative, setAffirmative] = useState('')
@@ -108,30 +134,25 @@ function NewDebatePage({ client, onCancel, onCreated }: { client: LanApiClient; 
 
   const canPlan = Boolean(topic.trim() && (mode !== 'assist' || (affirmative.trim() && negative.trim())))
   const canCreate = Boolean(topic.trim() && affirmative.trim() && negative.trim() && models.affirmative && models.negative && models.moderator && !busy)
-  return <section className="lan-page lan-create-page">
-    <header className="lan-page-header"><div><span className="eyebrow">DEBATE PLANNER</span><h1>新建辩论</h1><p>可让 AI 生成方案，也可完全手动填写。</p></div><button className="lan-back" onClick={onCancel}>← 返回列表</button></header>
-    <section className="lan-form-card">
-      <div className="lan-mode-grid">{([
-        ['auto', 'AI 自动规划', '只需辩题，自动生成完整方案'],
-        ['assist', 'AI 辅助完善', '保留双方初始立场并扩展'],
-        ['manual', '完全手动', '不调用规划模型']
-      ] as const).map(([value, title, copy]) => <button key={value} className={mode === value ? 'active' : ''} onClick={() => { setMode(value); setPlan(undefined) }}><strong>{title}</strong><span>{copy}</span></button>)}</div>
-      <label>辩题<input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：大学是否应设立每周无课日？" /></label>
-      <div className="lan-form-columns"><label>领域（可选）<input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="教育、科技、政策…" /></label><label>期望深度<select value={depth} onChange={(event) => setDepth(event.target.value as typeof depth)}><option value="light">精简</option><option value="standard">标准</option><option value="deep">深入</option></select></label></div>
-      <label>背景说明<textarea value={background} onChange={(event) => setBackground(event.target.value)} placeholder="可留空，让 AI 自动补全" /></label>
-      {(mode !== 'auto' || plan) && <div className="lan-form-columns"><label>正方立场<textarea value={affirmative} onChange={(event) => setAffirmative(event.target.value)} /></label><label>反方立场<textarea value={negative} onChange={(event) => setNegative(event.target.value)} /></label></div>}
+  return <section className="page-stack new-debate-page" aria-labelledby="lan-new-debate-title">
+    <PageHeader id="lan-new-debate-title" eyebrow="Debate Planner" title="新建辩论" description="只输入一个辩题，也可以先生成方案、确认后再创建。" actions={<button className="button ghost header-back-button" onClick={onCancel}>返回列表</button>} />
+    <section className="creation-mode-panel panel"><div className="section-heading"><div><h2>创建方式</h2><span>AI 只返回最终结构化方案，不保存分析过程</span></div></div><CreationModeSelector value={mode} onChange={(value) => { setMode(value); setPlan(undefined) }} /></section>
+    <section className="panel planner-input-panel lan-form-card">
+      <label className="field">辩题<input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：大学是否应设立每周无课日？" /></label>
+      <div className="planner-options"><label className="field">背景说明（可选）<textarea value={background} onChange={(event) => setBackground(event.target.value)} placeholder="可留空，让 AI 自动补全" /></label><label className="field">领域（可选）<input value={domain} onChange={(event) => setDomain(event.target.value)} placeholder="教育、科技、政策…" /></label><label className="field">期望深度<select value={depth} onChange={(event) => setDepth(event.target.value as typeof depth)}><option value="light">简要</option><option value="standard">标准</option><option value="deep">深入</option></select></label></div>
+      {(mode !== 'auto' || plan) && <div className="assisted-positions"><label className="field">正方立场<textarea value={affirmative} onChange={(event) => setAffirmative(event.target.value)} /></label><label className="field">反方立场<textarea value={negative} onChange={(event) => setNegative(event.target.value)} /></label></div>}
       {mode !== 'manual' && <button className="button ghost" disabled={!canPlan || busy} onClick={() => void generate()}>{plan ? '重新生成方案' : '生成辩论方案'}</button>}
       {plan && <details className="lan-plan-details"><summary>编辑 AI 方案要点</summary><div className="lan-plan-editor"><label>核心争议（每行一项）<textarea value={plan.plan.keyQuestions.join('\n')} onChange={(event) => updatePlanList('keyQuestions', event.target.value)} /></label><label>研究方向（每行一项）<textarea value={plan.plan.researchDirections.join('\n')} onChange={(event) => updatePlanList('researchDirections', event.target.value)} /></label><label>建议证据类型（每行一项）<textarea value={plan.plan.evidenceSuggestions.join('\n')} onChange={(event) => updatePlanList('evidenceSuggestions', event.target.value)} /></label></div></details>}
     </section>
-    <section className="lan-form-card"><h2>角色模型</h2>{profiles.length ? <><div className="lan-form-columns"><ModelSelect label="正方" value={models.affirmative} profiles={profiles} onChange={(value) => setModels({ ...models, affirmative: value })} /><ModelSelect label="反方" value={models.negative} profiles={profiles} onChange={(value) => setModels({ ...models, negative: value })} /><ModelSelect label="主持人" value={models.moderator} profiles={profiles} onChange={(value) => setModels({ ...models, moderator: value })} /><ModelSelect label="裁判（可选）" value={models.judge} profiles={profiles} optional onChange={(value) => setModels({ ...models, judge: value })} /></div><label>自由辩论轮数<input type="number" min="1" max="20" value={rounds} onChange={(event) => setRounds(Number(event.target.value))} /></label></> : <p className="lan-empty">尚未配置模型。可返回 Mac 客户端配置，或在首页创建 Mock 示例。</p>}</section>
-    {activity && <div className="lan-activity" role="status"><span className={busy ? 'lan-activity-dot active' : 'lan-activity-dot'} />{activity}</div>}
-    {message && <p className="lan-error" role="alert">{message}</p>}
-    <div className="lan-create-actions"><button className="button ghost" onClick={onCancel}>取消</button><button className="button primary" disabled={!canCreate} onClick={() => void create()}>创建辩论</button></div>
+    <section className="panel model-binding-panel lan-form-card"><div className="section-heading"><div><h2>辩论模型</h2><span>{profiles.length} 个可用模型</span></div></div>{profiles.length ? <div className="model-binding-grid"><label className="field">自由辩论轮数<input type="number" min="1" max="20" value={rounds} onChange={(event) => setRounds(Number(event.target.value))} /></label><div /><ModelSelect label="正方模型" value={models.affirmative} profiles={profiles} onChange={(value) => setModels({ ...models, affirmative: value })} /><ModelSelect label="反方模型" value={models.negative} profiles={profiles} onChange={(value) => setModels({ ...models, negative: value })} /><ModelSelect label="主持人模型" value={models.moderator} profiles={profiles} onChange={(value) => setModels({ ...models, moderator: value })} /><ModelSelect label="裁判模型（可选）" value={models.judge} profiles={profiles} optional onChange={(value) => setModels({ ...models, judge: value })} /></div> : <div className="notice">尚未配置模型。可返回 Mac 客户端配置，或在首页创建 Mock 示例。</div>}</section>
+    {activity && <div className="notice" role="status"><span className={busy ? 'lan-activity-dot active' : 'lan-activity-dot'} />{activity}</div>}
+    {message && <div className="notice error" role="alert">{message}</div>}
+    <div className="form-actions planner-final-actions"><button className="button ghost" onClick={onCancel}>取消</button><button className="button primary" disabled={!canCreate} onClick={() => void create()}>创建辩论</button></div>
   </section>
 }
 
 function ModelSelect({ label, value, profiles, optional, onChange }: { label: string; value: string; profiles: LanModelProfileDto[]; optional?: boolean; onChange(value: string): void }) {
-  return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{optional && <option value="">不配置</option>}{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.alias || profile.displayName} · {profile.modelId}</option>)}</select></label>
+  return <label className="field">{label}<select value={value} onChange={(event) => onChange(event.target.value)}>{optional && <option value="">不配置</option>}{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.alias || profile.displayName} · {profile.modelId}</option>)}</select></label>
 }
 
 function LivePage({ client, debateId, sessionId, onBack }: { client: LanApiClient; debateId: string; sessionId: string; onBack(): void }) {
@@ -209,19 +230,26 @@ function LivePage({ client, debateId, sessionId, onBack }: { client: LanApiClien
     })
   }
 
-  return <section className="lan-page lan-live" onScroll={(event) => { const node = event.currentTarget; follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120 }}>
+  const status = snapshot.state?.status ?? detail?.status ?? 'draft'
+  const stage = snapshot.state?.currentStage ?? detail?.currentStage ?? 'draft'
+  return <section className="page-stack live-page lan-live" aria-labelledby="lan-live-title" onScroll={(event) => { const node = event.currentTarget; follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 120 }}>
     {offline && <div className="lan-offline">主机已离线，正在自动重连。当前画面会保留。</div>}
-    <header><button className="lan-back" onClick={onBack}>← 返回列表</button><span className="eyebrow">实时辩论</span><h1>{detail?.displayTitle ?? '正在加载…'}</h1><p>{statusLabel(snapshot.state?.status)} · {stageLabel(snapshot.state?.currentStage)}</p></header>
-    <DebateProgress stage={snapshot.state?.currentStage ?? detail?.currentStage ?? 'draft'} />
-    <div className="lan-controls"><button className="button primary" onClick={() => void command('start')}>启动</button><button className="button ghost" onClick={() => void command('pause')}>暂停</button><button className="button ghost" onClick={() => void command('resume')}>继续</button><button className="button danger" onClick={() => void command('stop')}>停止</button></div>
-    {error && <p className="lan-error" role="alert">{error}</p>}
-    <section className="lan-participants"><h2>参与角色</h2><div>{detail?.participants.map((participant) => <span key={participant.id}>{roleLabel(participant.role)} · {participant.displayName}</span>)}</div></section>
+    <PageHeader id="lan-live-title" eyebrow="实时辩论" title={detail?.topic ?? '正在加载…'} description={`${statusLabel(status)} · 阶段：${stageLabel(stage)}`} actions={<button className="button ghost header-back-button" onClick={onBack}>返回列表</button>} />
+    <DebateProgress stage={stage} />
+    <InsightsSection insights={insights} />
+    <RunControlBar status={status} statusText={statusLabel(status)} actions={[
+      { id: 'start', label: '启动', tone: 'primary', disabled: status !== 'draft', onClick: () => void command('start') },
+      { id: 'pause', label: '暂停', disabled: !['running', 'streaming'].includes(status), onClick: () => void command('pause') },
+      { id: 'resume', label: '继续', disabled: status !== 'paused', onClick: () => void command('resume') },
+      { id: 'stop', label: '停止', tone: 'danger', disabled: !['running', 'streaming', 'paused', 'failed', 'interrupted'].includes(status), onClick: () => void command('stop') }
+    ]} />
+    {error && <div className="notice error" role="alert">{error}</div>}
+    <ParticipantStrip participants={(detail?.participants ?? []).map((participant) => ({ id: participant.id, role: participant.role, roleLabel: roleLabel(participant.role), name: participant.displayName }))} />
     <ResearchSection research={research} />
     {detail && <AssetUploadCard client={client} detail={detail} onUploaded={loadRelated} />}
-    {turnCursor && <button className="button ghost lan-load-older" onClick={() => void loadOlderTurns()}>加载更早发言</button>}
-    <div className="lan-turn-list">{snapshot.turns.map((turn) => <TurnCard key={turn.id} turn={turn} reasoning={snapshot.reasoningByTurn?.[turn.id]?.content} detail={detail} />)}</div>
-    <InsightsSection insights={insights} />
-    <section className="lan-participants lan-export-card"><div className="lan-section-heading"><div><h2>导出</h2><p>文件在 Mac 后台生成，浏览器只获取下载流。</p></div><div><button className="button ghost" onClick={() => void createExport('markdown')}>导出 Markdown</button><button className="button ghost" onClick={() => void createExport('html')}>导出 HTML</button></div></div><div className="lan-export-list">{exports.length ? exports.map((record) => <div key={record.exportId}><span>{record.type.toUpperCase()} · {exportStatus(record.status)}{record.status === 'generating' ? ` ${record.progress}%` : ''}</span>{record.status === 'completed' && <a className="button ghost" href={client.exportDownloadUrl(record.exportId)}>下载</a>}</div>) : <p className="muted">尚无导出记录。</p>}</div></section>
+    {turnCursor && <button className="button ghost load-older-button" onClick={() => void loadOlderTurns()}>加载更早的发言与研究记录</button>}
+    <div className="turn-list">{snapshot.turns.map((turn) => <TurnCard key={turn.id} turn={turn} reasoning={snapshot.reasoningByTurn?.[turn.id]?.content} detail={detail} />)}</div>
+    <section className="panel lan-export-card"><div className="section-heading"><div><h2>导出</h2><span>文件在 Mac 后台生成，浏览器只获取下载流。</span></div><div className="compact-actions"><button className="button ghost" onClick={() => void createExport('markdown')}>导出 Markdown</button><button className="button ghost" onClick={() => void createExport('html')}>导出 HTML</button></div></div><div className="lan-export-list">{exports.length ? exports.map((record) => <div key={record.exportId}><span>{record.type.toUpperCase()} · {exportStatus(record.status)}{record.status === 'generating' ? ` ${record.progress}%` : ''}</span>{record.status === 'completed' && <a className="button ghost" href={client.exportDownloadUrl(record.exportId)}>下载</a>}</div>) : <p className="muted">尚无导出记录。</p>}</div></section>
     <div ref={scrollRef} />
   </section>
 }
@@ -280,11 +308,16 @@ function TagList({ items }: { items: string[] }) { return <div className="lan-ta
 
 function TurnCard({ turn, reasoning, detail }: { turn: DebateTurnDto; reasoning?: string; detail?: LanDebateDetailDto }) {
   const participant = detail?.participants.find((value) => value.id === turn.participantId)
-  return <article className="lan-turn-card"><div className="lan-turn-head"><div><strong>{participant ? roleLabel(participant.role) : '发言'}</strong><span>{stageLabel(turn.stage)}</span></div><span className={`status-pill status-${turn.status}`}>{statusLabel(turn.status)}</span></div>
-    {reasoning && <details className="lan-reasoning"><summary>模型仍在思考 · 查看活动</summary><pre>{reasoning}</pre></details>}
-    <div className="turn-content">{turn.content ? <MarkdownContent content={turn.content} /> : <p className="muted">正在等待正文…</p>}</div>
-    {turn.failure && <div className="lan-error"><strong>{turn.failure.titleZh}</strong><p>{turn.failure.descriptionZh}</p></div>}
-  </article>
+  const role = participant?.role ?? 'moderator'
+  return <DebateTurnCard
+    turn={turn}
+    role={role}
+    name={participant ? roleLabel(role) : '发言'}
+    stageText={stageLabel(turn.stage)}
+    statusText={statusLabel(turn.status)}
+    reasoning={reasoning ? <details className="reasoning-activity"><summary><div><strong>服务商返回的思考内容 / 摘要</strong><span>当前 Web 会话实时同步</span></div><span className="reasoning-live-status">实时</span></summary><div className="reasoning-activity-body"><pre>{reasoning}</pre></div></details> : undefined}
+    failure={turn.failure ? <div className="notice error"><strong>{turn.failure.titleZh}</strong><p>{turn.failure.descriptionZh}</p></div> : undefined}
+  />
 }
 
 function applyServerSnapshot(value: LanSessionSnapshotDto, setDetail: (value: LanDebateDetailDto) => void, setSnapshot: (value: LiveRunSnapshot) => void, epoch: React.MutableRefObject<string>, sequence: React.MutableRefObject<number>) {

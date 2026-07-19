@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import type { CostSummaryDto, DebateQualityOverviewItemDto } from '../../../shared/ipc-contract'
+import { PageHeader } from '../components/UnifiedWorkbench'
 
 export function DebateQualityPage({ onOpenDebate }: { onOpenDebate(debateId: string): void }) {
   const [items, setItems] = useState<DebateQualityOverviewItemDto[]>([])
@@ -20,7 +21,7 @@ export function DebateQualityPage({ onOpenDebate }: { onOpenDebate(debateId: str
   }, {})).sort((left, right) => right[1] - left[1]).slice(0, 6), [items])
   const trend = useMemo(() => [...items].sort((left, right) => left.createdAt.localeCompare(right.createdAt)).slice(-12), [items])
   return <section className="page-stack quality-page" aria-labelledby="quality-title">
-    <header className="page-header compact"><div><span className="eyebrow">DEBATE QUALITY</span><h1 id="quality-title">质量分析</h1><p className="page-description">跟踪已完成辩论的公开评分、证据和 Prompt 版本表现。</p></div></header>
+    <PageHeader id="quality-title" eyebrow="DEBATE QUALITY" title="质量分析" description="跟踪已完成辩论的公开评分、证据和 Prompt 版本表现。" />
     {error && <div className="notice error">{error}</div>}
     <div className="quality-kpis"><article><span>已评分辩论</span><b>{items.length}</b></article><article><span>平均评分</span><b>{average.toFixed(1)}</b></article><article><span>总证据</span><b>{items.reduce((sum, item) => sum + item.evidenceCount, 0)}</b></article><article><span>已知总费用</span><b>{formatCost(costs?.totalCost)}</b></article></div>
     <section className="panel"><div className="section-heading"><div><strong>Prompt 版本表现</strong><span>仅展示已有结构化评分的样本</span></div></div><div className="quality-prompt-performance">{promptPerformance.map((item) => <div key={item.version}><strong>{item.version}</strong><span>平均评分 {item.average.toFixed(1)}</span><span>{item.count} 场</span></div>)}</div></section>

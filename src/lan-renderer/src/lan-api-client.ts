@@ -18,6 +18,10 @@ import type {
 export class LanApiClient {
   private csrfToken = ''
 
+  publicStatus(): Promise<LanResultDto<import('../../shared/lan-dtos').LanPublicStatusDto>> {
+    return this.request('/api/v1/public/status')
+  }
+
   async session(): Promise<LanResultDto<LanAuthSessionDto>> {
     const result = await this.request<LanAuthSessionDto>('/api/v1/auth/session')
     if (result.ok) this.csrfToken = result.value.csrfToken

@@ -21,13 +21,18 @@ describe('LAN Web Console UI contracts', () => {
     expect(html).not.toContain('访问密码')
   })
 
-  it('overrides the desktop minimum width and provides phone navigation at 768px', () => {
+  it('inherits the desktop workbench and only adds phone navigation below 768px', () => {
     const css = readFileSync(join(process.cwd(), 'src/lan-renderer/src/styles.css'), 'utf8')
+    const source = readFileSync(join(process.cwd(), 'src/lan-renderer/src/LanApp.tsx'), 'utf8')
     expect(css).toContain('min-width: 0 !important')
     expect(css).toContain('@media (max-width: 768px)')
-    expect(css).toContain('.lan-bottom-nav')
-    expect(css).toContain('.lan-mode-grid, .lan-form-columns, .lan-upload-form, .lan-plan-editor { grid-template-columns: 1fr; }')
+    expect(css).toContain('.workbench-bottom-nav')
+    expect(css).toContain('.creation-mode-grid, .planner-options, .assisted-positions, .model-binding-grid, .lan-upload-form, .lan-plan-editor { grid-template-columns: 1fr; }')
     expect(css).toContain('min-height: 44px')
     expect(css).not.toContain('min-width: 680px')
+    expect(css).not.toContain('.lan-nav')
+    expect(source).toContain('WorkbenchShell')
+    expect(source).toContain('CreationModeSelector')
+    expect(source).toContain('RunControlBar')
   })
 })

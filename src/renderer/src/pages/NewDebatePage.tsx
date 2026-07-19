@@ -9,6 +9,7 @@ import type {
   ProviderConnectionDto
 } from '../../../shared/ipc-contract'
 import { OperationProgressDialog, type OperationLogItem } from '../components/OperationProgressDialog'
+import { CreationModeSelector, PageHeader, type CreationMode } from '../components/UnifiedWorkbench'
 import { slowModelNotice } from '../model-latency'
 
 export interface NewDebatePageProps {
@@ -17,7 +18,6 @@ export interface NewDebatePageProps {
   onOpenModels(): void
 }
 
-type CreationMode = 'auto' | 'assist' | 'manual'
 type PlanField = 'background' | 'affirmative' | 'negative' | 'questions' | 'research' | 'evidence'
 
 interface RoleModels {
@@ -28,12 +28,6 @@ interface RoleModels {
 }
 
 const EMPTY_ROLE_MODELS: RoleModels = { affirmative: '', negative: '', moderator: '', judge: '' }
-
-const creationModes: Array<{ id: CreationMode; title: string; description: string; badge?: string }> = [
-  { id: 'auto', title: 'AI 自动规划', description: '只填辩题，由 AI 生成可编辑的完整方案。', badge: '推荐' },
-  { id: 'assist', title: 'AI 辅助完善', description: '保留你的双方立场，由 AI 扩展并指出研究重点。' },
-  { id: 'manual', title: '完全手动', description: '保持原有流程，不调用任何规划模型。' }
-]
 
 export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePageProps) {
   const [connections, setConnections] = useState<ProviderConnectionDto[]>([])
@@ -201,10 +195,7 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
 
   return (
     <section className="page-stack new-debate-page" aria-labelledby="new-debate-title">
-      <header className="page-header compact">
-        <div><p className="eyebrow">Debate Planner</p><h1 id="new-debate-title">新建辩论</h1><p className="page-description">只输入一个辩题，也可以先生成方案、确认后再创建。</p></div>
-        <button className="button ghost header-back-button" onClick={onBack}>返回列表</button>
-      </header>
+      <PageHeader id="new-debate-title" eyebrow="Debate Planner" title="新建辩论" description="只输入一个辩题，也可以先生成方案、确认后再创建。" actions={<button className="button ghost header-back-button" onClick={onBack}>返回列表</button>} />
 
       <OperationProgressDialog
         open={plannerDialog.open}
@@ -236,11 +227,7 @@ export function NewDebatePage({ onBack, onCreated, onOpenModels }: NewDebatePage
 
       <section className="creation-mode-panel panel">
         <div className="section-heading"><div><h2>创建方式</h2><span>AI 只返回最终结构化方案，不保存分析过程</span></div></div>
-        <div className="creation-mode-grid" role="radiogroup" aria-label="创建方式">
-          {creationModes.map((item) => <button type="button" role="radio" aria-checked={mode === item.id} className={mode === item.id ? 'selected' : ''} key={item.id} onClick={() => switchMode(item.id)}>
-            <span>{item.title}{item.badge && <em>{item.badge}</em>}</span><small>{item.description}</small>
-          </button>)}
-        </div>
+        <CreationModeSelector value={mode} onChange={switchMode} />
       </section>
 
       <form className="planner-form" onSubmit={(event) => void submitDebate(event)}>

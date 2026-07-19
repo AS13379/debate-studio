@@ -4,7 +4,7 @@ import type { DebateDetailDto, DebateHistoryListQueryDto, DebateHistorySummaryDt
 import type { SettingsTab } from './pages/SettingsPage'
 import { HomePage } from './pages/HomePage'
 import { OnboardingWizard } from './components/OnboardingWizard'
-import brandIconUrl from '../../../build/icon.svg?url'
+import { WorkbenchShell } from './components/UnifiedWorkbench'
 
 const LiveDebatePage = lazy(() => import('./pages/LiveDebatePage').then((module) => ({ default: module.LiveDebatePage })))
 const NewDebatePage = lazy(() => import('./pages/NewDebatePage').then((module) => ({ default: module.NewDebatePage })))
@@ -116,25 +116,16 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-mark" aria-hidden="true"><img src={brandIconUrl} alt="" /></div>
-        <div className="brand-copy"><strong>Debate Studio</strong><span>本地 AI 辩论</span></div>
-        <nav aria-label="主导航">
-          <div className="sidebar-nav-group">
-            <span className="sidebar-nav-label">工作台</span>
-            <button className={page === 'home' ? 'active' : ''} onClick={goHome}>辩论列表</button>
-            <button className={page === 'new' ? 'active' : ''} onClick={() => setPage('new')}>新建辩论</button>
-            <button className={page === 'quality' ? 'active' : ''} onClick={() => setPage('quality')}>质量分析</button>
-          </div>
-          <div className="sidebar-nav-group sidebar-nav-settings">
-            <span className="sidebar-nav-label">管理</span>
-            <button className={page === 'settings' ? 'active' : ''} onClick={() => openSettings()}>设置</button>
-          </div>
-        </nav>
-        <span className="app-version">v{version || '…'}</span>
-      </aside>
-      <main className="content-area">
+    <WorkbenchShell
+      subtitle="本地 AI 辩论"
+      version={`v${version || '…'}`}
+      primaryNav={[
+        { id: 'home', label: '辩论列表', active: page === 'home', onSelect: goHome },
+        { id: 'new', label: '新建辩论', active: page === 'new', onSelect: () => setPage('new') },
+        { id: 'quality', label: '质量分析', active: page === 'quality', onSelect: () => setPage('quality') }
+      ]}
+      managementNav={[{ id: 'settings', label: '设置', active: page === 'settings', onSelect: () => openSettings() }]}
+    >
         <Profiler id={page} onRender={reportRender}>
         <Suspense fallback={<section className="panel muted page-loading" role="status">正在按需加载页面…</section>}>
         <>
@@ -172,12 +163,11 @@ export function App() {
         </>
         </Suspense>
         </Profiler>
-      </main>
       {showOnboarding && onboarding && <OnboardingWizard
         state={onboarding}
         onClose={() => { setShowOnboarding(false); void window.debateStudio.getOnboardingState().then((result) => result.ok && setOnboarding(result.value)) }}
         onCreated={(debateId) => { setShowOnboarding(false); openDebate({ id: debateId }) }}
       />}
-    </div>
+    </WorkbenchShell>
   )
 }

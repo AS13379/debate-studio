@@ -7,6 +7,7 @@ import {
   type HistoryBatchAction,
   type HistoryBatchResult
 } from '../history-batch-actions'
+import { PageHeader } from '../components/UnifiedWorkbench'
 
 export interface HomePageProps {
   debates: DebateHistorySummaryDto[]
@@ -86,17 +87,16 @@ export function HomePage({
 
   return (
     <section className="page-stack" aria-labelledby="home-title">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">本地辩论工作台</p>
-          <h1 id="home-title">辩论历史</h1>
-          <p className="page-description">长期保存、整理和查找辩论；删除记录也可以恢复。</p>
-        </div>
-        <div className="header-actions">
+      <PageHeader
+        id="home-title"
+        eyebrow="本地辩论工作台"
+        title="辩论历史"
+        description="长期保存、整理和查找辩论；删除记录也可以恢复。"
+        actions={<>
           <button className="button secondary" onClick={onCreate}>新建辩论</button>
           <button className="button primary" onClick={onCreateDemo}>创建 Mock 示例辩论</button>
-        </div>
-      </header>
+        </>}
+      />
 
       {needsModelSetup && <div className="panel model-setup-prompt"><div><strong>还没有配置真实 AI 服务</strong><span>Mock 辩论仍可使用；准备好后可用引导安全保存 API Key。</span></div><button className="button primary" onClick={onOpenOnboarding}>开始配置 AI 服务</button></div>}
 

@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { PageHeader } from '../components/UnifiedWorkbench'
 
 const ProviderManagementPage = lazy(() => import('./ProviderManagementPage').then((module) => ({ default: module.ProviderManagementPage })))
 const ModelRoutingPage = lazy(() => import('./ModelRoutingPage').then((module) => ({ default: module.ModelRoutingPage })))
@@ -28,9 +29,7 @@ const tabs: Array<{ id: SettingsTab; label: string }> = [
 export function SettingsPage({ activeTab, onTabChange, onOpenOnboarding }: SettingsPageProps) {
   return (
     <section className="page-stack settings-page" aria-labelledby="settings-title">
-      <header className="page-header compact">
-        <div><span className="eyebrow">偏好与管理</span><h1 id="settings-title">设置</h1><p className="page-description">集中管理模型、运行策略、本地统计与诊断工具。</p></div>
-      </header>
+      <PageHeader id="settings-title" eyebrow="偏好与管理" title="设置" description="集中管理模型、运行策略、本地统计与诊断工具。" />
       <div className="settings-tabs" role="tablist" aria-label="设置分类">
         {tabs.map((tab) => (
           <button
