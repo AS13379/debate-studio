@@ -10,36 +10,24 @@ type View = { type: 'list' } | { type: 'live'; debateId: string; sessionId: stri
 
 export function LanApp() {
   const client = useMemo(() => new LanApiClient(), [])
-  const [authenticated, setAuthenticated] = useState<boolean>()
+  const [ready, setReady] = useState(false)
+  const [connectionError, setConnectionError] = useState('')
   const [view, setView] = useState<View>({ type: 'list' })
 
-  useEffect(() => { void client.session().then((result) => setAuthenticated(result.ok)) }, [client])
+  const connect = () => void client.session().then((result) => {
+    if (result.ok) { setReady(true); setConnectionError('') }
+    else setConnectionError(`${result.error.titleZh}：${result.error.descriptionZh}`)
+  })
+  useEffect(connect, [client])
 
-  if (authenticated === undefined) return <div className="lan-centered"><div className="lan-spinner" /><p>正在连接 Debate Studio…</p></div>
-  if (!authenticated) return <LoginPage client={client} onLoggedIn={() => setAuthenticated(true)} />
+  if (!ready) return <div className="lan-centered"><div className="lan-spinner" /><p>{connectionError || '正在连接 Debate Studio…'}</p>{connectionError && <button className="button primary" onClick={connect}>重试连接</button>}</div>
   return <div className="lan-shell">
-    <aside className="lan-nav"><strong>Debate Studio</strong><small>局域网控制台</small><button className="active" onClick={() => setView({ type: 'list' })}>辩论</button><p>仅用于可信局域网</p></aside>
+    <aside className="lan-nav"><strong>Debate Studio</strong><small>Web 控制台</small><button className="active" onClick={() => setView({ type: 'list' })}>辩论</button><p>无需密码 · 仅用于可信网络</p></aside>
     <main>{view.type === 'list'
       ? <DebateListPage client={client} onOpen={(debate) => setView({ type: 'live', debateId: debate.id, sessionId: debate.sessionId })} />
       : <LivePage client={client} {...view} onBack={() => setView({ type: 'list' })} />}</main>
     <nav className="lan-bottom-nav"><button className="active" onClick={() => setView({ type: 'list' })}>辩论列表</button></nav>
   </div>
-}
-
-function LoginPage({ client, onLoggedIn }: { client: LanApiClient; onLoggedIn(): void }) {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  return <main className="lan-login-page"><section className="lan-login-card">
-    <span className="lan-mark">DS</span><span className="eyebrow">DEBATE STUDIO LAN</span><h1>连接你的辩论工作台</h1>
-    <p>在 Mac 版“设置 → 局域网访问”中临时查看访问密码。请只在可信家庭网络使用。</p>
-    <form onSubmit={(event) => { event.preventDefault(); setBusy(true); setError(''); void client.login(password).then((result) => { setBusy(false); result.ok ? onLoggedIn() : setError(`${result.error.titleZh}：${result.error.descriptionZh}`) }) }}>
-      <label>访问密码<input autoFocus autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-      <button className="button primary" disabled={busy || !password}>{busy ? '正在验证…' : '登录'}</button>
-    </form>
-    {error && <p className="lan-error" role="alert">{error}</p>}
-    <small>HTTP 无法防御同一局域网中的被动窃听或中间人攻击。</small>
-  </section></main>
 }
 
 function DebateListPage({ client, onOpen }: { client: LanApiClient; onOpen(debate: DebateHistorySummaryDto): void }) {

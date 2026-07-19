@@ -219,7 +219,6 @@ export function initializeDebateDesktopApplication(
       configuration,
       history,
       run,
-      credentialStore,
       logger,
       now: options.now
     })

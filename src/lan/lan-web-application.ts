@@ -6,7 +6,6 @@ import type { DebateRunApplication, DebateRunEvent } from '../application/debate
 import type { DebateTurn } from '../domain'
 import type { LoggerLike } from '../observability'
 import type { PersistenceContext } from '../persistence'
-import type { CredentialStore } from '../security'
 import type { DebateTurnDto } from '../shared/debate-dtos'
 import type { DebateHistoryListQueryDto } from '../shared/history-dtos'
 import type {
@@ -24,9 +23,10 @@ import { LanAuthService } from './lan-auth-service'
 export const LAN_SETTINGS_KEY = 'lan-server-config.v1'
 export const DEFAULT_LAN_SERVER_CONFIG: LanServerConfigDto = {
   enabled: false,
-  host: '0.0.0.0',
+  accessMode: 'localhost',
+  host: '127.0.0.1',
   port: 27180,
-  authenticationMode: 'password',
+  authenticationMode: 'none',
   sessionTimeoutMinutes: 1440,
   allowFileUpload: false,
   autoPort: false
@@ -37,7 +37,6 @@ export interface LanWebApplicationDependencies {
   configuration: DebateConfigurationApplication
   history: DebateHistoryApplication
   run: DebateRunApplication
-  credentialStore: CredentialStore
   logger?: LoggerLike
   now?: () => Date
 }
@@ -57,7 +56,6 @@ export class LanWebApplication {
   constructor(private readonly dependencies: LanWebApplicationDependencies) {
     this.now = dependencies.now ?? (() => new Date())
     this.auth = new LanAuthService(
-      dependencies.credentialStore,
       () => this.getConfig().sessionTimeoutMinutes,
       dependencies.logger,
       this.now
@@ -248,12 +246,17 @@ function normalizeConfig(value?: Partial<LanServerConfigDto>): LanServerConfigDt
   const timeout = Number.isInteger(value?.sessionTimeoutMinutes)
     ? Math.max(15, Math.min(10_080, value!.sessionTimeoutMinutes!))
     : DEFAULT_LAN_SERVER_CONFIG.sessionTimeoutMinutes
+  const accessMode = value?.accessMode === 'lan' || (!value?.accessMode && (value?.host === '0.0.0.0' || value?.host === '::'))
+    ? 'lan'
+    : 'localhost'
   return {
     ...DEFAULT_LAN_SERVER_CONFIG,
     ...value,
     port,
     sessionTimeoutMinutes: timeout,
-    authenticationMode: 'password',
+    accessMode,
+    host: accessMode === 'lan' ? '0.0.0.0' : '127.0.0.1',
+    authenticationMode: 'none',
     allowFileUpload: false
   }
 }

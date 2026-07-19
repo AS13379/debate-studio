@@ -8,8 +8,7 @@ export function LanAccessPage() {
   const [port, setPort] = useState('27180')
   const [timeout, setTimeoutMinutes] = useState('1440')
   const [autoPort, setAutoPort] = useState(false)
-  const [password, setPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
+  const [accessMode, setAccessMode] = useState<'localhost' | 'lan'>('localhost')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -20,18 +19,13 @@ export function LanAccessPage() {
     setPort(String(result.value.config.port))
     setTimeoutMinutes(String(result.value.config.sessionTimeoutMinutes))
     setAutoPort(result.value.config.autoPort)
+    setAccessMode(result.value.config.accessMode)
   }
 
   useEffect(() => {
     void load()
     return window.debateStudio.onLanStatusChanged((next) => setStatus(next))
   }, [])
-
-  useEffect(() => {
-    if (!password) return
-    const timer = window.setTimeout(() => setPassword(''), 30_000)
-    return () => window.clearTimeout(timer)
-  }, [password])
 
   const run = async (operation: () => Promise<unknown>) => {
     setBusy(true)
@@ -44,7 +38,7 @@ export function LanAccessPage() {
   return (
     <section className="page-stack lan-access-page" aria-labelledby="lan-title">
       <header className="page-header compact">
-        <div><span className="eyebrow">可信家庭网络</span><h2 id="lan-title">局域网访问</h2><p className="page-description">用手机或同一 Wi-Fi 下的浏览器查看并控制辩论。当前为 HTTP，仅适合可信的个人网络。</p></div>
+        <div><span className="eyebrow">本机与可信网络</span><h2 id="lan-title">Web 控制台</h2><p className="page-description">无需密码。可选择只允许这台 Mac 访问，或向同一可信 Wi-Fi 开放。</p></div>
       </header>
 
       <section className="panel lan-overview">
@@ -64,10 +58,10 @@ export function LanAccessPage() {
 
       {status?.lifecycle === 'running' && primaryUrl && (
         <section className="panel lan-share-panel">
-          <div className="lan-qr"><QrMatrix value={primaryUrl} /></div>
+          {status.config.accessMode === 'lan' && <div className="lan-qr"><QrMatrix value={primaryUrl} /></div>}
           <div className="lan-share-copy">
             <span className="eyebrow">访问地址</span><h3>{primaryUrl}</h3>
-            <p>手机与这台 Mac 连接同一可信 Wi-Fi 后，扫码或在浏览器输入地址。</p>
+            <p>{status.config.accessMode === 'lan' ? '手机与这台 Mac 连接同一可信 Wi-Fi 后，扫码或在浏览器输入地址。' : '这个地址只能在本 Mac 上打开，局域网其他设备无法访问。'}</p>
             <button className="button ghost" onClick={() => void navigator.clipboard.writeText(primaryUrl).then(() => setMessage('访问地址已复制。'))}>复制地址</button>
           </div>
         </section>
@@ -78,42 +72,28 @@ export function LanAccessPage() {
         <section className="panel">
           <h3>网络与会话</h3>
           <div className="form-grid lan-form-grid">
+            <label>访问范围<select value={accessMode} onChange={(event) => setAccessMode(event.target.value as 'localhost' | 'lan')}><option value="localhost">仅本机（localhost）</option><option value="lan">开放局域网（无密码）</option></select></label>
             <label>端口<input type="number" min="1024" max="65535" value={port} onChange={(event) => setPort(event.target.value)} /></label>
             <label>会话有效期（分钟）<input type="number" min="15" max="10080" value={timeout} onChange={(event) => setTimeoutMinutes(event.target.value)} /></label>
           </div>
           <label className="check-row"><input type="checkbox" checked={autoPort} onChange={(event) => setAutoPort(event.target.checked)} />端口占用时自动尝试后续端口</label>
-          <button className="button primary" disabled={busy} onClick={() => void run(async () => showResult(await window.debateStudio.updateLanServerConfig({ port: Number(port), sessionTimeoutMinutes: Number(timeout), autoPort }), setMessage))}>保存设置</button>
+          <button className="button primary" disabled={busy} onClick={() => void run(async () => showResult(await window.debateStudio.updateLanServerConfig({ accessMode, port: Number(port), sessionTimeoutMinutes: Number(timeout), autoPort }), setMessage))}>保存设置</button>
         </section>
 
         <section className="panel">
-          <h3>访问密码</h3>
-          <p className="muted">密码保存在系统加密凭据存储中，不进入 SQLite。修改密码会立即注销所有设备。</p>
-          {password && <output className="lan-password" aria-live="polite">{password}</output>}
-          <div className="inline-actions">
-            <button className="button ghost" onClick={() => void run(async () => {
-              const result = await window.debateStudio.revealLanPassword()
-              result.ok ? setPassword(result.value.password) : setMessage(`${result.error.titleZh}：${result.error.descriptionZh}`)
-            })}>临时显示 30 秒</button>
-            <button className="button ghost" onClick={() => void run(async () => {
-              const result = await window.debateStudio.regenerateLanPassword()
-              if (result.ok) { setPassword(result.value.password); setMessage('已生成新密码，所有旧设备已退出。') }
-              else setMessage(`${result.error.titleZh}：${result.error.descriptionZh}`)
-            })}>重新生成</button>
-          </div>
-          <div className="lan-password-editor"><input type="password" autoComplete="new-password" placeholder="输入至少 10 位新密码" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /><button className="button ghost" disabled={newPassword.length < 10} onClick={() => void run(async () => {
-            const result = await window.debateStudio.setLanPassword({ password: newPassword })
-            if (result.ok) { setNewPassword(''); setPassword(''); setMessage('密码已修改，所有旧设备已退出。') }
-            else setMessage(`${result.error.titleZh}：${result.error.descriptionZh}`)
-          })}>修改密码</button></div>
+          <h3>访问说明</h3>
+          <p className="muted">仅本机模式只监听 localhost，适合在 Mac 浏览器中使用。</p>
+          <p className="muted">开放局域网后，同一网络内的设备无需密码即可查看并控制辩论。请勿在公共 Wi-Fi 使用。</p>
+          <span className={`status-pill ${accessMode === 'lan' ? 'status-warning' : 'status-completed'}`}>{accessMode === 'lan' ? '同网络设备均可访问' : '只有本 Mac 可访问'}</span>
         </section>
       </div>
 
       <section className="panel">
-        <div className="section-heading-row"><div><h3>已登录设备</h3><p className="muted">服务重启、关闭或密码修改后，所有 Web 会话都会失效。</p></div><button className="button ghost" disabled={!status?.devices.length} onClick={() => void run(async () => showResult(await window.debateStudio.logoutAllLanDevices(), setMessage, '所有设备已注销。'))}>注销全部</button></div>
+        <div className="section-heading-row"><div><h3>当前 Web 设备</h3><p className="muted">打开页面时会自动建立本地会话；服务重启或关闭后全部失效。</p></div><button className="button ghost" disabled={!status?.devices.length} onClick={() => void run(async () => showResult(await window.debateStudio.logoutAllLanDevices(), setMessage, '所有设备已断开。'))}>断开全部</button></div>
         <div className="lan-device-list">
           {status?.devices.length ? status.devices.map((device) => (
-            <article key={device.id} className="lan-device-row"><div><strong>{device.label}</strong><small>{device.address} · 最近访问 {formatTime(device.lastAccessAt)}</small></div><button className="button ghost" onClick={() => void run(async () => showResult(await window.debateStudio.kickLanDevice({ deviceId: device.id }), setMessage, '设备已注销。'))}>踢出</button></article>
-          )) : <p className="empty-inline">暂无已登录设备。</p>}
+            <article key={device.id} className="lan-device-row"><div><strong>{device.label}</strong><small>{device.address} · 最近访问 {formatTime(device.lastAccessAt)}</small></div><button className="button ghost" onClick={() => void run(async () => showResult(await window.debateStudio.kickLanDevice({ deviceId: device.id }), setMessage, '设备已断开。'))}>断开</button></article>
+          )) : <p className="empty-inline">暂无 Web 设备。</p>}
         </div>
       </section>
 

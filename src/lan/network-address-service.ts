@@ -38,8 +38,14 @@ export class NetworkAddressService {
 export function isAllowedLanAddress(value: string | undefined): boolean {
   if (!value) return false
   const address = normalizeRemoteAddress(value)
-  return address === '127.0.0.1' || address === '::1' || isPrivateIpv4(address) ||
+  return isLoopbackAddress(address) || isPrivateIpv4(address) ||
     isUniqueLocalIpv6(address) || isLinkLocalIpv6(address)
+}
+
+export function isLoopbackAddress(value: string | undefined): boolean {
+  if (!value) return false
+  const address = normalizeRemoteAddress(value)
+  return address === '127.0.0.1' || address === '::1'
 }
 
 export function isAllowedBindHost(value: string): boolean {

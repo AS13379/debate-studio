@@ -55,30 +55,26 @@ describe('LAN Web Console security and lifecycle', () => {
     ])
   })
 
-  it('binds sessions to the client address and browser class, expires them, and revokes all on password change', async () => {
-    const store = new MemoryCredentialStore()
+  it('creates passwordless sessions bound to the client address and browser class, expires them, and revokes them', () => {
     let current = new Date('2026-07-19T00:00:00.000Z')
-    const auth = new LanAuthService(store, () => 15, undefined, () => current)
-    await auth.setPassword('safe-lan-password-123')
-    const login = await auth.login('safe-lan-password-123', 'Mac 浏览器', '192.168.1.20')
-    if (!login.ok) throw login.error
+    const auth = new LanAuthService(() => 15, undefined, () => current)
+    const login = auth.createSession('Mac 浏览器', '192.168.1.20')
 
-    expect(auth.authenticate(login.value.token, { address: '192.168.1.20', label: 'Mac 浏览器' })).toBeDefined()
-    expect(auth.authenticate(login.value.token, { address: '192.168.1.21', label: 'Mac 浏览器' })).toBeUndefined()
-    expect(auth.authenticate(login.value.token, { address: '192.168.1.20', label: 'Android 浏览器' })).toBeUndefined()
+    expect(auth.authenticate(login.token, { address: '192.168.1.20', label: 'Mac 浏览器' })).toBeDefined()
+    expect(auth.authenticate(login.token, { address: '192.168.1.21', label: 'Mac 浏览器' })).toBeUndefined()
+    expect(auth.authenticate(login.token, { address: '192.168.1.20', label: 'Android 浏览器' })).toBeUndefined()
     current = new Date('2026-07-19T00:16:00.000Z')
-    expect(auth.authenticate(login.value.token, { address: '192.168.1.20', label: 'Mac 浏览器' })).toBeUndefined()
+    expect(auth.authenticate(login.token, { address: '192.168.1.20', label: 'Mac 浏览器' })).toBeUndefined()
 
-    const second = await auth.login('safe-lan-password-123', 'Mac 浏览器', '192.168.1.20')
-    if (!second.ok) throw second.error
-    await auth.setPassword('another-safe-password-456')
-    expect(auth.authenticate(second.value.token, { address: '192.168.1.20', label: 'Mac 浏览器' })).toBeUndefined()
+    current = new Date('2026-07-19T00:17:00.000Z')
+    const second = auth.createSession('Mac 浏览器', '192.168.1.20')
+    auth.logoutAll()
+    expect(auth.authenticate(second.token, { address: '192.168.1.20', label: 'Mac 浏览器' })).toBeUndefined()
   })
 
-  it('requires password, strict session cookie, Origin, CSRF and safe Host without leaking credentials', async () => {
+  it('establishes a passwordless strict session while retaining Origin, CSRF and Host protection', async () => {
     const app = createApplication(temporaryDirectory(), new MemoryCredentialStore())
     app.configuration.createMockDemoDebate()
-    await app.lanWeb.auth.setPassword('safe-lan-password-123')
     const network = new NetworkAddressService(() => ({ en0: [record('192.168.1.8', 'IPv4')] }) as never)
     const server = createLanHttpServer({ application: app.lanWeb, webRoot: temporaryDirectory(), appVersion: '0.4.0', networkAddresses: network })
     await server.ready()
@@ -86,14 +82,13 @@ describe('LAN Web Console security and lifecycle', () => {
     const common = { host: '127.0.0.1:27180', origin: 'http://127.0.0.1:27180' }
     const publicStatus = await server.inject({ method: 'GET', url: '/api/v1/public/status', headers: { host: common.host } })
     expect(publicStatus.statusCode).toBe(200)
-    expect(publicStatus.json()).toMatchObject({ ok: true, value: { version: '0.4.0', authenticationRequired: true } })
+    expect(publicStatus.json()).toMatchObject({ ok: true, value: { version: '0.4.0', authenticationRequired: false } })
     expect(publicStatus.headers['strict-transport-security']).toBeUndefined()
     expect(publicStatus.headers['x-frame-options']).toBe('DENY')
 
     expect((await server.inject({ method: 'GET', url: '/api/v1/debates', headers: { host: common.host } })).statusCode).toBe(401)
-    expect((await server.inject({ method: 'POST', url: '/api/v1/auth/login', headers: common, payload: { password: 'wrong-password' } })).statusCode).toBe(401)
 
-    const login = await server.inject({ method: 'POST', url: '/api/v1/auth/login', headers: common, payload: { password: 'safe-lan-password-123' } })
+    const login = await server.inject({ method: 'GET', url: '/api/v1/auth/session', headers: common })
     expect(login.statusCode).toBe(200)
     const cookie = login.headers['set-cookie'] as string
     expect(cookie).toContain('HttpOnly')
@@ -105,7 +100,7 @@ describe('LAN Web Console security and lifecycle', () => {
     const debates = await server.inject({ method: 'GET', url: '/api/v1/debates?limit=20', headers: { ...common, cookie: cookieValue } })
     expect(debates.statusCode).toBe(200)
     const serialized = debates.body.toLowerCase()
-    for (const forbidden of ['apikey', 'credentialref', 'authorization', 'safe-lan-password-123', '/users/']) expect(serialized).not.toContain(forbidden)
+    for (const forbidden of ['apikey', 'credentialref', 'authorization', 'password', '/users/']) expect(serialized).not.toContain(forbidden)
 
     const noCsrf = await server.inject({ method: 'POST', url: '/api/v1/sessions/mock-demo-session/commands', headers: { ...common, cookie: cookieValue }, payload: { command: 'start' } })
     expect(noCsrf.statusCode).toBe(403)
@@ -113,7 +108,23 @@ describe('LAN Web Console security and lifecycle', () => {
     expect(withCsrf.statusCode).toBe(200)
 
     expect((await server.inject({ method: 'GET', url: '/api/v1/debates', headers: { host: 'evil.example:27180' } })).statusCode).toBe(403)
+    expect((await server.inject({ method: 'GET', url: '/api/v1/auth/session', headers: common, remoteAddress: '192.168.1.20' })).statusCode).toBe(403)
     expect((await server.inject({ method: 'GET', url: '/api/v1/debates', headers: { host: common.host }, remoteAddress: '8.8.8.8' })).statusCode).toBe(403)
+    await server.close()
+  })
+
+  it('allows private clients only after explicitly switching to passwordless LAN mode', async () => {
+    const app = createApplication(temporaryDirectory(), new MemoryCredentialStore())
+    app.lanWeb.saveConfig({ ...app.lanWeb.getConfig(), accessMode: 'lan', host: '0.0.0.0' })
+    const network = new NetworkAddressService(() => ({ en0: [record('192.168.1.8', 'IPv4')] }) as never)
+    const server = createLanHttpServer({ application: app.lanWeb, webRoot: temporaryDirectory(), appVersion: 'test', networkAddresses: network })
+    await server.ready()
+    const response = await server.inject({
+      method: 'GET', url: '/api/v1/auth/session', remoteAddress: '192.168.1.20',
+      headers: { host: '192.168.1.8:27180', origin: 'http://192.168.1.8:27180' }
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['set-cookie']).toContain('HttpOnly')
     await server.close()
   })
 

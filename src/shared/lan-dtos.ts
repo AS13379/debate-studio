@@ -2,7 +2,8 @@ import type { DebateHistorySummaryDto } from './history-dtos'
 import type { DebateDetailDto, DebateTurnDto, DebateTurnPageDto } from './debate-dtos'
 import type { RunEventDto, RunStateDto } from './ipc-contract'
 
-export type LanAuthenticationMode = 'password'
+export type LanAuthenticationMode = 'none'
+export type LanAccessMode = 'localhost' | 'lan'
 export type LanServerLifecycleState =
   | 'stopped'
   | 'starting'
@@ -13,6 +14,7 @@ export type LanServerLifecycleState =
 
 export interface LanServerConfigDto {
   enabled: boolean
+  accessMode: LanAccessMode
   host: string
   port: number
   authenticationMode: LanAuthenticationMode
@@ -41,7 +43,6 @@ export interface LanServerStatusDto {
   lifecycle: LanServerLifecycleState
   config: LanServerConfigDto
   accessUrls: string[]
-  passwordConfigured: boolean
   startedAt?: string
   lastAccessAt?: string
   devices: LanConnectedDeviceDto[]
@@ -55,7 +56,7 @@ export type LanResultDto<T> =
 export interface LanPublicStatusDto {
   appName: 'Debate Studio'
   version: string
-  authenticationRequired: true
+  authenticationRequired: false
 }
 
 export interface LanAuthSessionDto {
@@ -99,10 +100,7 @@ export interface LanDesktopApi {
   getLanServerStatus(): Promise<LanResultDto<LanServerStatusDto>>
   startLanServer(): Promise<LanResultDto<LanServerStatusDto>>
   stopLanServer(): Promise<LanResultDto<LanServerStatusDto>>
-  updateLanServerConfig(input: Partial<Pick<LanServerConfigDto, 'port' | 'sessionTimeoutMinutes' | 'autoPort'>>): Promise<LanResultDto<LanServerStatusDto>>
-  revealLanPassword(): Promise<LanResultDto<{ password: string }>>
-  setLanPassword(input: { password: string }): Promise<LanResultDto<boolean>>
-  regenerateLanPassword(): Promise<LanResultDto<{ password: string }>>
+  updateLanServerConfig(input: Partial<Pick<LanServerConfigDto, 'accessMode' | 'port' | 'sessionTimeoutMinutes' | 'autoPort'>>): Promise<LanResultDto<LanServerStatusDto>>
   logoutAllLanDevices(): Promise<LanResultDto<boolean>>
   kickLanDevice(input: { deviceId: string }): Promise<LanResultDto<boolean>>
   openLanPreview(): Promise<LanResultDto<boolean>>

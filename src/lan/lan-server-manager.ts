@@ -15,7 +15,6 @@ import type { LoggerLike } from '../observability'
 import {
   lanCommandSchema,
   lanDebateListQuerySchema,
-  lanLoginSchema,
   lanSessionParamsSchema,
   lanSnapshotQuerySchema
 } from '../shared/lan-schemas'
@@ -25,7 +24,7 @@ import type {
   LanServerConfigDto,
   LanServerStatusDto
 } from '../shared/lan-dtos'
-import { isAllowedBindHost, isAllowedLanAddress, NetworkAddressService, normalizeRemoteAddress } from './network-address-service'
+import { isAllowedBindHost, isAllowedLanAddress, isLoopbackAddress, NetworkAddressService, normalizeRemoteAddress } from './network-address-service'
 import { LanWebApplication } from './lan-web-application'
 
 const SESSION_COOKIE = 'debate_studio_lan_session'
@@ -54,7 +53,6 @@ export class LanServerManager {
   private error?: LanServerStatusDto['error']
   private addressPoll?: ReturnType<typeof setInterval>
   private accessUrls: string[] = []
-  private passwordConfigured = false
 
   constructor(private readonly options: LanServerManagerOptions) {
     this.networkAddresses = options.networkAddresses ?? new NetworkAddressService()
@@ -62,7 +60,6 @@ export class LanServerManager {
   }
 
   async initialize(): Promise<LanResultDto<LanServerStatusDto>> {
-    this.passwordConfigured = await this.options.application.auth.hasPassword()
     return this.options.application.getConfig().enabled ? this.start(false) : this.statusResult()
   }
 
@@ -73,9 +70,6 @@ export class LanServerManager {
     }
     const config = this.options.application.getConfig()
     if (!isAllowedBindHost(config.host)) return failure('LAN_HOST_NOT_ALLOWED', '监听地址不安全', '只能监听本机、私有局域网或通配本地地址。', false)
-    const password = await this.options.application.auth.ensurePassword()
-    if (!password.ok) return password
-    this.passwordConfigured = true
     this.lifecycle = 'starting'
     this.error = undefined
     this.emitStatus()
@@ -126,16 +120,22 @@ export class LanServerManager {
     return this.start(false)
   }
 
-  async updateConfig(update: Partial<Pick<LanServerConfigDto, 'port' | 'sessionTimeoutMinutes' | 'autoPort'>>): Promise<LanResultDto<LanServerStatusDto>> {
+  async updateConfig(update: Partial<Pick<LanServerConfigDto, 'accessMode' | 'port' | 'sessionTimeoutMinutes' | 'autoPort'>>): Promise<LanResultDto<LanServerStatusDto>> {
     const previous = this.options.application.getConfig()
-    const candidate = { ...previous, ...update }
+    const candidate = {
+      ...previous,
+      ...update,
+      host: (update.accessMode ?? previous.accessMode) === 'lan' ? '0.0.0.0' : '127.0.0.1',
+      authenticationMode: 'none' as const
+    }
     if (!Number.isInteger(candidate.port) || candidate.port < 1024 || candidate.port > 65535) {
       return failure('LAN_PORT_INVALID', '端口无效', '端口必须是 1024 到 65535 之间的整数。', false)
     }
     if (!Number.isInteger(candidate.sessionTimeoutMinutes) || candidate.sessionTimeoutMinutes < 15 || candidate.sessionTimeoutMinutes > 10_080) {
       return failure('LAN_SESSION_TIMEOUT_INVALID', '会话有效期无效', '会话有效期必须在 15 分钟到 7 天之间。', false)
     }
-    if (this.lifecycle !== 'running' || candidate.port === previous.port) {
+    const listenerUnchanged = candidate.port === previous.port && candidate.host === previous.host
+    if (this.lifecycle !== 'running' || listenerUnchanged) {
       const saved = this.options.application.saveConfig(candidate)
       if (!saved.ok) return saved
       this.emitStatus()
@@ -157,25 +157,6 @@ export class LanServerManager {
 
   listAccessUrls(): string[] {
     return [...this.accessUrls]
-  }
-
-  async revealPassword(): Promise<LanResultDto<{ password: string }>> {
-    const result = await this.options.application.auth.revealPassword()
-    return result.ok ? { ok: true, value: { password: result.value } } : result
-  }
-
-  async setPassword(password: string): Promise<LanResultDto<boolean>> {
-    const result = await this.options.application.auth.setPassword(password)
-    if (result.ok) this.passwordConfigured = true
-    this.emitStatus()
-    return result.ok ? { ok: true, value: true } : result
-  }
-
-  async regeneratePassword(): Promise<LanResultDto<{ password: string }>> {
-    const result = await this.options.application.auth.regeneratePassword()
-    if (result.ok) this.passwordConfigured = true
-    this.emitStatus()
-    return result.ok ? { ok: true, value: { password: result.value } } : result
   }
 
   logoutAllDevices(): LanResultDto<boolean> {
@@ -277,7 +258,6 @@ export class LanServerManager {
         lifecycle: this.lifecycle,
         config,
         accessUrls: [...this.accessUrls],
-        passwordConfigured: this.passwordConfigured,
         startedAt: this.startedAt,
         lastAccessAt: this.lastAccessAt,
         devices: this.options.application.auth.listDevices(),
@@ -287,10 +267,7 @@ export class LanServerManager {
   }
 
   async statusWithCredentialState(): Promise<LanResultDto<LanServerStatusDto>> {
-    const result = this.statusResult()
-    this.passwordConfigured = await this.options.application.auth.hasPassword()
-    if (result.ok) result.value.passwordConfigured = this.passwordConfigured
-    return result
+    return this.statusResult()
   }
 
   private persistEnabled(enabled: boolean): void {
@@ -299,7 +276,9 @@ export class LanServerManager {
   }
 
   private refreshAccessUrls(config = this.options.application.getConfig()): void {
-    this.accessUrls = this.networkAddresses.listAccessUrls(config.port, config.host === '::')
+    this.accessUrls = config.accessMode === 'localhost'
+      ? [`http://localhost:${config.port}`]
+      : this.networkAddresses.listAccessUrls(config.port, config.host === '::')
   }
 
   private beginAddressPolling(): void {
@@ -328,10 +307,7 @@ export class LanServerManager {
   private emitStatus(): void {
     const result = this.statusResult()
     if (!result.ok) return
-    void this.statusWithCredentialState().then((status) => {
-      if (!status.ok) return
-      for (const listener of this.listeners) listener(status.value)
-    })
+    for (const listener of this.listeners) listener(result.value)
   }
 }
 
@@ -373,9 +349,13 @@ export function createLanHttpServer(options: CreateLanHttpServerOptions): Fastif
   if (hasWebUi) void server.register(fastifyStatic, { root: options.webRoot, wildcard: false })
 
   server.addHook('onRequest', async (request, reply) => {
-    if (!isAllowedLanAddress(request.socket.remoteAddress)) {
+    const config = options.application.getConfig()
+    const sourceAllowed = config.accessMode === 'localhost'
+      ? isLoopbackAddress(request.socket.remoteAddress)
+      : isAllowedLanAddress(request.socket.remoteAddress)
+    if (!sourceAllowed) {
       options.logger?.warn('拒绝非局域网来源请求', { source: 'lan-server' })
-      return reply.code(403).send(apiFailure('LAN_PUBLIC_SOURCE_REJECTED', '已拒绝非局域网访问', '此功能只允许本机和私有局域网设备访问。', false))
+      return reply.code(403).send(apiFailure('LAN_SOURCE_REJECTED', '访问来源未获允许', config.accessMode === 'localhost' ? '当前仅允许这台 Mac 本机访问。' : '此功能只允许本机和私有局域网设备访问。', false))
     }
     if (!isAllowedHost(request.headers.host, options.application.getConfig(), options.networkAddresses)) {
       return reply.code(403).send(apiFailure('LAN_HOST_REJECTED', '访问地址未获允许', '请求使用了无效的 Host。', false))
@@ -391,29 +371,19 @@ export function createLanHttpServer(options: CreateLanHttpServerOptions): Fastif
 
   server.get('/api/v1/public/status', async () => ({
     ok: true,
-    value: { appName: 'Debate Studio', version: options.appVersion, authenticationRequired: true }
+    value: { appName: 'Debate Studio', version: options.appVersion, authenticationRequired: false }
   }))
 
-  server.post('/api/v1/auth/login', {
-    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } }
-  }, async (request, reply) => {
-    if (!hasRequiredOrigin(request, options)) return reply.code(403).send(apiFailure('LAN_ORIGIN_REQUIRED', '登录来源无效', '请从桌面客户端显示的局域网地址打开页面。', false))
-    const parsed = lanLoginSchema.safeParse(request.body)
-    if (!parsed.success) return reply.code(400).send(apiFailure('LAN_INPUT_INVALID', '登录信息格式无效', '请输入有效的访问密码。', false))
-    const result = await options.application.auth.login(
-      parsed.data.password,
-      parsed.data.deviceName ?? coarseDeviceLabel(request.headers['user-agent']),
+  server.get('/api/v1/auth/session', async (request, reply) => {
+    const current = authenticateRequest(request, options)
+    if (current) return { ok: true, value: authSessionDto(current) }
+    const result = options.application.auth.createSession(
+      coarseDeviceLabel(request.headers['user-agent']),
       normalizeRemoteAddress(request.socket.remoteAddress ?? '')
     )
-    if (!result.ok) return reply.code(401).send(result)
     const maxAge = options.application.getConfig().sessionTimeoutMinutes * 60
-    reply.setCookie(SESSION_COOKIE, result.value.token, { httpOnly: true, sameSite: 'strict', path: '/', maxAge })
-    return { ok: true, value: authSessionDto(result.value.session) }
-  })
-
-  server.get('/api/v1/auth/session', async (request, reply) => {
-    const session = authenticateRequest(request, options)
-    return session ? { ok: true, value: authSessionDto(session) } : reply.code(401).send(unauthorized())
+    reply.setCookie(SESSION_COOKIE, result.token, { httpOnly: true, sameSite: 'strict', path: '/', maxAge })
+    return { ok: true, value: authSessionDto(result.session) }
   })
 
   server.post('/api/v1/auth/logout', async (request, reply) => {
@@ -521,13 +491,14 @@ function validCsrf(request: FastifyRequest, expected: string): boolean {
 }
 
 function allowedOrigins(config: LanServerConfigDto, addresses: NetworkAddressService): Set<string> {
-  const origins = new Set<string>([
+  const loopback = [
     `http://127.0.0.1:${config.port}`,
     `http://localhost:${config.port}`,
-    `http://[::1]:${config.port}`,
-    ...addresses.listAccessUrls(config.port, config.host === '::')
-  ])
-  return origins
+    `http://[::1]:${config.port}`
+  ]
+  return new Set(config.accessMode === 'localhost'
+    ? loopback
+    : [...loopback, ...addresses.listAccessUrls(config.port, config.host === '::')])
 }
 
 function isAllowedHost(host: string | undefined, config: LanServerConfigDto, addresses: NetworkAddressService): boolean {
@@ -549,7 +520,7 @@ function coarseDeviceLabel(userAgent: string | undefined): string {
 }
 
 function unauthorized() {
-  return apiFailure('LAN_AUTH_REQUIRED', '需要登录', '请输入桌面客户端显示的访问密码。', true)
+  return apiFailure('LAN_SESSION_REQUIRED', '访问会话已失效', '请刷新页面重新建立本地会话。', true)
 }
 
 function csrfFailure() {

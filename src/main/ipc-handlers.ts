@@ -60,7 +60,7 @@ import {
   , createPromptVersionSchema
   , rollbackPromptSchema
 } from '../shared/ipc-schemas'
-import { lanConfigUpdateSchema, lanDeviceSchema, lanPasswordSchema } from '../shared/lan-schemas'
+import { lanConfigUpdateSchema, lanDeviceSchema } from '../shared/lan-schemas'
 import type { LanServerStatusDto } from '../shared/lan-dtos'
 
 export interface IpcMainLike {
@@ -110,12 +110,6 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
     lanConfigUpdateSchema,
     (input) => dependencies.lanServer?.updateConfig(input) ?? lanUnavailable()
   ))
-  ipcMain.handle(IPC_CHANNELS.revealLanPassword, () => dependencies.lanServer?.revealPassword() ?? lanUnavailable())
-  ipcMain.handle(IPC_CHANNELS.setLanPassword, validated(
-    lanPasswordSchema,
-    (input) => dependencies.lanServer?.setPassword(input.password) ?? lanUnavailable()
-  ))
-  ipcMain.handle(IPC_CHANNELS.regenerateLanPassword, () => dependencies.lanServer?.regeneratePassword() ?? lanUnavailable())
   ipcMain.handle(IPC_CHANNELS.logoutAllLanDevices, () => dependencies.lanServer?.logoutAllDevices() ?? lanUnavailable())
   ipcMain.handle(IPC_CHANNELS.kickLanDevice, validated(
     lanDeviceSchema,

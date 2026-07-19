@@ -11,14 +11,6 @@ import type {
 export class LanApiClient {
   private csrfToken = ''
 
-  async login(password: string, deviceName?: string): Promise<LanResultDto<LanAuthSessionDto>> {
-    const result = await this.request<LanAuthSessionDto>('/api/v1/auth/login', {
-      method: 'POST', body: JSON.stringify({ password, deviceName })
-    })
-    if (result.ok) this.csrfToken = result.value.csrfToken
-    return result
-  }
-
   async session(): Promise<LanResultDto<LanAuthSessionDto>> {
     const result = await this.request<LanAuthSessionDto>('/api/v1/auth/session')
     if (result.ok) this.csrfToken = result.value.csrfToken
@@ -55,6 +47,18 @@ export class LanApiClient {
     let timer: number | undefined
     const connect = () => {
       if (stopped) return
+      void this.session().then((session) => {
+        if (stopped) return
+        if (!session.ok) {
+          handlers.onOffline()
+          timer = window.setTimeout(connect, retry)
+          retry = Math.min(retry * 2, 10_000)
+          return
+        }
+        openSocket()
+      })
+    }
+    const openSocket = () => {
       const url = new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`, window.location.href)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       socket = new WebSocket(url)
@@ -76,7 +80,12 @@ export class LanApiClient {
   }
 
   private write<T>(path: string, body: unknown): Promise<LanResultDto<T>> {
-    return this.request(path, { method: 'POST', headers: { 'X-CSRF-Token': this.csrfToken }, body: JSON.stringify(body) })
+    const send = () => this.request<T>(path, { method: 'POST', headers: { 'X-CSRF-Token': this.csrfToken }, body: JSON.stringify(body) })
+    return send().then(async (result) => {
+      if (result.ok || result.error.code !== 'LAN_SESSION_REQUIRED') return result
+      const session = await this.session()
+      return session.ok ? send() : result
+    })
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<LanResultDto<T>> {

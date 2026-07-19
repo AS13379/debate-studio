@@ -1,10 +1,5 @@
 import { z } from 'zod'
 
-export const lanLoginSchema = z.object({
-  password: z.string().min(1).max(256),
-  deviceName: z.string().trim().min(1).max(60).optional()
-}).strict()
-
 export const lanDebateListQuerySchema = z.object({
   search: z.string().trim().max(200).optional(),
   sort: z.enum(['created-desc', 'created-asc', 'updated-desc', 'updated-asc']).optional(),
@@ -29,10 +24,10 @@ export const lanCommandSchema = z.object({
 }).strict()
 
 export const lanConfigUpdateSchema = z.object({
+  accessMode: z.enum(['localhost', 'lan']).optional(),
   port: z.number().int().min(1024).max(65535).optional(),
   sessionTimeoutMinutes: z.number().int().min(15).max(10_080).optional(),
   autoPort: z.boolean().optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one setting is required.')
 
-export const lanPasswordSchema = z.object({ password: z.string().min(10).max(256) }).strict()
 export const lanDeviceSchema = z.object({ deviceId: z.string().uuid() }).strict()
