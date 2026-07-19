@@ -44,6 +44,28 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .onboarding-settings-panel { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 28px; }
 .onboarding-settings-panel h2 { margin: 7px 0 8px; }
 .onboarding-settings-panel p { max-width: 660px; margin: 0; color: #6c707a; line-height: 1.65; }
+.lan-access-page { gap: 20px; }
+.lan-overview, .lan-share-panel, .section-heading-row, .lan-device-row { display: flex; align-items: center; justify-content: space-between; gap: 22px; }
+.lan-overview h3, .lan-share-panel h3, .lan-access-page .panel > h3 { margin: 10px 0 7px; }
+.lan-overview p, .lan-share-panel p { margin: 0; color: #6c707a; line-height: 1.6; overflow-wrap: anywhere; }
+.lan-share-panel { justify-content: flex-start; }
+.lan-qr { flex: 0 0 176px; padding: 12px; background: #fff; border: 1px solid #dedfe5; border-radius: 14px; }
+.lan-qr svg { display: block; width: 100%; height: auto; fill: #111319; }
+.lan-share-copy { min-width: 0; }
+.lan-share-copy h3 { overflow-wrap: anywhere; }
+.lan-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.lan-form-grid label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; }
+.lan-form-grid input { min-width: 0; padding: 10px 11px; color: inherit; background: #fff; border: 1px solid #d8dae1; border-radius: 8px; }
+.lan-access-page .check-row { display: flex; align-items: center; gap: 9px; margin: 17px 0; color: #565a65; }
+.lan-password { display: block; margin: 16px 0; padding: 13px 15px; color: #403785; background: #f0edff; border: 1px solid #d7cffb; border-radius: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 750; letter-spacing: .05em; overflow-wrap: anywhere; }
+.lan-password-editor { display: flex; gap: 8px; margin-top: 14px; }
+.lan-password-editor input { min-width: 0; flex: 1; padding: 10px 11px; color: inherit; background: #fff; border: 1px solid #d8dae1; border-radius: 8px; }
+.lan-device-list { display: grid; gap: 8px; margin-top: 16px; }
+.lan-device-row { padding: 12px 14px; background: #f5f6f8; border-radius: 9px; }
+.lan-device-row div { display: grid; gap: 4px; min-width: 0; }
+.lan-device-row small { color: #777b85; overflow-wrap: anywhere; }
+.empty-inline { margin: 0; color: #777b85; }
+.inline-message { margin: 0; padding: 12px 14px; color: #403785; background: #f0edff; border: 1px solid #d7cffb; border-radius: 9px; }
 .page-header { display: flex; width: 100%; align-self: stretch; justify-content: space-between; align-items: flex-end; gap: 24px; text-align: left; }
 .page-header.compact { align-items: center; }
 .page-header > div:first-child { min-width: 0; max-width: 720px; text-align: left; }
@@ -671,6 +693,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .settings-tabs button:hover { color: #ddd9fa; background: rgba(255,255,255,.06); }
   .settings-tabs button.active { color: #f0f1f4; background: #3a3d45; }
   .onboarding-settings-panel p { color: #a8abb4; }
+  .lan-overview p, .lan-share-panel p, .empty-inline, .lan-device-row small { color: #a8abb4; }
+  .lan-form-grid input { color: #f0f1f4; background: #22242a; border-color: #41444d; }
+  .lan-password-editor input { color: #f0f1f4; background: #22242a; border-color: #41444d; }
+  .lan-access-page .check-row { color: #c7c9d0; }
+  .lan-device-row { background: #1b1d22; }
+  .lan-password, .inline-message { color: #ddd9fa; background: #292540; border-color: #50477b; }
   .creation-mode-grid > button, .plan-review-grid article { background: #1b1d22; border-color: #3d4049; }
   .creation-mode-grid > button small, .planner-generate-row span, .plan-review-panel .section-heading > small, .plan-confirmation-note { color: #a8abb4; }
   .creation-mode-grid > button.selected, .plan-review-grid article.editing { background: #2a2640; border-color: #786bcf; }
@@ -727,6 +755,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .routing-row { grid-template-columns: 1fr; }
   .cost-kpis { grid-template-columns: 1fr; }
   .onboarding-settings-panel { align-items: stretch; flex-direction: column; }
+  .lan-settings-grid { grid-template-columns: 1fr; }
+  .lan-overview, .lan-share-panel, .section-heading-row { align-items: stretch; flex-direction: column; }
+  .lan-password-editor { flex-direction: column; }
   .creation-mode-grid, .planner-options, .assisted-positions, .manual-debate-fields, .model-binding-grid, .plan-review-grid { grid-template-columns: 1fr; }
   .planner-generate-row { align-items: stretch; flex-direction: column; }
 }

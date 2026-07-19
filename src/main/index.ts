@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor, safeStorage, shell } from 'electron'
 import { join } from 'node:path'
 import {
   initializeDebateDesktopApplication,
@@ -9,8 +9,10 @@ import { EncryptedFileCredentialStore } from '../security'
 import { registerDebateIpc } from './ipc-handlers'
 import { createWindowOptions } from './window-options'
 import { resolveAppDataDirectory } from './app-paths'
+import { LanServerManager } from '../lan'
 
 let desktopApplication: DebateDesktopApplication | undefined
+let lanServer: LanServerManager | undefined
 let disposeIpc: (() => void) | undefined
 let shutdownStarted = false
 let readyToQuit = false
@@ -51,7 +53,7 @@ function configureDockIcon(): void {
   if (!icon.isEmpty()) app.dock.setIcon(icon)
 }
 
-if (hasSingleInstanceLock) void app.whenReady().then(() => {
+if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   configureDockIcon()
   const appDataDirectory = app.getPath('userData')
   const credentialStore = new EncryptedFileCredentialStore({
@@ -90,6 +92,19 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     throw new Error(`${applicationResult.error.code}: ${applicationResult.error.message}`)
   }
   desktopApplication = applicationResult.value
+  lanServer = new LanServerManager({
+    application: desktopApplication.lanWeb,
+    webRoot: join(__dirname, '../lan-renderer'),
+    appVersion: app.getVersion(),
+    logger: desktopApplication.logger
+  })
+  const lanInitialization = await lanServer.initialize()
+  if (!lanInitialization.ok) {
+    desktopApplication.logger.warn('局域网服务自动启动失败', {
+      source: 'lan-server',
+      metadata: { code: lanInitialization.error.code }
+    })
+  }
 
   disposeIpc = registerDebateIpc({
     ipcMain,
@@ -108,8 +123,10 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
     exports: desktopApplication.exports,
     logger: desktopApplication.logger,
     errorCenter: desktopApplication.errorCenter,
+    lanServer,
     getAppVersion: () => app.getVersion(),
     openExternalUrl: (url) => shell.openExternal(url),
+    openLanPreviewUrl: (url) => shell.openExternal(url),
     broadcastRunEvent: (event) => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.runEvent, event)
@@ -119,8 +136,15 @@ if (hasSingleInstanceLock) void app.whenReady().then(() => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.plannerProgress, event)
       }
+    },
+    broadcastLanStatus: (status) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.lanStatusChanged, status)
+      }
     }
   })
+  powerMonitor.on('suspend', () => { void lanServer?.suspend() })
+  powerMonitor.on('resume', () => { void lanServer?.resume() })
   createWindow()
 
   app.on('activate', () => {
@@ -135,7 +159,11 @@ app.on('before-quit', (event) => {
   shutdownStarted = true
   disposeIpc?.()
   disposeIpc = undefined
-  const closing = desktopApplication?.close() ?? Promise.resolve({ ok: true as const, value: undefined })
+  const closing = (async () => {
+    await lanServer?.close()
+    lanServer = undefined
+    return desktopApplication?.close() ?? { ok: true as const, value: undefined }
+  })()
   void closing.finally(() => {
     desktopApplication = undefined
     readyToQuit = true

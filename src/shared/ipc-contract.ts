@@ -93,6 +93,7 @@ import type {
   PromptTemplateDetailDto,
   RollbackPromptInputDto
 } from './prompt-studio-dtos'
+import type { LanDesktopApi } from './lan-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
@@ -186,6 +187,17 @@ export const IPC_CHANNELS = {
   listExports: 'export:list',
   deleteExport: 'export:delete',
   cancelExport: 'export:cancel',
+  getLanServerStatus: 'lan:get-status',
+  startLanServer: 'lan:start',
+  stopLanServer: 'lan:stop',
+  updateLanServerConfig: 'lan:update-config',
+  revealLanPassword: 'lan:reveal-password',
+  setLanPassword: 'lan:set-password',
+  regenerateLanPassword: 'lan:regenerate-password',
+  logoutAllLanDevices: 'lan:logout-all',
+  kickLanDevice: 'lan:kick-device',
+  openLanPreview: 'lan:open-preview',
+  lanStatusChanged: 'lan:status-changed',
   runEvent: 'run:event'
 } as const
 
@@ -238,7 +250,7 @@ export type RunEventDto =
   | (RunEventBase & { type: 'turnFailed'; turn: DebateTurnDto })
   | (RunEventBase & { type: 'sessionPaused' | 'sessionStopped' | 'sessionCompleted' })
 
-export interface DebateStudioApi {
+export interface DebateStudioApi extends LanDesktopApi {
   getAppVersion(): Promise<string>
   openExternalUrl(input: { url: string }): Promise<WorkbenchResultDto<boolean>>
   getOnboardingState(): Promise<WorkbenchResultDto<OnboardingStateDto>>
@@ -332,6 +344,20 @@ export interface DebateStudioApi {
   onRunEvent(listener: (event: RunEventDto) => void): () => void
   onPlannerProgress(listener: (event: DebatePlannerProgressDto) => void): () => void
 }
+
+export type {
+  LanAuthSessionDto,
+  LanConnectedDeviceDto,
+  LanDebateDetailDto,
+  LanDebateListDto,
+  LanEventEnvelopeDto,
+  LanResultDto,
+  LanRunCommand,
+  LanServerConfigDto,
+  LanServerErrorDto,
+  LanServerStatusDto,
+  LanSessionSnapshotDto
+} from './lan-dtos'
 
 export type {
   DatabaseBackupDto,

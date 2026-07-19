@@ -42,6 +42,7 @@ import { DebatePlanner } from '../debate-planner'
 import { PromptStudioApplication } from '../prompt-studio'
 import { DebateEvaluationService, DebateReviewService } from '../debate-quality'
 import { DebateQualityApplication } from './debate-quality-application'
+import { LanWebApplication } from '../lan/lan-web-application'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -71,6 +72,7 @@ export class DebateDesktopApplication {
     readonly planner: DebatePlanner,
     readonly promptStudio: PromptStudioApplication,
     readonly quality: DebateQualityApplication,
+    readonly lanWeb: LanWebApplication,
     readonly logger: StructuredLogger,
     readonly errorCenter: ErrorCenter,
     private readonly closeApplication: () => Promise<PersistenceResult<void>>
@@ -212,9 +214,19 @@ export function initializeDebateDesktopApplication(
       performanceMetrics,
       now: options.now
     })
+    const lanWeb = new LanWebApplication({
+      persistence,
+      configuration,
+      history,
+      run,
+      credentialStore,
+      logger,
+      now: options.now
+    })
     let closed = false
     const closeApplication = async (): Promise<PersistenceResult<void>> => {
       if (closed) return { ok: true, value: undefined }
+      lanWeb.close()
       await exports.close()
       const result = await run.close()
       if (result.ok) closed = true
@@ -230,7 +242,7 @@ export function initializeDebateDesktopApplication(
       ok: true,
       value: new DebateDesktopApplication(
         configuration, run, research, diagnostics, dataManagement, history, exports,
-        onboarding, modelRouting, costs, planner, promptStudio, quality, logger, errorCenter, closeApplication
+        onboarding, modelRouting, costs, planner, promptStudio, quality, lanWeb, logger, errorCenter, closeApplication
       )
     }
   } catch (cause) {

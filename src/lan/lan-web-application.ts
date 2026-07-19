@@ -1,0 +1,331 @@
+import { randomUUID } from 'node:crypto'
+
+import type { DebateConfigurationApplication } from '../application/debate-configuration-application'
+import type { DebateHistoryApplication } from '../application/debate-history-application'
+import type { DebateRunApplication, DebateRunEvent } from '../application/debate-run-application'
+import type { DebateTurn } from '../domain'
+import type { LoggerLike } from '../observability'
+import type { PersistenceContext } from '../persistence'
+import type { CredentialStore } from '../security'
+import type { DebateTurnDto } from '../shared/debate-dtos'
+import type { DebateHistoryListQueryDto } from '../shared/history-dtos'
+import type {
+  LanDebateDetailDto,
+  LanDebateListDto,
+  LanEventEnvelopeDto,
+  LanResultDto,
+  LanRunCommand,
+  LanServerConfigDto,
+  LanSessionSnapshotDto
+} from '../shared/lan-dtos'
+import type { RunCommandResultDto, RunEventDto, RunStateDto } from '../shared/ipc-contract'
+import { LanAuthService } from './lan-auth-service'
+
+export const LAN_SETTINGS_KEY = 'lan-server-config.v1'
+export const DEFAULT_LAN_SERVER_CONFIG: LanServerConfigDto = {
+  enabled: false,
+  host: '0.0.0.0',
+  port: 27180,
+  authenticationMode: 'password',
+  sessionTimeoutMinutes: 1440,
+  allowFileUpload: false,
+  autoPort: false
+}
+
+export interface LanWebApplicationDependencies {
+  persistence: PersistenceContext
+  configuration: DebateConfigurationApplication
+  history: DebateHistoryApplication
+  run: DebateRunApplication
+  credentialStore: CredentialStore
+  logger?: LoggerLike
+  now?: () => Date
+}
+
+type LanEventListener = (event: LanEventEnvelopeDto) => void
+
+export class LanWebApplication {
+  readonly auth: LanAuthService
+  readonly streamEpoch = randomUUID()
+  private readonly now: () => Date
+  private readonly sequenceBySession = new Map<string, number>()
+  private readonly listeners = new Map<string, Set<LanEventListener>>()
+  private readonly pendingEvents = new Map<string, { event: RunEventDto; timer: ReturnType<typeof setTimeout> }>()
+  private readonly commandQueues = new Map<string, Promise<unknown>>()
+  private readonly unsubscribeRun: () => void
+
+  constructor(private readonly dependencies: LanWebApplicationDependencies) {
+    this.now = dependencies.now ?? (() => new Date())
+    this.auth = new LanAuthService(
+      dependencies.credentialStore,
+      () => this.getConfig().sessionTimeoutMinutes,
+      dependencies.logger,
+      this.now
+    )
+    this.unsubscribeRun = dependencies.run.subscribe((event) => this.observeRunEvent(event))
+  }
+
+  getConfig(): LanServerConfigDto {
+    const result = this.dependencies.persistence.repositories.settings.get<Partial<LanServerConfigDto>>(LAN_SETTINGS_KEY)
+    return result.ok ? normalizeConfig(result.value) : { ...DEFAULT_LAN_SERVER_CONFIG }
+  }
+
+  saveConfig(config: LanServerConfigDto): LanResultDto<LanServerConfigDto> {
+    const normalized = normalizeConfig(config)
+    const saved = this.dependencies.persistence.repositories.settings.set(LAN_SETTINGS_KEY, normalized)
+    if (!saved.ok) return lanFailure('LAN_CONFIG_SAVE_FAILED', '局域网设置保存失败', '无法保存局域网访问设置，请稍后重试。', true)
+    return { ok: true, value: normalized }
+  }
+
+  listDebates(query: DebateHistoryListQueryDto): LanResultDto<LanDebateListDto> {
+    const limit = Math.min(query.limit ?? 50, 50)
+    const result = this.dependencies.history.listDebates({ ...query, limit: limit + 1 })
+    if (!result.ok) return { ok: false, error: { ...result.error } }
+    return { ok: true, value: { debates: result.value.slice(0, limit), hasMore: result.value.length > limit } }
+  }
+
+  getDebate(debateId: string): LanResultDto<LanDebateDetailDto> {
+    const detail = this.dependencies.configuration.getDebate(debateId)
+    if (!detail.ok) return { ok: false, error: { ...detail.error } }
+    const history = this.dependencies.history.getDebateDetail(debateId)
+    return {
+      ok: true,
+      value: {
+        ...detail.value,
+        participants: detail.value.participants.map((participant) => ({ ...participant })),
+        displayTitle: history.ok ? history.value.displayTitle : detail.value.topic
+      }
+    }
+  }
+
+  getSnapshot(
+    sessionId: string,
+    page: { limit?: number; before?: { createdAt: string; id: string } } = {}
+  ): LanResultDto<LanSessionSnapshotDto> {
+    const detail = this.dependencies.configuration.getDebateBySession(sessionId)
+    if (!detail.ok) return { ok: false, error: { ...detail.error } }
+    const state = this.dependencies.run.getRunState(sessionId)
+    if (!state.ok) return { ok: false, error: mapRunError(state.error) }
+    const turns = this.dependencies.configuration.listDebateTurnsPage(sessionId, page.limit ?? 40, page.before)
+    if (!turns.ok) return { ok: false, error: { ...turns.error } }
+    const history = this.dependencies.history.getDebateDetail(detail.value.id)
+    return {
+      ok: true,
+      value: {
+        streamEpoch: this.streamEpoch,
+        latestSequence: this.getLatestSequence(sessionId),
+        debate: {
+          ...detail.value,
+          displayTitle: history.ok ? history.value.displayTitle : detail.value.topic,
+          participants: detail.value.participants.map((participant) => ({ ...participant }))
+        },
+        state: { ...state.state, lastTurn: state.state.lastTurn ? safeTurn(state.state.lastTurn) : undefined },
+        turnPage: {
+          turns: turns.value.turns.map(safeTurn),
+          nextCursor: turns.value.nextCursor ? { ...turns.value.nextCursor } : undefined
+        }
+      }
+    }
+  }
+
+  executeCommand(sessionId: string, command: LanRunCommand): Promise<LanResultDto<RunStateDto>> {
+    const previous = this.commandQueues.get(sessionId) ?? Promise.resolve()
+    const operation = previous.catch(() => undefined).then(async () => {
+      const result = await this.runCommand(sessionId, command)
+      if (!result.ok) return { ok: false as const, error: mapRunError(result.error) }
+      return { ok: true as const, value: result.state }
+    })
+    const queued = operation.finally(() => {
+      if (this.commandQueues.get(sessionId) === queued) this.commandQueues.delete(sessionId)
+    })
+    this.commandQueues.set(sessionId, queued)
+    return operation
+  }
+
+  subscribe(sessionId: string, listener: LanEventListener): () => void {
+    const listeners = this.listeners.get(sessionId) ?? new Set<LanEventListener>()
+    listeners.add(listener)
+    this.listeners.set(sessionId, listeners)
+    return () => {
+      listeners.delete(listener)
+      if (listeners.size === 0) this.listeners.delete(sessionId)
+    }
+  }
+
+  getLatestSequence(sessionId: string): number {
+    return this.sequenceBySession.get(sessionId) ?? 0
+  }
+
+  close(): void {
+    this.unsubscribeRun()
+    for (const pending of this.pendingEvents.values()) clearTimeout(pending.timer)
+    this.pendingEvents.clear()
+    this.listeners.clear()
+    this.auth.logoutAll()
+  }
+
+  private async runCommand(sessionId: string, command: LanRunCommand): Promise<RunCommandResultDto> {
+    this.dependencies.logger?.info('局域网运行命令', {
+      source: 'lan-command', sessionId, metadata: { command }
+    })
+    if (command === 'start') return this.launchWithoutBlocking(sessionId, () => this.dependencies.run.start(sessionId))
+    if (command === 'pause') return this.dependencies.run.pause(sessionId).then(mapRunResult)
+    if (command === 'resume') return this.launchWithoutBlocking(sessionId, () => this.dependencies.run.resume(sessionId))
+    return this.dependencies.run.stop(sessionId).then(mapRunResult)
+  }
+
+  private async launchWithoutBlocking(
+    sessionId: string,
+    launch: () => Promise<Awaited<ReturnType<DebateRunApplication['start']>>>
+  ): Promise<RunCommandResultDto> {
+    const pending = launch()
+    const immediate = await Promise.race([
+      pending.then((result) => ({ result })),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 0))
+    ])
+    if (immediate) return mapRunResult(immediate.result)
+    void pending.then((result) => {
+      if (!result.ok) this.dependencies.logger?.warn('局域网启动的运行任务结束于错误', {
+        source: 'lan-command', sessionId, metadata: { code: result.error.code }
+      })
+    }).catch(() => undefined)
+    return mapRunResult(this.dependencies.run.getRunState(sessionId))
+  }
+
+  private observeRunEvent(event: DebateRunEvent): void {
+    const mapped = safeRunEvent(mapApplicationRunEvent(event))
+    if (mapped.type === 'turnUpdated' || mapped.type === 'turnReasoningUpdated') {
+      const key = `${mapped.sessionId}:${mapped.type}:${mapped.turnId}`
+      const existing = this.pendingEvents.get(key)
+      if (existing) {
+        existing.event = mapped.type === 'turnReasoningUpdated' && existing.event.type === 'turnReasoningUpdated'
+          ? { ...mapped, delta: `${existing.event.delta}${mapped.delta}` }
+          : mapped
+        return
+      }
+      const timer = setTimeout(() => this.flushPendingKey(key), 100)
+      this.pendingEvents.set(key, { event: mapped, timer })
+      return
+    }
+    this.flushPendingSession(mapped.sessionId)
+    this.emit(mapped)
+  }
+
+  private flushPendingSession(sessionId: string): void {
+    for (const key of [...this.pendingEvents.keys()]) {
+      if (key.startsWith(`${sessionId}:`)) this.flushPendingKey(key)
+    }
+  }
+
+  private flushPendingKey(key: string): void {
+    const pending = this.pendingEvents.get(key)
+    if (!pending) return
+    clearTimeout(pending.timer)
+    this.pendingEvents.delete(key)
+    this.emit(pending.event)
+  }
+
+  private emit(event: RunEventDto): void {
+    const sequence = this.getLatestSequence(event.sessionId) + 1
+    this.sequenceBySession.set(event.sessionId, sequence)
+    const envelope: LanEventEnvelopeDto = {
+      protocolVersion: 1,
+      streamEpoch: this.streamEpoch,
+      sequence,
+      eventId: event.id,
+      sessionId: event.sessionId,
+      createdAt: event.createdAt,
+      event
+    }
+    for (const listener of this.listeners.get(event.sessionId) ?? []) listener(envelope)
+  }
+}
+
+function normalizeConfig(value?: Partial<LanServerConfigDto>): LanServerConfigDto {
+  const port = Number.isInteger(value?.port) && (value?.port ?? 0) >= 1024 && (value?.port ?? 0) <= 65535
+    ? value!.port!
+    : DEFAULT_LAN_SERVER_CONFIG.port
+  const timeout = Number.isInteger(value?.sessionTimeoutMinutes)
+    ? Math.max(15, Math.min(10_080, value!.sessionTimeoutMinutes!))
+    : DEFAULT_LAN_SERVER_CONFIG.sessionTimeoutMinutes
+  return {
+    ...DEFAULT_LAN_SERVER_CONFIG,
+    ...value,
+    port,
+    sessionTimeoutMinutes: timeout,
+    authenticationMode: 'password',
+    allowFileUpload: false
+  }
+}
+
+function mapRunResult(result: Awaited<ReturnType<DebateRunApplication['start']>>): RunCommandResultDto {
+  return result.ok
+    ? { ok: true, state: { ...result.state, lastTurn: result.state.lastTurn ? safeTurn(result.state.lastTurn) : undefined } }
+    : { ok: false, error: mapRunError(result.error) }
+}
+
+function mapRunError(error: { code: string; titleZh: string; descriptionZh: string; retryable: boolean }): {
+  code: string; titleZh: string; descriptionZh: string; retryable: boolean
+} {
+  return { code: error.code, titleZh: error.titleZh, descriptionZh: error.descriptionZh, retryable: error.retryable }
+}
+
+function safeTurn(turn: DebateTurnDto): DebateTurnDto {
+  const { error: _rawError, ...safe } = turn
+  return {
+    ...safe,
+    failure: turn.failure ? {
+      code: turn.failure.code,
+      titleZh: turn.failure.titleZh,
+      descriptionZh: turn.failure.descriptionZh,
+      retryable: turn.failure.retryable,
+      suggestedActionZh: turn.failure.suggestedActionZh
+    } : undefined
+  }
+}
+
+function safeRunEvent(event: RunEventDto): RunEventDto {
+  if (event.type === 'turnStarted' || event.type === 'turnCompleted' || event.type === 'turnFailed') {
+    return { ...event, turn: safeTurn(event.turn) }
+  }
+  return { ...event }
+}
+
+function mapApplicationRunEvent(event: DebateRunEvent): RunEventDto {
+  const base = { id: event.id, sessionId: event.sessionId, createdAt: event.createdAt }
+  switch (event.type) {
+    case 'stateChanged':
+      return { ...base, type: event.type, state: { status: event.event.to.status, currentStage: event.event.to.stage } }
+    case 'turnStarted':
+    case 'turnCompleted':
+    case 'turnFailed':
+      return { ...base, type: event.type, turn: applicationTurn(event.turn) }
+    case 'turnUpdated':
+      return { ...base, type: event.type, turnId: event.turnId, stage: event.stage, participantId: event.participantId, delta: event.delta, content: event.content }
+    case 'turnReasoningUpdated':
+      return { ...base, type: event.type, turnId: event.turnId, stage: event.stage, participantId: event.participantId, delta: event.delta }
+    case 'sessionPaused':
+    case 'sessionStopped':
+    case 'sessionCompleted':
+      return { ...base, type: event.type }
+  }
+}
+
+function applicationTurn(turn: DebateTurn): DebateTurnDto {
+  return {
+    id: turn.id,
+    sessionId: turn.sessionId,
+    participantId: turn.participantId,
+    stage: turn.stage,
+    status: turn.status,
+    content: turn.content,
+    retryOfTurnId: turn.retryOfTurnId,
+    error: turn.error,
+    failure: turn.failure ? { ...turn.failure } : undefined,
+    createdAt: turn.createdAt
+  }
+}
+
+function lanFailure<T>(code: string, titleZh: string, descriptionZh: string, retryable: boolean): LanResultDto<T> {
+  return { ok: false, error: { code, titleZh, descriptionZh, retryable } }
+}

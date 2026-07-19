@@ -472,6 +472,13 @@ export class DebateConfigurationApplication {
     return { ok: true, value: this.detailDto(debate.value, session, participants.value) }
   }
 
+  getDebateBySession(sessionId: string): ConfigurationResultDto<DebateDetailDto> {
+    const session = this.dependencies.persistence.repositories.sessions.get(sessionId)
+    if (!session.ok) return this.persistenceError(session.error)
+    if (!session.value) return this.notFound('Session', sessionId)
+    return this.getDebate(session.value.debateId)
+  }
+
   listDebateTurns(sessionId: string): ConfigurationResultDto<DebateTurnDto[]> {
     const turns = this.dependencies.persistence.repositories.turns.listBySession(sessionId)
     return turns.ok

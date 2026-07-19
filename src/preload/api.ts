@@ -1,11 +1,13 @@
 import type { IpcRendererEvent } from 'electron'
 
-import { IPC_CHANNELS, type DebatePlannerProgressDto, type DebateStudioApi, type RunEventDto } from '../shared/ipc-contract'
+import { IPC_CHANNELS, type DebatePlannerProgressDto, type DebateStudioApi, type LanServerStatusDto, type RunEventDto } from '../shared/ipc-contract'
+
+type PreloadEventPayload = RunEventDto | DebatePlannerProgressDto | LanServerStatusDto
 
 export interface IpcRendererLike {
   invoke(channel: string, input?: unknown): Promise<unknown>
-  on(channel: string, listener: (event: IpcRendererEvent, payload: RunEventDto | DebatePlannerProgressDto) => void): void
-  removeListener(channel: string, listener: (event: IpcRendererEvent, payload: RunEventDto | DebatePlannerProgressDto) => void): void
+  on(channel: string, listener: (event: IpcRendererEvent, payload: PreloadEventPayload) => void): void
+  removeListener(channel: string, listener: (event: IpcRendererEvent, payload: PreloadEventPayload) => void): void
 }
 
 export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudioApi {
@@ -100,15 +102,30 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
     listExports: () => invoke(ipcRenderer, IPC_CHANNELS.listExports),
     deleteExport: (input) => invoke(ipcRenderer, IPC_CHANNELS.deleteExport, input),
     cancelExport: (input) => invoke(ipcRenderer, IPC_CHANNELS.cancelExport, input),
+    getLanServerStatus: () => invoke(ipcRenderer, IPC_CHANNELS.getLanServerStatus),
+    startLanServer: () => invoke(ipcRenderer, IPC_CHANNELS.startLanServer),
+    stopLanServer: () => invoke(ipcRenderer, IPC_CHANNELS.stopLanServer),
+    updateLanServerConfig: (input) => invoke(ipcRenderer, IPC_CHANNELS.updateLanServerConfig, input),
+    revealLanPassword: () => invoke(ipcRenderer, IPC_CHANNELS.revealLanPassword),
+    setLanPassword: (input) => invoke(ipcRenderer, IPC_CHANNELS.setLanPassword, input),
+    regenerateLanPassword: () => invoke(ipcRenderer, IPC_CHANNELS.regenerateLanPassword),
+    logoutAllLanDevices: () => invoke(ipcRenderer, IPC_CHANNELS.logoutAllLanDevices),
+    kickLanDevice: (input) => invoke(ipcRenderer, IPC_CHANNELS.kickLanDevice, input),
+    openLanPreview: () => invoke(ipcRenderer, IPC_CHANNELS.openLanPreview),
     onRunEvent: (listener) => {
-      const wrapped = (_event: IpcRendererEvent, payload: RunEventDto | DebatePlannerProgressDto): void => listener(payload as RunEventDto)
+      const wrapped = (_event: IpcRendererEvent, payload: PreloadEventPayload): void => listener(payload as RunEventDto)
       ipcRenderer.on(IPC_CHANNELS.runEvent, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.runEvent, wrapped)
     },
     onPlannerProgress: (listener) => {
-      const wrapped = (_event: IpcRendererEvent, payload: RunEventDto | DebatePlannerProgressDto): void => listener(payload as DebatePlannerProgressDto)
+      const wrapped = (_event: IpcRendererEvent, payload: PreloadEventPayload): void => listener(payload as DebatePlannerProgressDto)
       ipcRenderer.on(IPC_CHANNELS.plannerProgress, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.plannerProgress, wrapped)
+    },
+    onLanStatusChanged: (listener) => {
+      const wrapped = (_event: IpcRendererEvent, payload: PreloadEventPayload): void => listener(payload as LanServerStatusDto)
+      ipcRenderer.on(IPC_CHANNELS.lanStatusChanged, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.lanStatusChanged, wrapped)
     }
   }
 }

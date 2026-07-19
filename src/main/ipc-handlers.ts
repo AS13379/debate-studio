@@ -6,6 +6,7 @@ import type {
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
 import type { DebatePlanner } from '../debate-planner'
+import type { LanServerManager } from '../lan'
 import { redactForExport, redactSensitiveText } from '../security'
 import {
   IPC_CHANNELS,
@@ -59,6 +60,8 @@ import {
   , createPromptVersionSchema
   , rollbackPromptSchema
 } from '../shared/ipc-schemas'
+import { lanConfigUpdateSchema, lanDeviceSchema, lanPasswordSchema } from '../shared/lan-schemas'
+import type { LanServerStatusDto } from '../shared/lan-dtos'
 
 export interface IpcMainLike {
   handle(channel: string, listener: (event: unknown, input?: unknown) => unknown): void
@@ -82,19 +85,53 @@ export interface DebateIpcDependencies {
   exports: ExportApplication
   logger: LoggerLike
   errorCenter: ErrorCenter
+  lanServer?: LanServerManager
   getAppVersion(): string
   openExternalUrl?(url: string): Promise<void>
+  openLanPreviewUrl?(url: string): Promise<void>
   broadcastRunEvent(event: RunEventDto): void
   broadcastPlannerProgress(event: DebatePlannerProgressDto): void
+  broadcastLanStatus?(status: LanServerStatusDto): void
 }
 
-const registeredChannels = Object.values(IPC_CHANNELS).filter((channel) => channel !== IPC_CHANNELS.runEvent && channel !== IPC_CHANNELS.plannerProgress)
+const registeredChannels = Object.values(IPC_CHANNELS).filter((channel) =>
+  channel !== IPC_CHANNELS.runEvent && channel !== IPC_CHANNELS.plannerProgress && channel !== IPC_CHANNELS.lanStatusChanged
+)
 
 export function registerDebateIpc(dependencies: DebateIpcDependencies): () => void {
   const { configuration, run, research } = dependencies
   const rawIpcMain = dependencies.ipcMain
   const ipcMain = observedIpcMain(dependencies)
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => dependencies.getAppVersion())
+  ipcMain.handle(IPC_CHANNELS.getLanServerStatus, () => dependencies.lanServer?.statusWithCredentialState() ?? lanUnavailable())
+  ipcMain.handle(IPC_CHANNELS.startLanServer, () => dependencies.lanServer?.start() ?? lanUnavailable())
+  ipcMain.handle(IPC_CHANNELS.stopLanServer, () => dependencies.lanServer?.stop() ?? lanUnavailable())
+  ipcMain.handle(IPC_CHANNELS.updateLanServerConfig, validated(
+    lanConfigUpdateSchema,
+    (input) => dependencies.lanServer?.updateConfig(input) ?? lanUnavailable()
+  ))
+  ipcMain.handle(IPC_CHANNELS.revealLanPassword, () => dependencies.lanServer?.revealPassword() ?? lanUnavailable())
+  ipcMain.handle(IPC_CHANNELS.setLanPassword, validated(
+    lanPasswordSchema,
+    (input) => dependencies.lanServer?.setPassword(input.password) ?? lanUnavailable()
+  ))
+  ipcMain.handle(IPC_CHANNELS.regenerateLanPassword, () => dependencies.lanServer?.regeneratePassword() ?? lanUnavailable())
+  ipcMain.handle(IPC_CHANNELS.logoutAllLanDevices, () => dependencies.lanServer?.logoutAllDevices() ?? lanUnavailable())
+  ipcMain.handle(IPC_CHANNELS.kickLanDevice, validated(
+    lanDeviceSchema,
+    (input) => dependencies.lanServer?.kickDevice(input.deviceId) ?? lanUnavailable()
+  ))
+  ipcMain.handle(IPC_CHANNELS.openLanPreview, async () => {
+    const preview = dependencies.lanServer?.getPreviewUrl() ?? lanUnavailable<string>()
+    if (!preview.ok) return preview
+    if (!dependencies.openLanPreviewUrl) return externalUrlFailure('LAN_PREVIEW_UNAVAILABLE', '当前环境无法打开浏览器预览。')
+    try {
+      await dependencies.openLanPreviewUrl(preview.value)
+      return { ok: true as const, value: true }
+    } catch {
+      return externalUrlFailure('LAN_PREVIEW_OPEN_FAILED', '无法打开局域网预览，请复制访问地址后手动打开。')
+    }
+  })
   ipcMain.handle(IPC_CHANNELS.openExternalUrl, validated(externalUrlSchema, async (input) => {
     if (!dependencies.openExternalUrl || !isAllowedExternalUrl(input.url)) return externalUrlFailure('EXTERNAL_URL_NOT_ALLOWED', '此链接不在官方平台白名单中。')
     try {
@@ -205,8 +242,10 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
     dependencies.diagnostics.observeRunEvent(event)
     dependencies.broadcastRunEvent(mapRunEvent(event))
   })
+  const unsubscribeLan = dependencies.lanServer?.subscribe((status) => dependencies.broadcastLanStatus?.(status)) ?? (() => undefined)
   return () => {
     unsubscribe()
+    unsubscribeLan()
     for (const channel of registeredChannels) rawIpcMain.removeHandler(channel)
   }
 }
@@ -254,6 +293,18 @@ function ipcUnexpectedFailure(): ConfigurationResultDto<never> {
       titleZh: '应用操作失败',
       descriptionZh: '主进程处理请求时发生异常，请在“诊断与日志”中查看详情。',
       retryable: true
+    }
+  }
+}
+
+function lanUnavailable<T>() {
+  return {
+    ok: false as const,
+    error: {
+      code: 'LAN_SERVER_UNAVAILABLE',
+      titleZh: '局域网服务不可用',
+      descriptionZh: '当前应用环境没有启用局域网服务组件。',
+      retryable: false
     }
   }
 }
