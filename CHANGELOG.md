@@ -2,6 +2,13 @@
 
 本文件记录 Debate Studio 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.3.4] - 2026-07-19
+
+### 修复与改进
+
+- 兼容展示旧版本已经保存的 Kimi `EMPTY_RESPONSE / finish_reason=length` 失败记录，将其明确解释为可重试的模型输出上限问题。
+- 历史失败 Turn 保持原样且继续展示原始技术详情；重试会创建使用新 Kimi 输出配置的 Turn，不覆盖旧记录。
+
 ## [0.3.3] - 2026-07-19
 
 ### 修复与改进

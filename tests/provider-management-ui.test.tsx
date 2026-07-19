@@ -87,6 +87,27 @@ describe('provider management UI states', () => {
     expect(html).not.toContain('不可直接重试')
   })
 
+  it('explains persisted pre-fix Kimi length errors as retryable output-limit records', () => {
+    const html = renderToStaticMarkup(
+      <ErrorRecoveryPanel
+        failure={{
+          code: 'EMPTY_RESPONSE',
+          titleZh: '模型请求失败',
+          descriptionZh: '模型服务未能完成当前发言。',
+          retryable: false,
+          technicalDetails: 'OpenAI Chat stream ended without assistant content (finish_reason=length, reasoning_content=present).'
+        }}
+        onRetry={() => undefined}
+      />
+    )
+
+    expect(html).toContain('模型输出上限不足')
+    expect(html).toContain('这是旧版本保存的失败记录')
+    expect(html).toContain('可重试')
+    expect(html).toContain('>重试<')
+    expect(html).toContain('EMPTY_RESPONSE')
+  })
+
   it('uses the application Validator result as the only start gate', () => {
     expect(isDebateStartBlocked()).toBe(true)
     expect(isDebateStartBlocked({
