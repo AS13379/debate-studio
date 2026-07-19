@@ -282,7 +282,7 @@ describe('OpenAIChatAdapter', () => {
         reasoningEnabled: true
       }
     })
-    expect(k3Transport.requests[0].body).toMatchObject({ reasoning_effort: 'max' })
+    expect(k3Transport.requests[0].body).toMatchObject({ reasoning_effort: 'max', max_tokens: 16_000 })
     expect(k3Transport.requests[0].body).not.toHaveProperty('thinking')
 
     const codeTransport = new MockHttpTransport()
@@ -297,6 +297,34 @@ describe('OpenAIChatAdapter', () => {
     })
     expect(codeTransport.requests[0].body).not.toHaveProperty('thinking')
     expect(codeTransport.requests[0].body).not.toHaveProperty('reasoning_effort')
+  })
+
+  it('uses Kimi official safe output minimum for thinking and tool calls', async () => {
+    const transport = new MockHttpTransport({ response: { status: 200, body: {
+      choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
+        id: 'call-search', type: 'function', function: { name: 'searchWeb', arguments: '{"query":"英美法系"}' }
+      }] }, finish_reason: 'tool_calls' }]
+    } } })
+
+    await new OpenAIChatAdapter(transport).complete({
+      ...request(),
+      modelId: 'kimi-k2.6',
+      maxTokens: 800,
+      tools: [{ name: 'searchWeb', description: '搜索', parameters: { type: 'object' } }],
+      toolChoice: 'auto',
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'moonshot',
+        reasoningEnabled: true
+      }
+    })
+
+    expect(transport.requests[0].body).toMatchObject({
+      max_tokens: 16_000,
+      temperature: 1,
+      thinking: { type: 'enabled' },
+      tool_choice: 'auto'
+    })
   })
 
   it('maps image input only when a vision request explicitly contains image bytes', async () => {
@@ -405,6 +433,42 @@ describe('OpenAIChatAdapter', () => {
       type: 'completed',
       response: { content: '公开回答', reasoningContent: reasoningMarker }
     })
+  })
+
+  it('classifies a length-truncated reasoning tool call as a retryable output-limit error', async () => {
+    const transport = new MockHttpTransport({
+      streamEvents: [
+        { type: 'data', data: { choices: [{ delta: { reasoning_content: '正在整理来源评价。' }, finish_reason: null }] } },
+        { type: 'data', data: { choices: [{ delta: { tool_calls: [{
+          index: 0, id: 'call-note', type: 'function', function: { name: 'saveResearchNote', arguments: '{"content":"尚未完成' }
+        }] }, finish_reason: 'length' }] } },
+        { type: 'done' }
+      ]
+    })
+    const events: UnifiedStreamEvent[] = []
+
+    for await (const event of new OpenAIChatAdapter(transport).stream({
+      ...request(),
+      modelId: 'kimi-k2.6',
+      maxTokens: 800,
+      tools: [{ name: 'saveResearchNote', description: '保存笔记', parameters: { type: 'object' } }],
+      runtimeMetadata: {
+        ...request().runtimeMetadata,
+        providerId: 'moonshot',
+        reasoningEnabled: true
+      }
+    })) events.push(event)
+
+    expect(events.map((event) => event.type)).toEqual(['started', 'reasoningDelta', 'error'])
+    expect(events.at(-1)).toMatchObject({
+      type: 'error',
+      error: {
+        titleZh: '模型输出上限不足',
+        retryable: true,
+        message: expect.stringContaining('reasoning_content=present')
+      }
+    })
+    expect(transport.requests[0].body).toMatchObject({ max_tokens: 16_000 })
   })
 
   it('assembles streamed tool calls and preserves Gemini thought signatures for replay', async () => {

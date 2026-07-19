@@ -49,6 +49,7 @@ export interface OpenAIChatRequestBody {
   thinking?: { type: 'enabled' | 'disabled' }
   enable_thinking?: boolean
   reasoning_effort?: 'max'
+  temperature?: number
   extra_body?: {
     google: {
       thinking_config: {
@@ -65,6 +66,8 @@ interface StreamToolCallAccumulator {
   googleThoughtSignature?: string
 }
 
+const KIMI_REASONING_MIN_OUTPUT_TOKENS = 16_000
+
 export class OpenAIChatAdapter implements ModelAdapter {
   constructor(private readonly transport: HttpTransport) {}
 
@@ -76,20 +79,13 @@ export class OpenAIChatAdapter implements ModelAdapter {
       }
 
       const content = this.responseContent(response.body) ?? ''
-      const toolCalls = this.responseToolCalls(response.body)
+      const finishReason = this.responseFinishReason(response.body)
       const reasoningContent = this.responseReasoningContent(response.body)
+      if (finishReason === 'length') {
+        throw new ModelAdapterError(this.outputLimitError(Boolean(reasoningContent)))
+      }
+      const toolCalls = this.responseToolCalls(response.body)
       if (!content && !toolCalls.length) {
-        const finishReason = this.responseFinishReason(response.body)
-        if (finishReason === 'length') {
-          throw new ModelAdapterError({
-            code: 'REQUEST_FAILED',
-            message: 'OpenAI Chat reached max_tokens before producing assistant content.',
-            titleZh: '模型输出上限不足',
-            descriptionZh: '模型在生成可用回复前已用完最大输出 Token。',
-            retryable: true,
-            suggestedActionZh: '提高该 ModelProfile 的最大输出 Token 后重试。'
-          })
-        }
         throw new ModelAdapterError({
           code: 'EMPTY_RESPONSE',
           message: `OpenAI Chat response did not contain assistant content (finish_reason=${finishReason ?? 'missing'}, reasoning_content=${this.hasReasoningContent(response.body) ? 'present' : 'absent'}).`,
@@ -156,6 +152,15 @@ export class OpenAIChatAdapter implements ModelAdapter {
       }
     } catch (cause) {
       yield this.errorEvent(request, cause)
+      return
+    }
+
+    if (finishReason === 'length') {
+      yield {
+        type: 'error',
+        requestId: request.requestId,
+        error: this.outputLimitError(Boolean(reasoningContent))
+      }
       return
     }
 
@@ -295,11 +300,36 @@ export class OpenAIChatAdapter implements ModelAdapter {
     // endpoint. K3 uses reasoning_effort, K2.5/K2.6 use thinking, while the
     // K2.7 coding model must be left at its service-side default.
     if (/^kimi-k3(?:$|[-.])/.test(modelId)) {
-      if (enabled) body.reasoning_effort = 'max'
+      if (enabled) {
+        body.reasoning_effort = 'max'
+        body.max_tokens = Math.max(body.max_tokens ?? 0, KIMI_REASONING_MIN_OUTPUT_TOKENS)
+      }
       return
     }
     if (/^kimi-k2\.(?:5|6)(?:$|[-.])/.test(modelId)) {
       body.thinking = { type: enabled ? 'enabled' : 'disabled' }
+      if (enabled) {
+        body.max_tokens = Math.max(body.max_tokens ?? 0, KIMI_REASONING_MIN_OUTPUT_TOKENS)
+        body.temperature = 1
+      }
+      return
+    }
+    if (enabled && /(?:thinking|reasoner)/.test(modelId)) {
+      body.max_tokens = Math.max(body.max_tokens ?? 0, KIMI_REASONING_MIN_OUTPUT_TOKENS)
+      body.temperature = 1
+    }
+  }
+
+  private outputLimitError(reasoningPresent: boolean): UnifiedError {
+    return {
+      code: 'REQUEST_FAILED',
+      message: `OpenAI Chat reached max_tokens before completing assistant output (reasoning_content=${reasoningPresent ? 'present' : 'absent'}).`,
+      titleZh: '模型输出上限不足',
+      descriptionZh: reasoningPresent
+        ? '模型的思考内容已经占满本轮输出额度，尚未生成完整正文或工具参数。已收到的思考内容和正文会保留。'
+        : '模型在生成完整正文或工具参数前用完了本轮输出额度，已收到的部分文本会保留。',
+      retryable: true,
+      suggestedActionZh: '重试当前 Turn；Kimi 思考模型将自动使用官方建议的安全输出下限。'
     }
   }
 

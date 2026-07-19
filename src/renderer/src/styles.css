@@ -16,19 +16,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sidebar {
   position: sticky; top: 0; height: 100vh; padding: 28px 18px 20px;
   display: grid; grid-template-columns: 56px 1fr; grid-template-rows: auto 1fr auto;
-  gap: 12px; color: #f7f7f8; background: linear-gradient(180deg, #25272c, #18191d);
-  border-right: 1px solid rgba(255,255,255,.08);
+  gap: 12px; color: #25272c; background: linear-gradient(180deg, #fff, #f0f1f4);
+  border-right: 1px solid #dfe1e6;
 }
 .brand-mark { display: grid; place-items: center; width: 56px; height: 56px; }
 .brand-mark img { display: block; width: 56px; height: 56px; filter: drop-shadow(0 8px 16px rgba(59,47,143,.28)); }
 .brand-copy { display: flex; flex-direction: column; justify-content: center; gap: 3px; }
-.brand-copy span, .app-version { color: #aeb1bb; font-size: 12px; }
+.brand-copy span, .app-version { color: #727681; font-size: 12px; }
 .sidebar nav { grid-column: 1 / -1; display: flex; min-height: 0; flex-direction: column; gap: 18px; margin-top: 26px; }
 .sidebar-nav-group { display: flex; flex-direction: column; gap: 6px; }
-.sidebar-nav-settings { margin-top: auto; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08); }
-.sidebar-nav-label { padding: 0 12px 5px; color: #777b85; font-size: 10px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
-.sidebar nav button { padding: 11px 12px; color: #d7d9df; text-align: left; border: 0; border-radius: 9px; background: transparent; }
-.sidebar nav button:hover, .sidebar nav button.active { color: #fff; background: rgba(255,255,255,.1); }
+.sidebar-nav-settings { margin-top: auto; padding-top: 16px; border-top: 1px solid #dfe1e6; }
+.sidebar-nav-label { padding: 0 12px 5px; color: #858995; font-size: 10px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+.sidebar nav button { padding: 11px 12px; color: #4b4f59; text-align: left; border: 0; border-radius: 9px; background: transparent; }
+.sidebar nav button:hover, .sidebar nav button.active { color: #322a72; background: #e7e4fb; }
 .app-version { grid-column: 1 / -1; align-self: end; padding-left: 12px; }
 .content-area { min-width: 0; padding: 40px clamp(28px, 5vw, 72px) 72px; scrollbar-gutter: stable; }
 .page-loading { max-width: 1180px; margin: 0 auto; }
@@ -554,6 +554,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 @media (prefers-color-scheme: dark) {
   :root { color: #f0f1f4; background: #15161a; }
+  .sidebar { color: #f7f7f8; background: linear-gradient(180deg, #25272c, #18191d); border-right-color: rgba(255,255,255,.08); }
+  .brand-copy span, .app-version { color: #aeb1bb; }
+  .sidebar-nav-settings { border-top-color: rgba(255,255,255,.08); }
+  .sidebar-nav-label { color: #777b85; }
+  .sidebar nav button { color: #d7d9df; }
+  .sidebar nav button:hover, .sidebar nav button.active { color: #fff; background: rgba(255,255,255,.1); }
   .content-area { background: #15161a; }
   .operation-dialog { color: #f0f1f4; background: #22242a; border-color: #3a3d46; }
   .operation-dialog header p:not(.eyebrow), .operation-log-row p, .operation-elapsed { color: #a7abb5; }
@@ -703,7 +709,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .sidebar { position: sticky; z-index: 10; height: auto; padding: 12px 16px; grid-template-columns: 56px 1fr; grid-template-rows: auto auto; }
   .sidebar nav { margin-top: 5px; flex-direction: row; overflow-x: auto; }
   .sidebar-nav-group { flex-direction: row; }
-  .sidebar-nav-settings { margin: 0 0 0 auto; padding: 0 0 0 8px; border-top: 0; border-left: 1px solid rgba(255,255,255,.08); }
+  .sidebar-nav-settings { margin: 0 0 0 auto; padding: 0 0 0 8px; border-top: 0; border-left: 1px solid #dfe1e6; }
   .sidebar-nav-label { display: none; }
   .sidebar nav button { flex: 0 0 auto; white-space: nowrap; }
   .app-version { display: none; }
@@ -796,6 +802,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .prompt-compare-grid pre { min-height: 160px; max-height: 420px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 15px; border: 1px solid #e1e2e7; border-radius: 11px; background: #f8f8fb; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 @media (prefers-color-scheme: dark) {
+  .sidebar-nav-settings { border-left-color: rgba(255,255,255,.08); }
   .quality-panel { border-color: #4f466e; }
   .quality-side, .quality-history-list button, .prompt-version-list article, .prompt-compare-grid pre { color: #eff0f3; background: #1b1d22; border-color: #383b44; }
   .quality-score-row, .quality-review { border-color: #383b44; }

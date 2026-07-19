@@ -202,7 +202,7 @@ describe('Release Candidate packaging configuration', () => {
     const entitlements = readFileSync(join(root, 'build', 'entitlements.mac.plist'), 'utf8')
     const releaseWorkflow = readFileSync(join(root, '.github', 'workflows', 'macos-arm64-release.yml'), 'utf8')
 
-    expect(packageJson.version).toBe('0.3.2')
+    expect(packageJson.version).toBe('0.3.3')
     expect(packageJson.scripts['release:mac:arm64']).toContain('electron-builder --mac dmg --arm64')
     expect(configuration).toContain('appId: com.leander.debatestudio')
     expect(configuration).toContain('from: build/icon.png')

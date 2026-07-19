@@ -195,7 +195,9 @@ export function LiveDebatePage({ debateId, onBack, onOpenModels, onHistoryChange
       {commandFailure && (
         <ErrorRecoveryPanel
           failure={commandFailure}
-          onRetry={commandFailure.retryable ? () => void runCommand(() => window.debateStudio.retryFailedTurn({ sessionId })) : undefined}
+          onRetry={['failed', 'interrupted'].includes(status)
+            ? () => void runCommand(() => window.debateStudio.retryFailedTurn({ sessionId }))
+            : undefined}
           onChangeModel={() => setShowRoleEditor(true)}
           onOpenConnection={onOpenModels}
         />

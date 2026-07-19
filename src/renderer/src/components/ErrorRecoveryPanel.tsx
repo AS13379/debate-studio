@@ -10,21 +10,25 @@ export interface ErrorRecoveryPanelProps {
 }
 
 export function ErrorRecoveryPanel({ failure, onRetry, onChangeModel, onOpenConnection }: ErrorRecoveryPanelProps) {
+  const retryGuidance = failure.retryable
+    ? '建议直接重试'
+    : '建议先检查配置，也可以强制重试'
+
   return (
     <div className="failure-panel" role="alert">
       <div className="failure-heading">
         <div>
           <strong>{failure.titleZh}</strong>
-          <span>{failure.retryable ? '可以重试' : '需要先修正配置'}</span>
+          <span>{retryGuidance}</span>
         </div>
         <span className={`retry-badge ${failure.retryable ? 'retryable' : 'blocked'}`}>
-          {failure.retryable ? '可重试' : '不可直接重试'}
+          {failure.retryable ? '可重试' : '可强制重试'}
         </span>
       </div>
       <p>{failure.descriptionZh}</p>
       {failure.suggestedActionZh && <p className="suggestion"><strong>建议：</strong>{failure.suggestedActionZh}</p>}
       <div className="failure-actions">
-        {onRetry && failure.retryable && <button className="button secondary" onClick={onRetry}>重试</button>}
+        {onRetry && <button className="button secondary" onClick={onRetry}>{failure.retryable ? '重试' : '仍然重试'}</button>}
         {onChangeModel && <button className="button secondary" onClick={onChangeModel}>更换模型</button>}
         {onOpenConnection && <button className="button ghost" onClick={onOpenConnection}>打开连接设置</button>}
       </div>

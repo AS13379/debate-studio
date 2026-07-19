@@ -67,6 +67,26 @@ describe('provider management UI states', () => {
     expect(html).toContain('查看详情')
   })
 
+  it('keeps a user-controlled retry action for errors classified as non-retryable', () => {
+    const html = renderToStaticMarkup(
+      <ErrorRecoveryPanel
+        failure={{
+          code: 'MODEL_NOT_FOUND',
+          titleZh: '模型不存在',
+          descriptionZh: '服务商没有找到当前模型。',
+          retryable: false,
+          suggestedActionZh: '检查 Model ID。'
+        }}
+        onRetry={() => undefined}
+      />
+    )
+
+    expect(html).toContain('建议先检查配置，也可以强制重试')
+    expect(html).toContain('可强制重试')
+    expect(html).toContain('仍然重试')
+    expect(html).not.toContain('不可直接重试')
+  })
+
   it('uses the application Validator result as the only start gate', () => {
     expect(isDebateStartBlocked()).toBe(true)
     expect(isDebateStartBlocked({
