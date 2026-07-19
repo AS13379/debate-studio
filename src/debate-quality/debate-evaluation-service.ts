@@ -37,7 +37,7 @@ export class DebateEvaluationService {
       participant: { id: 'debate-evaluator', role: 'judge', name: '结构化裁判员' },
       prompt: publicDebateInput(source), signal: new AbortController().signal,
       modelId: route.route.modelProfile.modelId, stream: false,
-      maxTokens: Math.min(route.route.modelProfile.maxOutputTokens ?? 2_000, 3_000),
+      maxTokens: undefined,
       messages: [
         { role: 'system', content: evaluationSystemPrompt(activePrompt.version.content) },
         { role: 'user', content: publicDebateInput(source) }
@@ -155,4 +155,3 @@ function isRecord(value: unknown): value is Record<string, unknown> { return Boo
 function invalid(descriptionZh: string): { ok: false; error: { code: string; titleZh: string; descriptionZh: string; retryable: boolean } } {
   return { ok: false, error: { code: 'INVALID_EVALUATION_JSON', titleZh: '裁判评分格式无效', descriptionZh, retryable: true } }
 }
-

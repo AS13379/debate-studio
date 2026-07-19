@@ -44,7 +44,10 @@ export class RuntimeTurnExecutor implements ModelAdapter {
       modelId: participant.modelProfile.modelId,
       messages: [],
       stream,
-      maxTokens: participant.modelProfile.maxOutputTokens,
+      // ModelProfile.maxOutputTokens describes provider capability. Runtime
+      // requests are uncapped by default and let the provider enforce only its
+      // own model limit.
+      maxTokens: undefined,
       runtimeMetadata: {
         sessionId: request.sessionId,
         role,

@@ -41,6 +41,7 @@ export interface OpenAIChatRequestBody {
   messages: OpenAIChatMessage[]
   stream: boolean
   max_tokens?: number
+  max_completion_tokens?: number
   tools?: Array<{
     type: 'function'
     function: { name: string; description: string; parameters: Record<string, unknown> }
@@ -283,6 +284,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
       // the service even when an older ModelProfile still contains 800/16000.
       if (/^kimi-k3(?:$|[-.])/.test(modelId)) {
         delete body.max_tokens
+        body.max_completion_tokens = 1_048_576
         if (enabled !== false) body.reasoning_effort = 'max'
         return
       }

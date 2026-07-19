@@ -32,7 +32,7 @@ export class DebateReviewService {
       requestId, turnId: requestId, sessionId, stage: 'adjudication', topic: source.debate.topic,
       participant: { id: 'debate-reviewer', role: 'judge', name: '赛后复盘员' }, prompt: input,
       signal: new AbortController().signal, modelId: route.route.modelProfile.modelId, stream: false,
-      maxTokens: Math.min(route.route.modelProfile.maxOutputTokens ?? 2_000, 3_000),
+      maxTokens: undefined,
       messages: [
         { role: 'system', content: reviewSystemPrompt(activePrompt.version.content) },
         { role: 'user', content: input }

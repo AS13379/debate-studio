@@ -531,7 +531,7 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
       <label className="field">显示名称<input required value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
       <label className="field">本地别名<input name="alias" defaultValue={profile.alias} /></label>
       <label className="field">上下文长度<input name="contextWindow" type="number" min="1" defaultValue={profile.contextWindow} /></label>
-      <label className="field">最大输出 Token<input name="maxOutputTokens" type="number" min="1" defaultValue={profile.maxOutputTokens} /></label>
+      <label className="field">模型最大输出（能力信息）<input name="maxOutputTokens" type="number" min="1" defaultValue={profile.maxOutputTokens} /><small>仅用于能力校验；实际请求默认不设应用侧输出上限。</small></label>
       <div className="capability-checks span-2">
         <label><input name="textInput" type="checkbox" defaultChecked={profile.capabilities.textInput} />文本能力</label>
         <label><input name="imageInput" type="checkbox" defaultChecked={profile.capabilities.imageInput} />图片能力</label>

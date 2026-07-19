@@ -169,7 +169,7 @@ describe('RuntimeTurnExecutor and TurnRunnerFactory', () => {
       { role: 'user', content: `${role} prompt` }
     ])
     expect(request.stream).toBe(true)
-    expect(request.maxTokens).toBe(role === 'moderator' ? 1024 : 2048)
+    expect(request.maxTokens).toBeUndefined()
     expect(request.runtimeMetadata).toMatchObject({
       sessionId: 'runtime-execution-session',
       role,
@@ -286,8 +286,7 @@ describe('RuntimeTurnExecutor and TurnRunnerFactory', () => {
         },
         { role: 'user', content: '请提出核心论点。' }
       ],
-      stream: true,
-      max_tokens: 2048
+      stream: true
     })
   })
 

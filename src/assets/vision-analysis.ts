@@ -161,7 +161,7 @@ export class VisionAnalysisService {
         providerId: route.route.providerConnection.providerId,
         baseUrl: route.route.providerConnection.baseUrl,
         reasoningEnabled: route.route.modelProfile.capabilities.reasoning,
-        maxTokens: route.route.modelProfile.maxOutputTokens
+        maxTokens: undefined
       })
       const researchSession = asset.value.researchSessionId
       if (!researchSession) return this.failure('VISION_RESEARCH_SESSION_MISSING', '研究会话不存在', '图片未关联到有效研究会话。', false)

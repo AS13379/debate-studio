@@ -67,7 +67,7 @@ export class DebatePlanner {
         { role: 'user', content: prompt.user }
       ],
       stream: true,
-      maxTokens: Math.min(route.route.modelProfile.maxOutputTokens ?? 1_500, 2_000),
+      maxTokens: undefined,
       runtimeMetadata: {
         sessionId: 'debate-planner', role: 'moderator', turnId: requestId, stage: 'moderating',
         modelProfileId: route.route.modelProfile.id,
@@ -86,7 +86,7 @@ export class DebatePlanner {
     const rawInput = request.messages.map((message) => `${message.role.toUpperCase()}\n${message.content}`).join('\n\n')
     onProgress?.({
       stage: 'requesting', progress: 34, labelZh: '正在把规划要求发送给 AI',
-      detailZh: `请求 ${route.route.providerConnection.displayName}，最大输出 ${request.maxTokens ?? '默认'} Token。`,
+      detailZh: `请求 ${route.route.providerConnection.displayName}，应用不设输出上限，由服务商管理模型额度。`,
       rawInput: visibleText(rawInput)
     })
 

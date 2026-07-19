@@ -283,7 +283,10 @@ describe('OpenAIChatAdapter', () => {
         reasoningEnabled: true
       }
     })
-    expect(k3Transport.requests[0].body).toMatchObject({ reasoning_effort: 'max' })
+    expect(k3Transport.requests[0].body).toMatchObject({
+      reasoning_effort: 'max',
+      max_completion_tokens: 1_048_576
+    })
     expect(k3Transport.requests[0].body).not.toHaveProperty('max_tokens')
     expect(k3Transport.requests[0].body).not.toHaveProperty('thinking')
 
