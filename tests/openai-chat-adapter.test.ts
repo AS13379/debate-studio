@@ -276,13 +276,15 @@ describe('OpenAIChatAdapter', () => {
     await new OpenAIChatAdapter(k3Transport).complete({
       ...request(),
       modelId: 'kimi-k3',
+      maxTokens: 800,
       runtimeMetadata: {
         ...request().runtimeMetadata,
         providerId: 'moonshot',
         reasoningEnabled: true
       }
     })
-    expect(k3Transport.requests[0].body).toMatchObject({ reasoning_effort: 'max', max_tokens: 16_000 })
+    expect(k3Transport.requests[0].body).toMatchObject({ reasoning_effort: 'max' })
+    expect(k3Transport.requests[0].body).not.toHaveProperty('max_tokens')
     expect(k3Transport.requests[0].body).not.toHaveProperty('thinking')
 
     const codeTransport = new MockHttpTransport()
@@ -299,7 +301,7 @@ describe('OpenAIChatAdapter', () => {
     expect(codeTransport.requests[0].body).not.toHaveProperty('reasoning_effort')
   })
 
-  it('uses Kimi official safe output minimum for thinking and tool calls', async () => {
+  it('lets Kimi thinking models use the provider output budget for tool calls', async () => {
     const transport = new MockHttpTransport({ response: { status: 200, body: {
       choices: [{ message: { role: 'assistant', content: null, tool_calls: [{
         id: 'call-search', type: 'function', function: { name: 'searchWeb', arguments: '{"query":"英美法系"}' }
@@ -320,11 +322,11 @@ describe('OpenAIChatAdapter', () => {
     })
 
     expect(transport.requests[0].body).toMatchObject({
-      max_tokens: 16_000,
       temperature: 1,
       thinking: { type: 'enabled' },
       tool_choice: 'auto'
     })
+    expect(transport.requests[0].body).not.toHaveProperty('max_tokens')
   })
 
   it('maps image input only when a vision request explicitly contains image bytes', async () => {
@@ -468,7 +470,7 @@ describe('OpenAIChatAdapter', () => {
         message: expect.stringContaining('reasoning_content=present')
       }
     })
-    expect(transport.requests[0].body).toMatchObject({ max_tokens: 16_000 })
+    expect(transport.requests[0].body).not.toHaveProperty('max_tokens')
   })
 
   it('assembles streamed tool calls and preserves Gemini thought signatures for replay', async () => {

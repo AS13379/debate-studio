@@ -42,7 +42,7 @@ const baseCapabilities: ModelCapabilities = {
 const RECOMMENDATIONS: OnboardingProviderRecommendationDto[] = [
   recommendation('deepseek', 'DeepSeek', 'https://api.deepseek.com', 'deepseek-v4-flash', 1_000_000, 800, '按量计费；首次使用前请在服务商控制台确认余额。'),
   recommendation('openai', 'OpenAI', 'https://api.openai.com/v1', 'gpt-4.1-mini', 1_047_576, 800, '官方价：输入 $0.40、缓存 $0.10、输出 $1.60 / 百万 Token。', { imageInput: true }),
-  recommendation('moonshot', 'Moonshot / Kimi', 'https://api.moonshot.cn/v1', 'kimi-k3', 1_000_000, 800, '同一平台同时支持 Kimi 与 Moonshot 系列；Kimi K3：输入 ¥20、缓存 ¥2、输出 ¥100 / 百万 Token。', { imageInput: true, videoInput: true }),
+  recommendation('moonshot', 'Moonshot / Kimi', 'https://api.moonshot.cn/v1', 'kimi-k3', 1_000_000, 131_072, '同一平台同时支持 Kimi 与 Moonshot 系列；Kimi K3：输入 ¥20、缓存 ¥2、输出 ¥100 / 百万 Token。', { imageInput: true, videoInput: true }),
   recommendation('zhipu', '智谱 BigModel', 'https://open.bigmodel.cn/api/paas/v4', 'glm-5.1', 200_000, 800, 'GLM-5.1 按上下文阶梯计费，应用会按实际输入 Token 选择价格。'),
   recommendation('alibaba-dashscope', '阿里云百炼', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen3.7-plus', 1_000_000, 800, '千问 Plus 按上下文阶梯计费，限时折扣不计入长期估算。', { imageInput: true }),
   recommendation('gemini', 'Gemini OpenAI Compatible', 'https://generativelanguage.googleapis.com/v1beta/openai', 'gemini-3.5-flash', 1_048_576, 800, '付费标准价：输入 $1.50、缓存 $0.15、输出 $9.00 / 百万 Token。', { imageInput: true, documentInput: true }),

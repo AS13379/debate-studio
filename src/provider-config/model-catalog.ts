@@ -9,7 +9,7 @@ const MODEL_CATALOG: Readonly<Record<string, readonly ProviderModelCatalogEntry[
     model('gpt-4.1-mini', 'GPT-4.1 mini', 1_047_576, 32_768, { imageInput: true, toolCalling: true, structuredOutput: true })
   ],
   moonshot: [
-    model('kimi-k3', 'Kimi K3', 1_000_000, 1_000_000, { reasoning: true, toolCalling: true }),
+    model('kimi-k3', 'Kimi K3', 1_000_000, 1_048_576, { reasoning: true, toolCalling: true }),
     model('kimi-k2.6', 'Kimi K2.6', 262_144, 262_144, { reasoning: true, imageInput: true, videoInput: true, toolCalling: true }),
     model('kimi-k2.5', 'Kimi K2.5', 262_144, 262_144, { reasoning: true, imageInput: true, toolCalling: true }),
     model('moonshot-v1-8k', 'Moonshot V1 8K', 8_192),

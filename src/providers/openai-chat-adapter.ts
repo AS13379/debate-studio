@@ -66,8 +66,6 @@ interface StreamToolCallAccumulator {
   googleThoughtSignature?: string
 }
 
-const KIMI_REASONING_MIN_OUTPUT_TOKENS = 16_000
-
 export class OpenAIChatAdapter implements ModelAdapter {
   constructor(private readonly transport: HttpTransport) {}
 
@@ -274,10 +272,43 @@ export class OpenAIChatAdapter implements ModelAdapter {
 
   private applyReasoningConfiguration(body: OpenAIChatRequestBody, request: UnifiedRequest): void {
     const enabled = request.runtimeMetadata.reasoningEnabled
-    if (enabled === undefined) return
-
     const providerId = request.runtimeMetadata.providerId?.toLowerCase()
     const modelId = request.modelId.toLowerCase()
+
+    if (providerId === 'moonshot' || providerId === 'kimi') {
+      // Kimi K3 always reasons and its provider default output budget is much
+      // larger than the historical local profile defaults. Sending max_tokens
+      // here can consume the entire budget on reasoning before any assistant
+      // content or complete tool arguments are emitted, so leave the budget to
+      // the service even when an older ModelProfile still contains 800/16000.
+      if (/^kimi-k3(?:$|[-.])/.test(modelId)) {
+        delete body.max_tokens
+        if (enabled !== false) body.reasoning_effort = 'max'
+        return
+      }
+
+      // K2.5/K2.6 thinking mode has the same failure mode. Keep an explicit
+      // user-selected cap only when thinking is disabled; otherwise use the
+      // provider's model-specific default.
+      if (/^kimi-k2\.(?:5|6)(?:$|[-.])/.test(modelId)) {
+        if (enabled === undefined) return
+        body.thinking = { type: enabled ? 'enabled' : 'disabled' }
+        if (enabled) {
+          delete body.max_tokens
+          body.temperature = 1
+        }
+        return
+      }
+
+      if (enabled && /(?:thinking|reasoner)/.test(modelId)) {
+        delete body.max_tokens
+        body.temperature = 1
+      }
+      return
+    }
+
+    if (enabled === undefined) return
+
     if (providerId === 'deepseek' || providerId === 'zhipu' || providerId === 'xiaomi-mimo') {
       body.thinking = { type: enabled ? 'enabled' : 'disabled' }
       return
@@ -294,30 +325,6 @@ export class OpenAIChatAdapter implements ModelAdapter {
       }
       return
     }
-    if (providerId !== 'moonshot' && providerId !== 'kimi') return
-
-    // Kimi families expose different control fields on the same compatible
-    // endpoint. K3 uses reasoning_effort, K2.5/K2.6 use thinking, while the
-    // K2.7 coding model must be left at its service-side default.
-    if (/^kimi-k3(?:$|[-.])/.test(modelId)) {
-      if (enabled) {
-        body.reasoning_effort = 'max'
-        body.max_tokens = Math.max(body.max_tokens ?? 0, KIMI_REASONING_MIN_OUTPUT_TOKENS)
-      }
-      return
-    }
-    if (/^kimi-k2\.(?:5|6)(?:$|[-.])/.test(modelId)) {
-      body.thinking = { type: enabled ? 'enabled' : 'disabled' }
-      if (enabled) {
-        body.max_tokens = Math.max(body.max_tokens ?? 0, KIMI_REASONING_MIN_OUTPUT_TOKENS)
-        body.temperature = 1
-      }
-      return
-    }
-    if (enabled && /(?:thinking|reasoner)/.test(modelId)) {
-      body.max_tokens = Math.max(body.max_tokens ?? 0, KIMI_REASONING_MIN_OUTPUT_TOKENS)
-      body.temperature = 1
-    }
   }
 
   private outputLimitError(reasoningPresent: boolean): UnifiedError {
@@ -329,7 +336,7 @@ export class OpenAIChatAdapter implements ModelAdapter {
         ? '模型的思考内容已经占满本轮输出额度，尚未生成完整正文或工具参数。已收到的思考内容和正文会保留。'
         : '模型在生成完整正文或工具参数前用完了本轮输出额度，已收到的部分文本会保留。',
       retryable: true,
-      suggestedActionZh: '重试当前 Turn；Kimi 思考模型将自动使用官方建议的安全输出下限。'
+      suggestedActionZh: '该请求已由服务商的输出上限截断。Kimi 思考模型会使用服务商默认额度；若仍失败，请缩小任务或更换模型。'
     }
   }
 

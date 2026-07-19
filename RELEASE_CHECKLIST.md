@@ -1,10 +1,10 @@
-# Debate Studio 0.3.4 macOS Release Checklist
+# Debate Studio 0.3.5 macOS Release Checklist
 
-当前版本为 `0.3.4`，bundle identifier 为 `com.leander.debatestudio`。
+当前版本为 `0.3.5`，bundle identifier 为 `com.leander.debatestudio`。
 
 ## 发布策略
 
-- 0.3.4 作为个人/社区维护的本地 macOS 应用发布。
+- 0.3.5 作为个人/社区维护的本地 macOS 应用发布。
 - 当前 GitHub Release 提供未签名、未公证的 Apple Silicon（arm64）DMG。
 - Debate Studio 不提供账号、云同步或项目自有服务器，不会把用户数据库、凭据、研究资料或辩论记录上传给项目方。
 - DMG 只作为 GitHub Release 附件和 CI artifact 提供，不进入 Git 仓库。
@@ -47,14 +47,14 @@ npm run release:check
 
 预期产物：
 
-`release/Debate-Studio-0.3.4-arm64.dmg`
+`release/Debate-Studio-0.3.5-arm64.dmg`
 
 构建完成后检查 DMG 内部的 `app.asar` 和 `Contents/Resources`，确认没有数据库、凭据、用户内容、日志、诊断报告或导出文件。记录最终文件大小和 SHA-256。
 
 ## GitHub Release
 
 - 使用与 `package.json` 版本一致的 Git tag 和 Release 标题。
-- 将 `release/Debate-Studio-0.3.4-arm64.dmg` 作为附件上传；不要提交 `release/` 目录。
+- 将 `release/Debate-Studio-0.3.5-arm64.dmg` 作为附件上传；不要提交 `release/` 目录。
 - Release 说明必须明确标注“未签名、未公证”和 Apple Silicon（arm64）。
 - 发布后从 GitHub 下载附件，重新核对 SHA-256，并在隔离的新用户数据目录中执行首次启动验收。
 
