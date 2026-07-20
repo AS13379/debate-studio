@@ -3,6 +3,7 @@ const SLOW_MODEL_PATTERNS = [
   /thinking/i,
   /deep[-_]?research/i,
   /kimi-k3/i,
+  /(?:^|[/_-])glm-5(?:\.\d+)?(?:[-_/]|$)/i,
   /(?:^|[-_])o[134](?:[-_]|$)/i,
   /pro-preview/i
 ]

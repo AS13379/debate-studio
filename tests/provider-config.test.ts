@@ -8,6 +8,7 @@ import { initializePersistence } from '../src/persistence'
 import {
   getProviderPreset,
   getProviderPresets,
+  getFallbackProviderModels,
   type ModelCapabilities,
   type ModelProfile,
   type ProviderConnection
@@ -154,5 +155,15 @@ describe('provider configuration repositories', () => {
       supportedProtocols: ['openai-chat']
     })
     expect(getProviderPreset('unknown')).toBeUndefined()
+  })
+
+  it('keeps third-party Bailian model capabilities in the offline catalog', () => {
+    expect(getFallbackProviderModels('alibaba-dashscope')).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'glm-5.2',
+        contextWindow: 1_000_000,
+        capabilities: expect.objectContaining({ reasoning: true, toolCalling: true, structuredOutput: true })
+      })
+    ]))
   })
 })

@@ -472,6 +472,7 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
   const [modelId, setModelId] = useState(profile.modelId)
   const [customModel, setCustomModel] = useState(Boolean(profile.modelId))
   const [displayName, setDisplayName] = useState(profile.displayName)
+  const [capabilities, setCapabilities] = useState<ModelCapabilitiesDto>(profile.capabilities)
 
   useEffect(() => {
     if (!connectionId) return
@@ -492,6 +493,7 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
       if (!modelId && result.value.models[0]) {
         setModelId(result.value.models[0].id)
         setDisplayName(result.value.models[0].displayName)
+        setCapabilities({ ...DEFAULT_CAPABILITIES, ...result.value.models[0].capabilities })
         setCustomModel(false)
       }
     })
@@ -509,6 +511,7 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
     setCustomModel(false)
     setModelId(value)
     setDisplayName(entry?.displayName ?? value)
+    setCapabilities({ ...DEFAULT_CAPABILITIES, ...entry?.capabilities })
   }
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
@@ -521,10 +524,11 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
       displayName,
       alias: String(form.get('alias') ?? '') || undefined,
       capabilities: {
-        ...profile.capabilities,
+        ...capabilities,
         textInput: form.get('textInput') === 'on',
         imageInput: form.get('imageInput') === 'on',
         streaming: form.get('streaming') === 'on',
+        reasoning: form.get('reasoning') === 'on',
         toolCalling: form.get('toolCalling') === 'on',
         structuredOutput: form.get('structuredOutput') === 'on'
       },
@@ -554,11 +558,12 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
       <label className="field">上下文长度<input name="contextWindow" type="number" min="1" defaultValue={profile.contextWindow} /></label>
       <label className="field">模型最大输出（能力信息）<input name="maxOutputTokens" type="number" min="1" defaultValue={profile.maxOutputTokens} /><small>仅用于能力校验；实际请求默认不设应用侧输出上限。</small></label>
       <div className="capability-checks span-2">
-        <label><input name="textInput" type="checkbox" defaultChecked={profile.capabilities.textInput} />文本能力</label>
-        <label><input name="imageInput" type="checkbox" defaultChecked={profile.capabilities.imageInput} />图片能力</label>
-        <label><input name="streaming" type="checkbox" defaultChecked={profile.capabilities.streaming} />流式输出能力</label>
-        <label><input name="toolCalling" type="checkbox" defaultChecked={profile.capabilities.toolCalling} />原生工具调用</label>
-        <label><input name="structuredOutput" type="checkbox" defaultChecked={profile.capabilities.structuredOutput} />结构化输出</label>
+        <label><input name="textInput" type="checkbox" checked={capabilities.textInput} onChange={(event) => setCapabilities((current) => ({ ...current, textInput: event.target.checked }))} />文本能力</label>
+        <label><input name="imageInput" type="checkbox" checked={capabilities.imageInput} onChange={(event) => setCapabilities((current) => ({ ...current, imageInput: event.target.checked }))} />图片能力</label>
+        <label><input name="streaming" type="checkbox" checked={capabilities.streaming} onChange={(event) => setCapabilities((current) => ({ ...current, streaming: event.target.checked }))} />流式输出能力</label>
+        <label><input name="reasoning" type="checkbox" checked={capabilities.reasoning} onChange={(event) => setCapabilities((current) => ({ ...current, reasoning: event.target.checked }))} />深度思考（可能增加首字等待）</label>
+        <label><input name="toolCalling" type="checkbox" checked={capabilities.toolCalling} onChange={(event) => setCapabilities((current) => ({ ...current, toolCalling: event.target.checked }))} />原生工具调用</label>
+        <label><input name="structuredOutput" type="checkbox" checked={capabilities.structuredOutput} onChange={(event) => setCapabilities((current) => ({ ...current, structuredOutput: event.target.checked }))} />结构化输出</label>
       </div>
       <div className="form-actions span-2"><button type="button" className="button ghost" onClick={onCancel}>取消</button><button className="button primary" disabled={saving}>{saving ? '正在保存…' : '保存模型'}</button></div>
     </form>

@@ -63,6 +63,15 @@ export function OperationProgressDialog({
           <span className="operation-log-dot" />
           <div><strong>{item.label}</strong>{item.detail && <p>{item.detail}</p>}</div>
         </div>)}
+        {running && elapsedSeconds >= 8 && <div className="operation-log-row normal">
+          <span className="operation-log-dot" />
+          <div>
+            <strong>请求仍在服务商处理中</strong>
+            <p>{elapsedSeconds < 30
+              ? '已发出请求，正在等待模型返回结果；推理模型的首段内容通常更慢。'
+              : '等待已超过 30 秒，可能是模型排队、冷启动或长时间思考；你可以继续等待，也可以停止当前操作。'}</p>
+          </div>
+        </div>}
       </div>
       {(rawInput || rawOutput || reasoningOutput) && <div className="operation-raw">
         {rawInput && <details><summary>查看发送给 AI 的原文</summary><pre>{rawInput}</pre></details>}

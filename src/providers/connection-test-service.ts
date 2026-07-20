@@ -120,12 +120,7 @@ export class ConnectionTestService {
           method: 'POST',
           url: `${baseUrl}/chat/completions`,
           headers: { 'content-type': 'application/json' },
-          body: {
-            model: modelProfile.modelId,
-            messages: [{ role: 'user', content: 'Reply with OK.' }],
-            stream: false,
-            max_tokens: 1
-          },
+          body: this.createProbeBody(connection, modelProfile),
           signal,
           metadata: { providerConnectionId: connection.id }
         }
@@ -136,6 +131,26 @@ export class ConnectionTestService {
           signal,
           metadata: { providerConnectionId: connection.id }
         }
+  }
+
+  private createProbeBody(connection: ProviderConnection, modelProfile: ModelProfile): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      model: modelProfile.modelId,
+      messages: [{ role: 'user', content: 'Reply with OK.' }],
+      stream: false,
+      // One token is often consumed by an invisible reasoning prelude and can
+      // make a healthy model look stalled or empty.
+      max_tokens: 8
+    }
+    const providerId = connection.providerId.toLowerCase()
+    if (providerId === 'alibaba-dashscope') {
+      // A connection probe verifies reachability, not reasoning quality.
+      // Bailian hybrid-reasoning models support this OpenAI-compatible flag.
+      body.enable_thinking = false
+    } else if (providerId === 'zhipu' || providerId === 'xiaomi-mimo') {
+      body.thinking = { type: 'disabled' }
+    }
+    return body
   }
 
   private statusError(status: number, body: unknown): ConnectionTestError {

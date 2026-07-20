@@ -99,8 +99,24 @@ describe('ConnectionTestService', () => {
         model: 'provider-model',
         messages: [{ role: 'user', content: 'Reply with OK.' }],
         stream: false,
-        max_tokens: 1
+        max_tokens: 8
       }
+    })
+  })
+
+  it('disables Bailian thinking during the minimal GLM connection probe', async () => {
+    const transport = new MockHttpTransport({ response: { status: 200, body: { choices: [{ message: { content: 'OK' } }] } } })
+    const service = new ConnectionTestService({ transport, credentialStore: await credentialStore() })
+
+    await service.test(
+      connection({ providerId: 'alibaba-dashscope' }),
+      { ...profile(), modelId: 'glm-5.2', capabilities: { ...capabilities, reasoning: true } }
+    )
+
+    expect(transport.requests[0].body).toMatchObject({
+      model: 'glm-5.2',
+      max_tokens: 8,
+      enable_thinking: false
     })
   })
 

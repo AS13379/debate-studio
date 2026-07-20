@@ -233,6 +233,7 @@ describe('OpenAIChatAdapter', () => {
       { providerId: 'zhipu', modelId: 'glm-5.1', reasoningEnabled: true, expected: { thinking: { type: 'enabled' } } },
       { providerId: 'xiaomi-mimo', modelId: 'mimo-v2-flash', reasoningEnabled: false, expected: { thinking: { type: 'disabled' } } },
       { providerId: 'alibaba-dashscope', modelId: 'qwen3.7-plus', reasoningEnabled: true, expected: { enable_thinking: true } },
+      { providerId: 'alibaba-dashscope', modelId: 'glm-5.2', reasoningEnabled: false, expected: { enable_thinking: false } },
       {
         providerId: 'gemini', modelId: 'gemini-3.5-flash', reasoningEnabled: true,
         expected: { extra_body: { google: { thinking_config: { include_thoughts: true } } } }

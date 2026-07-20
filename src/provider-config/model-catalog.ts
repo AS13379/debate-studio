@@ -40,7 +40,14 @@ const MODEL_CATALOG: Readonly<Record<string, readonly ProviderModelCatalogEntry[
     model('qwen3-max', 'Qwen 3 Max', 262_144, undefined, { reasoning: true, toolCalling: true }),
     model('qwen-plus', 'Qwen Plus', 1_000_000, undefined, { reasoning: true, toolCalling: true }),
     model('qwen-flash', 'Qwen Flash', 1_000_000, undefined, { reasoning: true, toolCalling: true }),
-    model('qwen-vl-max', 'Qwen VL Max', undefined, undefined, { imageInput: true })
+    model('qwen-vl-max', 'Qwen VL Max', undefined, undefined, { imageInput: true }),
+    // Model Studio is a multi-vendor gateway. Keep major third-party model
+    // families in the offline catalog so a sparse /models response does not
+    // silently discard their runtime capabilities.
+    model('glm-5.2', 'GLM-5.2（百炼）', 1_000_000, undefined, { reasoning: true, toolCalling: true, structuredOutput: true }),
+    model('ZHIPU/GLM-5.2', 'GLM-5.2（智谱 / 百炼工作空间）', 1_000_000, undefined, { reasoning: true, toolCalling: true, structuredOutput: true }),
+    model('deepseek-r1-distill-qwen-32b', 'DeepSeek R1 Distill Qwen 32B（百炼）', undefined, undefined, { reasoning: true }),
+    model('xiaomi/mimo-v2.5-pro', 'MiMo V2.5 Pro（百炼）', undefined, undefined, { reasoning: true, toolCalling: true })
   ],
   gemini: [
     model('gemini-3.5-pro-preview', 'Gemini 3.5 Pro Preview', 1_048_576, 65_536, { reasoning: true, imageInput: true, documentInput: true, audioInput: true, videoInput: true, toolCalling: true }),

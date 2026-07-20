@@ -37,11 +37,13 @@ export class FetchHttpTransport implements HttpTransport {
 
   async send(request: HttpTransportRequest): Promise<HttpTransportResponse> {
     const scope = this.createAbortScope(request.signal)
+    const startedAt = performance.now()
     this.logger?.info('Provider HTTP 请求开始', { source: 'provider-http', metadata: this.requestMetadata(request, false) })
     try {
       const response = await this.fetchImplementation(request.url, this.requestInit(request, scope.signal))
+      this.logger?.info('Provider HTTP 已返回响应头', { source: 'provider-http', metadata: { ...this.requestMetadata(request, false), statusCode: response.status, elapsedMs: this.elapsedMs(startedAt) } })
       const body = await this.readJsonResponse(response, response.ok)
-      this.logger?.info('Provider HTTP 请求完成', { source: 'provider-http', metadata: { ...this.requestMetadata(request, false), statusCode: response.status } })
+      this.logger?.info('Provider HTTP 请求完成', { source: 'provider-http', metadata: { ...this.requestMetadata(request, false), statusCode: response.status, elapsedMs: this.elapsedMs(startedAt) } })
       return { status: response.status, body }
     } catch (cause) {
       const normalized = this.normalizeError(cause, scope, false)
@@ -54,6 +56,7 @@ export class FetchHttpTransport implements HttpTransport {
 
   async *stream(request: HttpTransportRequest): AsyncIterable<HttpTransportStreamEvent> {
     const scope = this.createAbortScope(request.signal)
+    const startedAt = performance.now()
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
     let responseStarted = false
     let receivedData = false
@@ -61,6 +64,7 @@ export class FetchHttpTransport implements HttpTransport {
     try {
       const response = await this.fetchImplementation(request.url, this.requestInit(request, scope.signal, true))
       responseStarted = true
+      this.logger?.info('Provider SSE 已返回响应头', { source: 'provider-http', metadata: { ...this.requestMetadata(request, true), statusCode: response.status, elapsedMs: this.elapsedMs(startedAt) } })
       if (!response.ok) {
         const body = await this.readJsonResponse(response, false)
         yield { type: 'error', status: response.status, body }
@@ -96,6 +100,7 @@ export class FetchHttpTransport implements HttpTransport {
             return
           }
           if (event?.type === 'data') {
+            if (!receivedData) this.logger?.info('Provider SSE 已收到首个事件', { source: 'provider-http', metadata: { ...this.requestMetadata(request, true), elapsedMs: this.elapsedMs(startedAt) } })
             receivedData = true
             yield event
           }
@@ -112,6 +117,7 @@ export class FetchHttpTransport implements HttpTransport {
           return
         }
         if (event?.type === 'data') {
+          if (!receivedData) this.logger?.info('Provider SSE 已收到首个事件', { source: 'provider-http', metadata: { ...this.requestMetadata(request, true), elapsedMs: this.elapsedMs(startedAt) } })
           receivedData = true
           yield event
         }
@@ -150,6 +156,10 @@ export class FetchHttpTransport implements HttpTransport {
     let host = 'invalid-url'
     try { host = new URL(request.url).host } catch { /* URL validation is handled by the request path. */ }
     return { method: request.method, host, streaming }
+  }
+
+  private elapsedMs(startedAt: number): number {
+    return Math.max(0, Math.round(performance.now() - startedAt))
   }
 
   private async readJsonResponse(response: Response, requireBody: boolean): Promise<unknown> {
