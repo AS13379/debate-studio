@@ -1,4 +1,4 @@
-import { getFallbackProviderModels, type ProviderConnection, type ProviderModelCatalogEntry } from '../provider-config'
+import { getFallbackProviderModels, getProviderModelPreset, type ProviderConnection, type ProviderModelCatalogEntry } from '../provider-config'
 import type { CredentialStore } from '../security'
 import { AuthenticatedHttpTransport } from './authenticated-http-transport'
 import type { HttpTransport } from './http-transport'
@@ -33,7 +33,7 @@ export class ProviderModelDiscoveryService {
         metadata: { providerConnectionId: connection.id }
       })
       if (response.status < 200 || response.status >= 300) throw new Error(`Provider returned HTTP ${response.status}.`)
-      const models = parseModels(response.body, fallback)
+      const models = parseModels(response.body, connection.providerId, fallback)
       if (!models.length) throw new Error('Provider returned an empty model list.')
       return { models, source: 'provider-api' }
     } catch {
@@ -48,7 +48,7 @@ export class ProviderModelDiscoveryService {
   }
 }
 
-function parseModels(body: unknown, fallback: ProviderModelCatalogEntry[]): AvailableProviderModel[] {
+function parseModels(body: unknown, providerId: string, fallback: ProviderModelCatalogEntry[]): AvailableProviderModel[] {
   if (!body || typeof body !== 'object' || !('data' in body) || !Array.isArray((body as { data?: unknown }).data)) return []
   const fallbackById = new Map(fallback.map((entry) => [entry.id, entry]))
   const discovered = (body as { data: unknown[] }).data.flatMap((item): AvailableProviderModel[] => {
@@ -56,7 +56,7 @@ function parseModels(body: unknown, fallback: ProviderModelCatalogEntry[]): Avai
     const record = item as Record<string, unknown>
     const id = String(record.id).trim()
     if (!id) return []
-    const known = fallbackById.get(id)
+    const known = fallbackById.get(id) ?? getProviderModelPreset(providerId, id)
     return [{
       ...known,
       id,

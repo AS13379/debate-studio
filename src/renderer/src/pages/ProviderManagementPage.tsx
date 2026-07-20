@@ -488,8 +488,9 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
         return
       }
       setCatalog(result.value)
-      const known = result.value.models.some((item) => item.id === modelId)
+      const known = result.value.models.find((item) => item.id === modelId)
       setCustomModel(Boolean(modelId) && !known)
+      if (known) setCapabilities({ ...DEFAULT_CAPABILITIES, ...known.capabilities })
       if (!modelId && result.value.models[0]) {
         setModelId(result.value.models[0].id)
         setDisplayName(result.value.models[0].displayName)
@@ -527,9 +528,13 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
         ...capabilities,
         textInput: form.get('textInput') === 'on',
         imageInput: form.get('imageInput') === 'on',
+        documentInput: form.get('documentInput') === 'on',
+        audioInput: form.get('audioInput') === 'on',
+        videoInput: form.get('videoInput') === 'on',
         streaming: form.get('streaming') === 'on',
         reasoning: form.get('reasoning') === 'on',
         toolCalling: form.get('toolCalling') === 'on',
+        webSearch: form.get('webSearch') === 'on',
         structuredOutput: form.get('structuredOutput') === 'on'
       },
       contextWindow: optionalNumber(form.get('contextWindow')),
@@ -560,9 +565,13 @@ function ModelProfileEditor({ profile, connections, onCancel, onSaved, onError }
       <div className="capability-checks span-2">
         <label><input name="textInput" type="checkbox" checked={capabilities.textInput} onChange={(event) => setCapabilities((current) => ({ ...current, textInput: event.target.checked }))} />文本能力</label>
         <label><input name="imageInput" type="checkbox" checked={capabilities.imageInput} onChange={(event) => setCapabilities((current) => ({ ...current, imageInput: event.target.checked }))} />图片能力</label>
+        <label><input name="documentInput" type="checkbox" checked={capabilities.documentInput} onChange={(event) => setCapabilities((current) => ({ ...current, documentInput: event.target.checked }))} />文档 / PDF 能力</label>
+        <label><input name="audioInput" type="checkbox" checked={capabilities.audioInput} onChange={(event) => setCapabilities((current) => ({ ...current, audioInput: event.target.checked }))} />音频理解</label>
+        <label><input name="videoInput" type="checkbox" checked={capabilities.videoInput} onChange={(event) => setCapabilities((current) => ({ ...current, videoInput: event.target.checked }))} />视频理解</label>
         <label><input name="streaming" type="checkbox" checked={capabilities.streaming} onChange={(event) => setCapabilities((current) => ({ ...current, streaming: event.target.checked }))} />流式输出能力</label>
         <label><input name="reasoning" type="checkbox" checked={capabilities.reasoning} onChange={(event) => setCapabilities((current) => ({ ...current, reasoning: event.target.checked }))} />深度思考（可能增加首字等待）</label>
         <label><input name="toolCalling" type="checkbox" checked={capabilities.toolCalling} onChange={(event) => setCapabilities((current) => ({ ...current, toolCalling: event.target.checked }))} />原生工具调用</label>
+        <label><input name="webSearch" type="checkbox" checked={capabilities.webSearch} onChange={(event) => setCapabilities((current) => ({ ...current, webSearch: event.target.checked }))} />服务商内置搜索</label>
         <label><input name="structuredOutput" type="checkbox" checked={capabilities.structuredOutput} onChange={(event) => setCapabilities((current) => ({ ...current, structuredOutput: event.target.checked }))} />结构化输出</label>
       </div>
       <div className="form-actions span-2"><button type="button" className="button ghost" onClick={onCancel}>取消</button><button className="button primary" disabled={saving}>{saving ? '正在保存…' : '保存模型'}</button></div>

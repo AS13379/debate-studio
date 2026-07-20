@@ -166,4 +166,23 @@ describe('provider configuration repositories', () => {
       })
     ]))
   })
+
+  it('provides official capability defaults for every built-in provider family', () => {
+    const expected = [
+      ['openai', 'gpt-5.1', { imageInput: true, reasoning: true, toolCalling: true, structuredOutput: true }],
+      ['moonshot', 'kimi-k3', { imageInput: true, videoInput: true, reasoning: true, toolCalling: true, structuredOutput: true }],
+      ['deepseek', 'deepseek-v4-pro', { reasoning: true, toolCalling: true, structuredOutput: true }],
+      ['zhipu', 'glm-5.1', { reasoning: true, toolCalling: true, structuredOutput: true }],
+      ['xiaomi-mimo', 'mimo-v2.5', { imageInput: true, documentInput: true, audioInput: true, videoInput: true, reasoning: true }],
+      ['alibaba-dashscope', 'qwen3.7-plus', { imageInput: true, videoInput: true, reasoning: true, toolCalling: true, structuredOutput: true }],
+      ['gemini', 'gemini-3.5-flash', { imageInput: true, documentInput: true, audioInput: true, videoInput: true, reasoning: true }]
+    ] as const
+
+    for (const [providerId, modelId, capabilitySubset] of expected) {
+      const entry = getFallbackProviderModels(providerId).find((candidate) => candidate.id === modelId)
+      expect(entry, `${providerId}/${modelId}`).toMatchObject({
+        capabilities: { textInput: true, streaming: true, ...capabilitySubset }
+      })
+    }
+  })
 })

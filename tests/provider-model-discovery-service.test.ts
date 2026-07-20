@@ -51,4 +51,27 @@ describe('ProviderModelDiscoveryService', () => {
       'kimi-k3', 'kimi-k2.6', 'moonshot-v1-8k', 'moonshot-v1-128k'
     ]))
   })
+
+  it('applies a dated official model preset when /models omits capability metadata', async () => {
+    const credentialStore = new MemoryCredentialStore()
+    await credentialStore.setCredential(connection.credentialRef, 'sk-secret-not-real')
+    const openAiConnection = { ...connection, providerId: 'openai', credentialRef: 'openai:test' }
+    await credentialStore.setCredential(openAiConnection.credentialRef, 'sk-openai-not-real')
+    const transport = new MockHttpTransport({ response: { status: 200, body: {
+      object: 'list', data: [{ id: 'gpt-4.1-mini-2025-04-14', owned_by: 'openai' }]
+    } } })
+
+    const result = await new ProviderModelDiscoveryService(transport, credentialStore).list(openAiConnection)
+
+    expect(result.models[0]).toMatchObject({
+      id: 'gpt-4.1-mini-2025-04-14',
+      capabilities: {
+        textInput: true,
+        imageInput: true,
+        streaming: true,
+        toolCalling: true,
+        structuredOutput: true
+      }
+    })
+  })
 })
