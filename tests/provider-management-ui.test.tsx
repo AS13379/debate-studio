@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
@@ -6,6 +7,18 @@ import { ConnectionTestStatus } from '../src/renderer/src/pages/ProviderManageme
 import { isDebateStartBlocked } from '../src/renderer/src/pages/LiveDebatePage'
 
 describe('provider management UI states', () => {
+  it('renders the model editor inside its owning connection card instead of at the end of the page', () => {
+    const source = readFileSync('src/renderer/src/pages/ProviderManagementPage.tsx', 'utf8')
+    const inlineEditor = source.indexOf('className="model-editor-anchor"')
+    const dangerZone = source.indexOf('<div className="danger-zone">', inlineEditor)
+    const searchSection = source.indexOf('<SearchProviderSection', dangerZone)
+
+    expect(inlineEditor).toBeGreaterThan(-1)
+    expect(dangerZone).toBeGreaterThan(inlineEditor)
+    expect(searchSection).toBeGreaterThan(dangerZone)
+    expect(source).not.toContain('editingModel !== undefined')
+  })
+
   it('renders successful connection latency and a short response', () => {
     const html = renderToStaticMarkup(
       <ConnectionTestStatus result={{

@@ -319,6 +319,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .model-card { display: flex; flex-direction: column; gap: 8px; padding: 15px; border: 1px solid #e1e2e7; border-radius: 10px; }
 .model-card > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
 .model-card span, .model-card p { margin: 0; color: #7a7e88; font-size: 12px; }
+.model-editor-anchor { scroll-margin: 110px 0 28px; }
+.model-editor-anchor .model-editor { border-color: #cfc9f7; background: #faf9ff; box-shadow: 0 12px 34px rgba(73, 58, 160, .1); }
 .compact-actions, .danger-zone, .failure-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .compact-actions .button, .danger-zone .button { min-height: 32px; padding: 6px 10px; font-size: 12px; }
 .danger-zone { justify-content: flex-end; padding-top: 14px; border-top: 1px solid #f0d4d8; }
@@ -613,6 +615,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .connection-card header p, .development-test p, .section-heading span, .model-card span, .model-card p { color: #a8abb4; }
   .credential-editor { background: #1b1d22; }
   .model-section, .model-card { border-color: #3b3e47; }
+  .model-editor-anchor .model-editor { background: #211f31; border-color: #514876; box-shadow: none; }
   .connection-card code, .model-card code { color: #a99df1; }
   .connection-test.success { color: #a9e4ce; background: #17352c; border-color: #285547; }
   .connection-test.failure, .failure-panel { color: #f2b7c0; background: #3a2025; border-color: #67323b; }

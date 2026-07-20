@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type {
   ConnectionTestDto,
@@ -50,7 +50,8 @@ export function ProviderManagementPage() {
   const [profiles, setProfiles] = useState<ModelProfileDto[]>([])
   const [presets, setPresets] = useState<ProviderPresetDto[]>([])
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft>()
-  const [editingModel, setEditingModel] = useState<ModelProfileDto | null>()
+  const [editingModel, setEditingModel] = useState<ModelProfileDto>()
+  const modelEditorRef = useRef<HTMLDivElement>(null)
   const [tests, setTests] = useState<Record<string, ConnectionTestDto>>({})
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(true)
@@ -78,6 +79,16 @@ export function ProviderManagementPage() {
   }
 
   useEffect(() => { void refresh() }, [])
+
+  useEffect(() => {
+    if (!editingModel) return
+    const frame = window.requestAnimationFrame(() => {
+      const editor = modelEditorRef.current
+      editor?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      editor?.querySelector<HTMLElement>('select, input, button')?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [editingModel])
 
   const editConnection = (connection: ProviderConnectionDto): void => {
     setConnectionDraft({
@@ -239,7 +250,11 @@ export function ProviderManagementPage() {
               <div className="model-section">
                 <div className="section-heading">
                   <div><strong>ModelProfile</strong><span>{connectionProfiles.length} 个手动模型</span></div>
-                  <button className="button secondary" onClick={() => setEditingModel(emptyProfile(connection.id))}>新建模型</button>
+                  <button
+                    className="button secondary"
+                    aria-expanded={editingModel?.connectionId === connection.id && !editingModel.id}
+                    onClick={() => setEditingModel(emptyProfile(connection.id))}
+                  >新建模型</button>
                 </div>
                 {connectionProfiles.length === 0 && <p className="muted">尚未填写 Model ID。</p>}
                 <div className="model-grid">
@@ -249,7 +264,11 @@ export function ProviderManagementPage() {
                       <code>{profile.modelId}</code>
                       <p>{profile.contextWindow ? `${profile.contextWindow.toLocaleString()} context` : '上下文未知'} · {profile.maxOutputTokens ? `${profile.maxOutputTokens.toLocaleString()} max output` : '输出上限未知'}</p>
                       <div className="compact-actions">
-                        <button className="button ghost" onClick={() => setEditingModel(profile)}>编辑</button>
+                        <button
+                          className="button ghost"
+                          aria-expanded={editingModel?.id === profile.id}
+                          onClick={() => setEditingModel(profile)}
+                        >编辑</button>
                         <button className="button ghost" onClick={() => void copyProfile(profile)}>复制</button>
                         <button className="button ghost danger-text" onClick={() => void deleteProfile(profile)}>删除</button>
                       </div>
@@ -257,6 +276,24 @@ export function ProviderManagementPage() {
                   ))}
                 </div>
               </div>
+
+              {editingModel?.connectionId === connection.id && (
+                <div ref={modelEditorRef} className="model-editor-anchor" data-model-editor-for={connection.id}>
+                  <ModelProfileEditor
+                    key={editingModel.id || `new-model-${connection.id}`}
+                    profile={editingModel}
+                    connections={connections}
+                    onCancel={() => setEditingModel(undefined)}
+                    onSaved={async (savedProfile) => {
+                      setEditingModel(undefined)
+                      await refresh()
+                      const savedConnection = connections.find((candidate) => candidate.id === savedProfile.connectionId)
+                      if (savedConnection) await testConnection(savedConnection, savedProfile.id)
+                    }}
+                    onError={setError}
+                  />
+                </div>
+              )}
 
               <div className="danger-zone">
                 <button className="button ghost danger-text" onClick={() => void deleteConnection(connection, false)}>仅删除连接配置</button>
@@ -266,22 +303,6 @@ export function ProviderManagementPage() {
           )
         })}
       </div>
-
-      {editingModel !== undefined && (
-        <ModelProfileEditor
-          key={editingModel?.id ?? 'new-model'}
-          profile={editingModel ?? emptyProfile(connections[0]?.id ?? '')}
-          connections={connections}
-          onCancel={() => setEditingModel(undefined)}
-          onSaved={async (savedProfile) => {
-            setEditingModel(undefined)
-            await refresh()
-            const connection = connections.find((candidate) => candidate.id === savedProfile.connectionId)
-            if (connection) await testConnection(connection, savedProfile.id)
-          }}
-          onError={setError}
-        />
-      )}
 
       <SearchProviderSection onError={setError} />
 
