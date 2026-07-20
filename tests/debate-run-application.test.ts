@@ -273,6 +273,12 @@ describe('DebateRunApplication headless integration', () => {
     expect(result).toMatchObject({ ok: true, state: { status: 'completed', currentStage: 'completed', active: false } })
     expect(adapter.requests).toHaveLength(20)
     expect(adapter.requests.every((request) => !('apiKey' in request) && !('credentialRef' in request))).toBe(true)
+    const adjudicationRequest = adapter.requests.find((request) => request.stage === 'adjudication')
+    const adjudicationPrompt = adjudicationRequest?.messages.map((message) => message.content).join('\n') ?? ''
+    expect(adjudicationPrompt).toContain('affirmative_opening:模拟发言')
+    expect(adjudicationPrompt).toContain('negative_opening:模拟发言')
+    expect(adjudicationPrompt).toContain('negative_closing:模拟发言')
+    expect(adjudicationPrompt).toContain('affirmative_closing:模拟发言')
     await app.close()
 
     const inspected = inspectDatabase(appDataDirectory)

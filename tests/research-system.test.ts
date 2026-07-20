@@ -66,7 +66,8 @@ function seed(): Seeded {
     createdAt: timestamp, updatedAt: timestamp
   }).ok).toBe(true)
   for (const [id, role] of [
-    ['affirmative-1', 'affirmative'], ['negative-1', 'negative'], ['moderator-1', 'moderator']
+    ['affirmative-1', 'affirmative'], ['negative-1', 'negative'], ['moderator-1', 'moderator'],
+    ['judge-1', 'judge']
   ] as const) {
     expect(repositories.participants.create({
       id, sessionId: 'session-1', role, modelProfileId: 'mock-profile', displayName: id,
@@ -129,7 +130,9 @@ describe('research and evidence MVP', () => {
     }).ok).toBe(true)
     const reader = new ResearchContextReader(
       seeded.persistence.repositories.debates,
-      seeded.persistence.repositories.research
+      seeded.persistence.repositories.research,
+      seeded.persistence.repositories.turns,
+      seeded.persistence.repositories.participants
     )
     const affirmative = reader.load({
       debateSessionId: 'session-1', debateId: 'debate-1', participantId: 'affirmative-1',
@@ -169,6 +172,71 @@ describe('research and evidence MVP', () => {
     const userWorkspace = seeded.application.loadWorkspace('session-1')
     expect(userWorkspace.ok && userWorkspace.value.affirmative.assets).toHaveLength(1)
     expect(userWorkspace.ok && userWorkspace.value.negative.assets).toHaveLength(1)
+    seeded.persistence.database.close()
+  })
+
+  it('injects completed public speeches into live rebuttal and adjudication prompts', () => {
+    const seeded = seed()
+    const repositories = seeded.persistence.repositories
+    for (const record of [
+      {
+        id: 'opening-a', sessionId: 'session-1', participantId: 'affirmative-1', stage: 'affirmative_opening',
+        status: 'completed', content: 'PUBLIC_AFFIRMATIVE_ARGUMENT', createdAt: timestamp, completedAt: timestamp
+      },
+      {
+        id: 'opening-b', sessionId: 'session-1', participantId: 'negative-1', stage: 'negative_opening',
+        status: 'completed', content: 'PUBLIC_NEGATIVE_ARGUMENT', createdAt: timestamp, completedAt: timestamp
+      },
+      {
+        id: 'private-research', sessionId: 'session-1', participantId: 'affirmative-1', stage: 'affirmative_research',
+        status: 'completed', content: 'PRIVATE_RESEARCH_MUST_NOT_LEAK', createdAt: timestamp, completedAt: timestamp
+      },
+      {
+        id: 'failed-rebuttal', sessionId: 'session-1', participantId: 'negative-1', stage: 'rebuttal',
+        status: 'failed', content: 'FAILED_PARTIAL_MUST_NOT_APPEAR', createdAt: timestamp
+      }
+    ]) expect(repositories.turns.create(record).ok).toBe(true)
+
+    const reader = new ResearchContextReader(
+      repositories.debates,
+      repositories.research,
+      repositories.turns,
+      repositories.participants
+    )
+    const connection = repositories.providerConnections.findById('mock-connection')
+    const profile = repositories.modelProfiles.findById('mock-profile')
+    const participants = repositories.participants.listBySession('session-1')
+    if (!connection.ok || !connection.value || !profile.ok || !profile.value || !participants.ok) throw new Error('runtime seed failed')
+    const adapter = new MockAdapter()
+    const runtimeParticipant = (role: 'affirmative' | 'negative' | 'moderator' | 'judge') => ({
+      role,
+      participant: participants.value.find((item) => item.role === role)!,
+      modelProfile: profile.value!, providerConnection: connection.value!, adapter
+    })
+    const runtime = {
+      session: { id: 'session-1', debateId: 'debate-1', status: 'running', currentStage: 'adjudication', createdAt: timestamp, updatedAt: timestamp },
+      affirmative: runtimeParticipant('affirmative'), negative: runtimeParticipant('negative'),
+      moderator: runtimeParticipant('moderator'), judge: runtimeParticipant('judge')
+    }
+    const request = (stage: 'rebuttal' | 'adjudication', role: 'affirmative' | 'judge'): UnifiedRequest => ({
+      requestId: `request-${stage}`, turnId: `turn-${stage}`, sessionId: 'session-1', stage,
+      topic: '城市是否应扩大公共交通投入？',
+      participant: { id: role === 'judge' ? 'judge-1' : 'affirmative-1', role, name: role === 'judge' ? '裁判' : '正方' },
+      prompt: `完成${stage}`, signal: new AbortController().signal, modelId: 'mock-model', messages: [], stream: true,
+      maxTokens: undefined, runtimeMetadata: { sessionId: 'session-1', role, turnId: `turn-${stage}`, stage }
+    })
+    const builder = new DebatePromptBuilder(reader)
+    const rebuttal = builder.build(request('rebuttal', 'affirmative'), runtime.affirmative, runtime)[0]?.content ?? ''
+    const adjudication = builder.build(request('adjudication', 'judge'), runtime.judge, runtime)[0]?.content ?? ''
+
+    for (const prompt of [rebuttal, adjudication]) {
+      expect(prompt).toContain('PUBLIC_AFFIRMATIVE_ARGUMENT')
+      expect(prompt).toContain('PUBLIC_NEGATIVE_ARGUMENT')
+      expect(prompt).not.toContain('PRIVATE_RESEARCH_MUST_NOT_LEAK')
+      expect(prompt).not.toContain('FAILED_PARTIAL_MUST_NOT_APPEAR')
+    }
+    expect(adjudication).toContain('Turn 1｜affirmative_opening｜正方')
+    expect(adjudication).toContain('Turn 2｜negative_opening｜反方')
     seeded.persistence.database.close()
   })
 
@@ -231,7 +299,12 @@ describe('research and evidence MVP', () => {
     expect(result).toEqual({ ok: true, value: 1 })
     expect(seeded.search.networkRequestCount).toBe(0)
     expect(seeded.search.requests).toHaveLength(1)
-    const reader = new ResearchContextReader(seeded.persistence.repositories.debates, seeded.persistence.repositories.research)
+    const reader = new ResearchContextReader(
+      seeded.persistence.repositories.debates,
+      seeded.persistence.repositories.research,
+      seeded.persistence.repositories.turns,
+      seeded.persistence.repositories.participants
+    )
     const negative = reader.load({ debateSessionId: 'session-1', debateId: 'debate-1', participantId: 'negative-1', role: 'negative', topic: 'x' })
     expect(negative.visibleSources).toHaveLength(0)
     seeded.persistence.database.close()

@@ -299,6 +299,16 @@ export interface SearchTool {
   search(request: SearchRequest): Promise<SearchResult[]>
 }
 
+export interface PublicDebateTurn {
+  id: string
+  stage: string
+  participantId: string
+  participantRole: ParticipantRole
+  participantName: string
+  content: string
+  createdAt: string
+}
+
 export interface ResearchPromptContext {
   debateSessionId: string
   participantId: string
@@ -313,4 +323,5 @@ export interface ResearchPromptContext {
   visibleNotes: ResearchNote[]
   visibleClaims: ProvisionalClaim[]
   publishedEvidence: PublishedEvidence[]
+  publicDebateTurns: PublicDebateTurn[]
 }

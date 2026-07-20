@@ -84,7 +84,9 @@ export class DebateSetupApplication {
       resolver: new DebateRuntimeResolver(this.modelRouting),
       turnRunnerFactory: new TurnRunnerFactory(new DebatePromptBuilder(new ResearchContextReader(
         persistence.repositories.debates,
-        persistence.repositories.research
+        persistence.repositories.research,
+        persistence.repositories.turns,
+        persistence.repositories.participants
       )), options.researchExecutor, options.promptRuntime),
       adapterRegistry
     })

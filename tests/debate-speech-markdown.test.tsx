@@ -90,7 +90,8 @@ describe('debate speech presentation', () => {
     const context: ResearchPromptContext = {
       debateSessionId: 'session-speech', participantId: 'participant-affirmative', role: 'affirmative',
       topic: '大学应将每周一天设为无课自主学习日',
-      visibleSources: [], visibleAssets: [], visibleNotes: [], visibleClaims: [], publishedEvidence: []
+      visibleSources: [], visibleAssets: [], visibleNotes: [], visibleClaims: [], publishedEvidence: [],
+      publicDebateTurns: []
     }
 
     const prompt = new RebuttalPrompt().build(context)

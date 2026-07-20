@@ -60,6 +60,18 @@ ${context.publishedEvidence.map((item) =>
   `- [${item.publicCode}] ${item.title}；状态：${item.currentStatus}；摘要：${item.summary || '无'}；来源：${item.sourceUrl || '无'}`
 ).join('\n') || '- 当前没有已发布证据；不得引用任何证据编号。'}`
 
+const publicDebateText = (context: ResearchPromptContext): string => {
+  if (context.publicDebateTurns.length === 0) return '此前公开发言：尚无已完成的正式辩论发言。'
+  const transcript = context.publicDebateTurns.map((turn, index) => [
+    `Turn ${index + 1}｜${turn.stage}｜${roleLabel(turn.participantRole)}（${turn.participantName}）`,
+    turn.content.slice(0, 3_000)
+  ].join('\n')).join('\n\n')
+  const maximum = 80_000
+  if (transcript.length <= maximum) return `此前公开发言：\n${transcript}`
+  const half = Math.floor((maximum - 40) / 2)
+  return `此前公开发言：\n${transcript.slice(0, half)}\n\n[中间部分因上下文长度已省略]\n\n${transcript.slice(-half)}`
+}
+
 const spokenOutputRules = (): string => `现场发言格式：
 1. 只输出可在辩论现场直接朗读的实质内容。
 2. 不要输出“收到”“好的”“作为正方/反方”“我方坚定认为”“下面我将”等开场套话。
@@ -116,31 +128,31 @@ ${evidenceText(context)}
 
 export class OpeningPrompt implements PhasePrompt {
   build(context: ResearchPromptContext): string {
-    return `${fixedContext(context)}\n\n${publicPoolText(context)}\n${researchMaterialText(context)}\n${evidenceText(context)}\n\n${spokenOutputRules()}\n\n任务：完成本方开篇陈词。论点清楚，引用证据时只用已列编号。`
+    return `${fixedContext(context)}\n\n${publicPoolText(context)}\n${researchMaterialText(context)}\n${evidenceText(context)}\n${publicDebateText(context)}\n\n${spokenOutputRules()}\n\n任务：完成本方开篇陈词。论点清楚，引用证据时只用已列编号。`
   }
 }
 
 export class CrossExaminationPrompt implements PhasePrompt {
   build(context: ResearchPromptContext): string {
-    return `${fixedContext(context)}\n\n${researchMaterialText(context)}\n${evidenceText(context)}\n\n${spokenOutputRules()}\n\n任务：提出交叉质询，准确指出待澄清的主张或证据；不得把“质疑”描述为已完成核验。`
+    return `${fixedContext(context)}\n\n${researchMaterialText(context)}\n${evidenceText(context)}\n${publicDebateText(context)}\n\n${spokenOutputRules()}\n\n任务：根据此前公开发言提出交叉质询，准确指出待澄清的主张或证据；不得把“质疑”描述为已完成核验。`
   }
 }
 
 export class RebuttalPrompt implements PhasePrompt {
   build(context: ResearchPromptContext): string {
-    return `${fixedContext(context)}\n\n${researchMaterialText(context)}\n${evidenceText(context)}\n\n${spokenOutputRules()}\n\n任务：针对对方公开论点进行反驳。私有笔记可辅助组织，但不得泄露或冒充公开证据。`
+    return `${fixedContext(context)}\n\n${researchMaterialText(context)}\n${evidenceText(context)}\n${publicDebateText(context)}\n\n${spokenOutputRules()}\n\n任务：针对此前公开发言中的对方论点进行反驳。私有笔记可辅助组织，但不得泄露或冒充公开证据。`
   }
 }
 
 export class ClosingPrompt implements PhasePrompt {
   build(context: ResearchPromptContext): string {
-    return `${fixedContext(context)}\n\n${researchMaterialText(context)}\n${evidenceText(context)}\n\n${spokenOutputRules()}\n\n任务：完成本方总结陈词，区分已获支持、仍有争议和未解决的部分。`
+    return `${fixedContext(context)}\n\n${researchMaterialText(context)}\n${evidenceText(context)}\n${publicDebateText(context)}\n\n${spokenOutputRules()}\n\n任务：结合此前公开发言完成本方总结陈词，区分已获支持、仍有争议和未解决的部分。`
   }
 }
 
 export class AdjudicationPrompt implements PhasePrompt {
   build(context: ResearchPromptContext): string {
-    return `${fixedContext(context)}\n\n${publicPoolText(context)}\n${researchMaterialText(context)}\n${evidenceText(context)}\n\n${spokenOutputRules()}\n\n任务：依据公开发言和公开证据进行裁决；不得读取或推断任何一方的私有研究。说明评判标准、不确定性和争议证据的影响。`
+    return `${fixedContext(context)}\n\n${publicPoolText(context)}\n${researchMaterialText(context)}\n${evidenceText(context)}\n${publicDebateText(context)}\n\n${spokenOutputRules()}\n\n任务：依据上方完整的此前公开发言和公开证据进行裁决；不得读取或推断任何一方的私有研究。说明评判标准、不确定性和争议证据的影响。`
   }
 }
 

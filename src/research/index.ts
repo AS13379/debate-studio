@@ -41,6 +41,7 @@ export type {
   OwnedResearchRecord,
   PrivateResearchVisibility,
   ProvisionalClaim,
+  PublicDebateTurn,
   PublicResourcePool,
   PublishedEvidence,
   ResearchAsset,
