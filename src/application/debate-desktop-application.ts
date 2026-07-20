@@ -43,6 +43,7 @@ import { PromptStudioApplication } from '../prompt-studio'
 import { DebateEvaluationService, DebateReviewService } from '../debate-quality'
 import { DebateQualityApplication } from './debate-quality-application'
 import { LanWebApplication } from '../lan/lan-web-application'
+import { ApplicationUpdateService, type ApplicationUpdaterPort } from './application-update-service'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -55,6 +56,9 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
   onDatabaseRestoreCompleted?(): void
   createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined
   visionAdapter?: VisionAdapter
+  applicationUpdater?: ApplicationUpdaterPort
+  applicationUpdaterSupported?: boolean
+  beforeInstallUpdate?(): Promise<void>
 }
 
 export class DebateDesktopApplication {
@@ -73,6 +77,7 @@ export class DebateDesktopApplication {
     readonly promptStudio: PromptStudioApplication,
     readonly quality: DebateQualityApplication,
     readonly lanWeb: LanWebApplication,
+    readonly updates: ApplicationUpdateService,
     readonly logger: StructuredLogger,
     readonly errorCenter: ErrorCenter,
     private readonly closeApplication: () => Promise<PersistenceResult<void>>
@@ -227,10 +232,20 @@ export function initializeDebateDesktopApplication(
       logger,
       now: options.now
     })
+    const updates = new ApplicationUpdateService({
+      currentVersion: options.appVersion ?? '0.1.0',
+      supported: options.applicationUpdaterSupported ?? false,
+      settings: persistence.repositories.settings,
+      updater: options.applicationUpdater,
+      logger,
+      now: options.now,
+      beforeInstall: options.beforeInstallUpdate
+    })
     let closed = false
     const closeApplication = async (): Promise<PersistenceResult<void>> => {
       if (closed) return { ok: true, value: undefined }
       lanWeb.close()
+      updates.close()
       await exports.close()
       const result = await run.close()
       if (result.ok) closed = true
@@ -246,7 +261,7 @@ export function initializeDebateDesktopApplication(
       ok: true,
       value: new DebateDesktopApplication(
         configuration, run, research, diagnostics, dataManagement, history, exports,
-        onboarding, modelRouting, costs, planner, promptStudio, quality, lanWeb, logger, errorCenter, closeApplication
+        onboarding, modelRouting, costs, planner, promptStudio, quality, lanWeb, updates, logger, errorCenter, closeApplication
       )
     }
   } catch (cause) {

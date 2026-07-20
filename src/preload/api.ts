@@ -1,8 +1,8 @@
 import type { IpcRendererEvent } from 'electron'
 
-import { IPC_CHANNELS, type DebatePlannerProgressDto, type DebateStudioApi, type LanServerStatusDto, type RunEventDto } from '../shared/ipc-contract'
+import { IPC_CHANNELS, type ApplicationUpdateStateDto, type DebatePlannerProgressDto, type DebateStudioApi, type LanServerStatusDto, type RunEventDto } from '../shared/ipc-contract'
 
-type PreloadEventPayload = RunEventDto | DebatePlannerProgressDto | LanServerStatusDto
+type PreloadEventPayload = RunEventDto | DebatePlannerProgressDto | LanServerStatusDto | ApplicationUpdateStateDto
 
 export interface IpcRendererLike {
   invoke(channel: string, input?: unknown): Promise<unknown>
@@ -13,6 +13,13 @@ export interface IpcRendererLike {
 export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudioApi {
   return {
     getAppVersion: () => invoke(ipcRenderer, IPC_CHANNELS.getAppVersion),
+    getApplicationUpdateState: () => invoke(ipcRenderer, IPC_CHANNELS.getApplicationUpdateState),
+    checkApplicationUpdates: () => invoke(ipcRenderer, IPC_CHANNELS.checkApplicationUpdates),
+    setApplicationUpdatePreferences: (input) => invoke(ipcRenderer, IPC_CHANNELS.setApplicationUpdatePreferences, input),
+    downloadApplicationUpdate: () => invoke(ipcRenderer, IPC_CHANNELS.downloadApplicationUpdate),
+    cancelApplicationUpdateDownload: () => invoke(ipcRenderer, IPC_CHANNELS.cancelApplicationUpdateDownload),
+    deferApplicationUpdate: () => invoke(ipcRenderer, IPC_CHANNELS.deferApplicationUpdate),
+    installApplicationUpdate: () => invoke(ipcRenderer, IPC_CHANNELS.installApplicationUpdate),
     openExternalUrl: (input) => invoke(ipcRenderer, IPC_CHANNELS.openExternalUrl, input),
     getOnboardingState: () => invoke(ipcRenderer, IPC_CHANNELS.getOnboardingState),
     saveOnboardingProvider: (input) => invoke(ipcRenderer, IPC_CHANNELS.saveOnboardingProvider, input),
@@ -123,6 +130,11 @@ export function createDebateStudioApi(ipcRenderer: IpcRendererLike): DebateStudi
       const wrapped = (_event: IpcRendererEvent, payload: PreloadEventPayload): void => listener(payload as LanServerStatusDto)
       ipcRenderer.on(IPC_CHANNELS.lanStatusChanged, wrapped)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.lanStatusChanged, wrapped)
+    },
+    onApplicationUpdateStateChanged: (listener) => {
+      const wrapped = (_event: IpcRendererEvent, payload: PreloadEventPayload): void => listener(payload as ApplicationUpdateStateDto)
+      ipcRenderer.on(IPC_CHANNELS.applicationUpdateStateChanged, wrapped)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.applicationUpdateStateChanged, wrapped)
     }
   }
 }

@@ -5,19 +5,19 @@ import { IPC_CHANNELS, type RunEventDto } from '../src/shared/ipc-contract'
 
 class RecordingIpcRenderer implements IpcRendererLike {
   readonly invocations: Array<{ channel: string; input?: unknown }> = []
-  listener?: (event: never, payload: RunEventDto) => void
-  removedListener?: (event: never, payload: RunEventDto) => void
+  listener?: (event: never, payload: never) => void
+  removedListener?: (event: never, payload: never) => void
 
   async invoke(channel: string, input?: unknown): Promise<unknown> {
     this.invocations.push({ channel, input })
     return { ok: true, value: [] }
   }
 
-  on(_channel: string, listener: (event: never, payload: RunEventDto) => void): void {
+  on(_channel: string, listener: (event: never, payload: never) => void): void {
     this.listener = listener
   }
 
-  removeListener(_channel: string, listener: (event: never, payload: RunEventDto) => void): void {
+  removeListener(_channel: string, listener: (event: never, payload: never) => void): void {
     this.removedListener = listener
   }
 }
@@ -27,12 +27,12 @@ describe('preload DebateStudioApi', () => {
     const api = createDebateStudioApi(new RecordingIpcRenderer())
 
     expect(Object.keys(api).sort()).toEqual([
-      'addResearchAsset', 'addTag', 'analyzeImageAsset', 'archiveDebate', 'cancelDebatePlanning', 'cancelExport', 'challengeEvidence', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDatabaseBackup', 'createDebate', 'createDefaultModelRouting', 'createMockDemoDebate', 'createOnboardingDemo', 'createPromptVersion', 'decideResearchToolCall', 'deleteCredential',
+      'addResearchAsset', 'addTag', 'analyzeImageAsset', 'archiveDebate', 'cancelApplicationUpdateDownload', 'cancelDebatePlanning', 'cancelExport', 'challengeEvidence', 'checkApplicationUpdates', 'clearErrors', 'clearLogs', 'copyModelProfile', 'createDatabaseBackup', 'createDebate', 'createDefaultModelRouting', 'createMockDemoDebate', 'createOnboardingDemo', 'createPromptVersion', 'decideResearchToolCall', 'deferApplicationUpdate', 'deleteCredential',
       'deleteDebate', 'deleteExport', 'deleteModelProfile', 'deleteProviderConnection', 'deleteSearchCredential', 'deleteSearchProviderConnection',
-      'exportDiagnosticReport', 'exportHtml', 'exportMarkdown', 'getAppVersion', 'getCostSummary', 'getDataManagementState', 'getDebate', 'getDebateDetail', 'getDebateQuality', 'getErrorDetail', 'getLanServerStatus', 'getOnboardingState', 'getPerformanceSnapshot', 'getRecentLogs', 'getRunState', 'kickLanDevice', 'listAvailableProviderModels', 'listDebateTurns', 'listDebateTurnsPage', 'listDebateQuality', 'listDebates',
-      'listExports', 'listModelProfiles', 'listModelRoutingPolicies', 'listPromptTemplates', 'listProviderConnections', 'listProviderPresets', 'listProviderPricing', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'logoutAllLanDevices', 'onLanStatusChanged', 'onPlannerProgress', 'onRunEvent', 'openExternalUrl', 'openLanPreview',
+      'downloadApplicationUpdate', 'exportDiagnosticReport', 'exportHtml', 'exportMarkdown', 'getAppVersion', 'getApplicationUpdateState', 'getCostSummary', 'getDataManagementState', 'getDebate', 'getDebateDetail', 'getDebateQuality', 'getErrorDetail', 'getLanServerStatus', 'getOnboardingState', 'getPerformanceSnapshot', 'getRecentLogs', 'getRunState', 'installApplicationUpdate', 'kickLanDevice', 'listAvailableProviderModels', 'listDebateTurns', 'listDebateTurnsPage', 'listDebateQuality', 'listDebates',
+      'listExports', 'listModelProfiles', 'listModelRoutingPolicies', 'listPromptTemplates', 'listProviderConnections', 'listProviderPresets', 'listProviderPricing', 'listRecentErrors', 'listSearchProviderConnections', 'loadDebateSetup', 'loadResearchWorkspace', 'logoutAllLanDevices', 'onApplicationUpdateStateChanged', 'onLanStatusChanged', 'onPlannerProgress', 'onRunEvent', 'openExternalUrl', 'openLanPreview',
       'pauseDebate', 'planDebate', 'publishResearchEvidence', 'regenerateDebateQuality', 'removeTag', 'renameDebate', 'reopenOnboarding', 'reportRendererError', 'reportRendererPerformance', 'restoreDatabaseBackup', 'restoreDebate', 'resumeDebate', 'retryFailedTurn', 'rollbackPromptVersion', 'runMockSearch', 'saveCredential', 'saveModelProfile', 'saveModelRoutingPolicy', 'saveOnboardingDefaults', 'saveOnboardingProvider',
-      'saveParticipantBindings', 'saveProviderConnection', 'saveProviderPricing', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection',
+      'saveParticipantBindings', 'saveProviderConnection', 'saveProviderPricing', 'saveResearchRuntimeSettings', 'saveSearchCredential', 'saveSearchProviderConnection', 'setApplicationUpdatePreferences',
       'skipDebate', 'skipOnboarding', 'startDebate', 'startLanServer', 'stopDebate', 'stopLanServer', 'testConnection', 'testOnboardingConnection', 'testSearchConnection', 'toggleFavorite', 'updateEvidenceStatus', 'updateLanServerConfig'
     ].sort())
     expect(api).not.toHaveProperty('invoke')
@@ -51,7 +51,7 @@ describe('preload DebateStudioApi', () => {
       createdAt: '2026-07-13T00:00:00.000Z'
     }
 
-    ipc.listener?.(undefined as never, event)
+    ipc.listener?.(undefined as never, event as never)
     unsubscribe()
 
     expect(received).toEqual([event])

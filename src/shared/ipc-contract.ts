@@ -94,6 +94,7 @@ import type {
   RollbackPromptInputDto
 } from './prompt-studio-dtos'
 import type { LanDesktopApi } from './lan-dtos'
+import type { ApplicationUpdateResultDto, ApplicationUpdateStateDto } from './update-dtos'
 
 export const IPC_CHANNELS = {
   getAppVersion: 'app:get-version',
@@ -195,6 +196,14 @@ export const IPC_CHANNELS = {
   kickLanDevice: 'lan:kick-device',
   openLanPreview: 'lan:open-preview',
   lanStatusChanged: 'lan:status-changed',
+  getApplicationUpdateState: 'update:get-state',
+  checkApplicationUpdates: 'update:check',
+  setApplicationUpdatePreferences: 'update:set-preferences',
+  downloadApplicationUpdate: 'update:download',
+  cancelApplicationUpdateDownload: 'update:cancel-download',
+  deferApplicationUpdate: 'update:defer',
+  installApplicationUpdate: 'update:install',
+  applicationUpdateStateChanged: 'update:state-changed',
   runEvent: 'run:event'
 } as const
 
@@ -249,6 +258,14 @@ export type RunEventDto =
 
 export interface DebateStudioApi extends LanDesktopApi {
   getAppVersion(): Promise<string>
+  getApplicationUpdateState(): Promise<ApplicationUpdateStateDto>
+  checkApplicationUpdates(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  setApplicationUpdatePreferences(input: { automaticCheckEnabled: boolean }): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  downloadApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  cancelApplicationUpdateDownload(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  deferApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  installApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  onApplicationUpdateStateChanged(listener: (state: ApplicationUpdateStateDto) => void): () => void
   openExternalUrl(input: { url: string }): Promise<WorkbenchResultDto<boolean>>
   getOnboardingState(): Promise<WorkbenchResultDto<OnboardingStateDto>>
   saveOnboardingProvider(input: OnboardingProviderInputDto): Promise<WorkbenchResultDto<OnboardingProviderResultDto>>
@@ -341,6 +358,14 @@ export interface DebateStudioApi extends LanDesktopApi {
   onRunEvent(listener: (event: RunEventDto) => void): () => void
   onPlannerProgress(listener: (event: DebatePlannerProgressDto) => void): () => void
 }
+
+export type {
+  ApplicationUpdateErrorDto,
+  ApplicationUpdateProgressDto,
+  ApplicationUpdateResultDto,
+  ApplicationUpdateStateDto,
+  ApplicationUpdateStatusDto
+} from './update-dtos'
 
 export type {
   LanAuthSessionDto,

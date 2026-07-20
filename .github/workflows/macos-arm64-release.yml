@@ -49,7 +49,12 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: Debate-Studio-macOS-arm64
-          path: release/Debate-Studio-*-arm64.dmg
+          path: |
+            release/Debate-Studio-*-arm64.dmg
+            release/Debate-Studio-*-arm64.dmg.blockmap
+            release/Debate-Studio-*-arm64.zip
+            release/Debate-Studio-*-arm64.zip.blockmap
+            release/latest-mac.yml
           if-no-files-found: error
           retention-days: 14
 
@@ -60,9 +65,9 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: gh release view "$RELEASE_TAG" || gh release create "$RELEASE_TAG" --title "Debate Studio $RELEASE_TAG" --generate-notes
 
-      - name: Attach DMG to GitHub Release
+      - name: Attach updater assets to GitHub Release
         if: github.event_name == 'push' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag || github.ref_name }}
-        run: gh release upload "$RELEASE_TAG" release/Debate-Studio-*-arm64.dmg --clobber
+        run: gh release upload "$RELEASE_TAG" release/Debate-Studio-*-arm64.dmg release/Debate-Studio-*-arm64.dmg.blockmap release/Debate-Studio-*-arm64.zip release/Debate-Studio-*-arm64.zip.blockmap release/latest-mac.yml --clobber

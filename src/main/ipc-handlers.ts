@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod'
 
 import type {
-  CostApplication, DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateQualityApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ModelRoutingApplication, OnboardingApplication, PromptStudioApplication, ResearchApplication
+  ApplicationUpdateService, CostApplication, DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateQualityApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ModelRoutingApplication, OnboardingApplication, PromptStudioApplication, ResearchApplication
 } from '../application'
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
@@ -10,6 +10,7 @@ import type { LanServerManager } from '../lan'
 import { redactForExport, redactSensitiveText } from '../security'
 import {
   IPC_CHANNELS,
+  type ApplicationUpdateStateDto,
   type ConfigurationResultDto,
   type DebateTurnDto,
   type DebatePlannerProgressDto,
@@ -18,6 +19,7 @@ import {
 } from '../shared/ipc-contract'
 import {
   addResearchAssetSchema,
+  applicationUpdatePreferencesSchema,
   assetInputSchema,
   challengeEvidenceSchema,
   cancelExportSchema,
@@ -86,16 +88,18 @@ export interface DebateIpcDependencies {
   logger: LoggerLike
   errorCenter: ErrorCenter
   lanServer?: LanServerManager
+  updates?: ApplicationUpdateService
   getAppVersion(): string
   openExternalUrl?(url: string): Promise<void>
   openLanPreviewUrl?(url: string): Promise<void>
   broadcastRunEvent(event: RunEventDto): void
   broadcastPlannerProgress(event: DebatePlannerProgressDto): void
   broadcastLanStatus?(status: LanServerStatusDto): void
+  broadcastApplicationUpdateState?(state: ApplicationUpdateStateDto): void
 }
 
 const registeredChannels = Object.values(IPC_CHANNELS).filter((channel) =>
-  channel !== IPC_CHANNELS.runEvent && channel !== IPC_CHANNELS.plannerProgress && channel !== IPC_CHANNELS.lanStatusChanged
+  channel !== IPC_CHANNELS.runEvent && channel !== IPC_CHANNELS.plannerProgress && channel !== IPC_CHANNELS.lanStatusChanged && channel !== IPC_CHANNELS.applicationUpdateStateChanged
 )
 
 export function registerDebateIpc(dependencies: DebateIpcDependencies): () => void {
@@ -103,6 +107,16 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   const rawIpcMain = dependencies.ipcMain
   const ipcMain = observedIpcMain(dependencies)
   ipcMain.handle(IPC_CHANNELS.getAppVersion, () => dependencies.getAppVersion())
+  ipcMain.handle(IPC_CHANNELS.getApplicationUpdateState, () => dependencies.updates?.getState() ?? updateUnavailableState(dependencies.getAppVersion()))
+  ipcMain.handle(IPC_CHANNELS.checkApplicationUpdates, () => dependencies.updates?.checkForUpdates() ?? updateUnavailable())
+  ipcMain.handle(IPC_CHANNELS.setApplicationUpdatePreferences, validated(
+    applicationUpdatePreferencesSchema,
+    (input) => dependencies.updates?.setPreferences(input) ?? updateUnavailable()
+  ))
+  ipcMain.handle(IPC_CHANNELS.downloadApplicationUpdate, () => dependencies.updates?.downloadUpdate() ?? updateUnavailable())
+  ipcMain.handle(IPC_CHANNELS.cancelApplicationUpdateDownload, () => dependencies.updates?.cancelDownload() ?? updateUnavailable())
+  ipcMain.handle(IPC_CHANNELS.deferApplicationUpdate, () => dependencies.updates?.deferUpdate() ?? updateUnavailable())
+  ipcMain.handle(IPC_CHANNELS.installApplicationUpdate, () => dependencies.updates?.installUpdate() ?? updateUnavailable())
   ipcMain.handle(IPC_CHANNELS.getLanServerStatus, () => dependencies.lanServer?.statusWithCredentialState() ?? lanUnavailable())
   ipcMain.handle(IPC_CHANNELS.startLanServer, () => dependencies.lanServer?.start() ?? lanUnavailable())
   ipcMain.handle(IPC_CHANNELS.stopLanServer, () => dependencies.lanServer?.stop() ?? lanUnavailable())
@@ -237,10 +251,35 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
     dependencies.broadcastRunEvent(mapRunEvent(event))
   })
   const unsubscribeLan = dependencies.lanServer?.subscribe((status) => dependencies.broadcastLanStatus?.(status)) ?? (() => undefined)
+  const unsubscribeUpdates = dependencies.updates?.subscribe((state) => dependencies.broadcastApplicationUpdateState?.(state)) ?? (() => undefined)
   return () => {
     unsubscribe()
     unsubscribeLan()
+    unsubscribeUpdates()
     for (const channel of registeredChannels) rawIpcMain.removeHandler(channel)
+  }
+}
+
+function updateUnavailableState(currentVersion: string): ApplicationUpdateStateDto {
+  return {
+    currentVersion,
+    supported: false,
+    automaticCheckEnabled: true,
+    automaticDownloadEnabled: false,
+    status: 'idle',
+    messageZh: '当前环境无法使用自动更新。'
+  }
+}
+
+function updateUnavailable() {
+  return {
+    ok: false as const,
+    error: {
+      code: 'UPDATE_SERVICE_UNAVAILABLE',
+      titleZh: '更新服务不可用',
+      descriptionZh: '当前环境无法使用自动更新。',
+      retryable: false
+    }
   }
 }
 

@@ -7,8 +7,9 @@ const CostStatisticsPage = lazy(() => import('./CostStatisticsPage').then((modul
 const DiagnosticsPage = lazy(() => import('./DiagnosticsPage').then((module) => ({ default: module.DiagnosticsPage })))
 const PromptStudioPage = lazy(() => import('./PromptStudioPage').then((module) => ({ default: module.PromptStudioPage })))
 const LanAccessPage = lazy(() => import('./LanAccessPage').then((module) => ({ default: module.LanAccessPage })))
+const ApplicationUpdatePage = lazy(() => import('./ApplicationUpdatePage').then((module) => ({ default: module.ApplicationUpdatePage })))
 
-export type SettingsTab = 'providers' | 'routing' | 'prompts' | 'costs' | 'diagnostics' | 'lan' | 'onboarding'
+export type SettingsTab = 'providers' | 'routing' | 'prompts' | 'costs' | 'diagnostics' | 'lan' | 'updates' | 'onboarding'
 
 interface SettingsPageProps {
   activeTab: SettingsTab
@@ -23,6 +24,7 @@ const tabs: Array<{ id: SettingsTab; label: string }> = [
   { id: 'costs', label: '成本统计' },
   { id: 'diagnostics', label: '诊断与日志' },
   { id: 'lan', label: '局域网访问' },
+  { id: 'updates', label: '应用更新' },
   { id: 'onboarding', label: '首次引导' }
 ]
 
@@ -49,6 +51,7 @@ export function SettingsPage({ activeTab, onTabChange, onOpenOnboarding }: Setti
           {activeTab === 'costs' && <CostStatisticsPage />}
           {activeTab === 'diagnostics' && <DiagnosticsPage />}
           {activeTab === 'lan' && <LanAccessPage />}
+          {activeTab === 'updates' && <ApplicationUpdatePage />}
           {activeTab === 'onboarding' && (
             <section className="panel onboarding-settings-panel">
               <div><span className="eyebrow">快速开始</span><h2>重新打开首次使用引导</h2><p>可以重新检查模型连接、生成默认角色配置，或创建一场 Mock 示例辩论。已有数据不会被清除。</p></div>

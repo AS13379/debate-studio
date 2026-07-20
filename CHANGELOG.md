@@ -2,6 +2,20 @@
 
 本文件记录 Debate Studio 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.4.5] - 2026-07-20
+
+### 应用更新
+
+- 增加基于 GitHub Releases 的 macOS 应用更新检查、手动下载、取消下载和重启安装流程。
+- 设置页新增“应用更新”，可查看当前版本、Release Notes、下载进度和更新错误，并可关闭启动后的自动检查。
+- 自动下载默认关闭；首次启动不强制弹窗，应用启动和本地数据读写不会被更新检查阻塞。
+- GitHub Release 构建流程补充 `latest-mac.yml`、DMG/ZIP 与对应 blockmap；DMG 用于手动安装，ZIP 用于 macOS 自动更新。
+
+### 本地数据与隐私
+
+- 更新服务只访问 GitHub Releases，不读取或上传 API Key、凭据引用、SQLite 数据库、辩论记录、研究资料或日志。
+- 应用升级保持既有 Bundle ID、数据目录、数据库 migration 和凭据存储位置不变。
+
 ## [0.4.4] - 2026-07-20
 
 ### 发布与可用性

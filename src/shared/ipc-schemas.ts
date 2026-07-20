@@ -5,6 +5,7 @@ const optionalIdSchema = idSchema.optional()
 export const externalUrlSchema = z.object({
   url: z.string().url().refine((value) => new URL(value).protocol === 'https:', 'Only HTTPS URLs are allowed')
 }).strict()
+export const applicationUpdatePreferencesSchema = z.object({ automaticCheckEnabled: z.boolean() }).strict()
 const protocolSchema = z.enum([
   'mock',
   'openai-chat',

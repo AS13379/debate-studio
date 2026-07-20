@@ -37,3 +37,11 @@ export { CostApplication } from './cost-application'
 export { DebatePlanner } from '../debate-planner'
 export { DebateQualityApplication } from './debate-quality-application'
 export { PromptStudioApplication } from '../prompt-studio'
+export { ApplicationUpdateService, normalizeReleaseNotes } from './application-update-service'
+export type {
+  ApplicationUpdateCancellationToken,
+  ApplicationUpdateListener,
+  ApplicationUpdatePreferences,
+  ApplicationUpdaterEvent,
+  ApplicationUpdaterPort
+} from './application-update-service'

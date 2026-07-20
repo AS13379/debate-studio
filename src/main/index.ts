@@ -10,12 +10,36 @@ import { registerDebateIpc } from './ipc-handlers'
 import { createWindowOptions } from './window-options'
 import { resolveAppDataDirectory } from './app-paths'
 import { LanServerManager } from '../lan'
+import { autoUpdater } from 'electron-updater'
+import { ElectronApplicationUpdaterAdapter } from './electron-updater-adapter'
 
 let desktopApplication: DebateDesktopApplication | undefined
 let lanServer: LanServerManager | undefined
 let disposeIpc: (() => void) | undefined
 let shutdownStarted = false
 let readyToQuit = false
+
+async function closeApplicationResources(): Promise<void> {
+  disposeIpc?.()
+  disposeIpc = undefined
+  await lanServer?.close()
+  lanServer = undefined
+  const result = await (desktopApplication?.close() ?? Promise.resolve({ ok: true as const, value: undefined }))
+  if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+  desktopApplication = undefined
+}
+
+async function prepareForUpdateInstall(): Promise<void> {
+  if (readyToQuit) return
+  shutdownStarted = true
+  try {
+    await closeApplicationResources()
+    readyToQuit = true
+  } catch (cause) {
+    shutdownStarted = false
+    throw cause
+  }
+}
 
 app.setPath('userData', resolveAppDataDirectory(app.getPath('appData')))
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -68,6 +92,9 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     appDataDirectory,
     credentialStore,
     appVersion: app.getVersion(),
+    applicationUpdater: new ElectronApplicationUpdaterAdapter(autoUpdater),
+    applicationUpdaterSupported: app.isPackaged && process.platform === 'darwin',
+    beforeInstallUpdate: prepareForUpdateInstall,
     createImageThumbnail: (bytes) => {
       const image = nativeImage.createFromBuffer(Buffer.from(bytes))
       if (image.isEmpty()) return undefined
@@ -124,6 +151,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     logger: desktopApplication.logger,
     errorCenter: desktopApplication.errorCenter,
     lanServer,
+    updates: desktopApplication.updates,
     getAppVersion: () => app.getVersion(),
     openExternalUrl: (url) => shell.openExternal(url),
     openLanPreviewUrl: (url) => shell.openExternal(url),
@@ -141,11 +169,17 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.lanStatusChanged, status)
       }
+    },
+    broadcastApplicationUpdateState: (state) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.applicationUpdateStateChanged, state)
+      }
     }
   })
   powerMonitor.on('suspend', () => { void lanServer?.suspend() })
   powerMonitor.on('resume', () => { void lanServer?.resume() })
   createWindow()
+  setTimeout(() => { void desktopApplication?.updates.checkForUpdates({ automatic: true }) }, 1_500)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -157,15 +191,7 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   if (shutdownStarted) return
   shutdownStarted = true
-  disposeIpc?.()
-  disposeIpc = undefined
-  const closing = (async () => {
-    await lanServer?.close()
-    lanServer = undefined
-    return desktopApplication?.close() ?? { ok: true as const, value: undefined }
-  })()
-  void closing.finally(() => {
-    desktopApplication = undefined
+  void closeApplicationResources().finally(() => {
     readyToQuit = true
     app.exit(0)
   })
