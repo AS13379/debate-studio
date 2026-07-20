@@ -2,6 +2,13 @@
 
 本文件记录 Debate Studio 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.4.4] - 2026-07-20
+
+### 发布与可用性
+
+- 发布 ModelProfile 新建与编辑交互修复，表单现在会在所属平台卡片中立即显示。
+- 提供未签名、未公证的 macOS arm64 DMG，供 GitHub Release 下载。
+
 ## [0.4.3] - 2026-07-20
 
 ### 模型管理修复
