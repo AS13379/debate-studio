@@ -2,6 +2,14 @@
 
 本文件记录 Debate Studio 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.4.6] - 2026-07-20
+
+### 发布
+
+- 发布首个带 GitHub Releases 自动更新链路的 macOS arm64 版本。
+- Release 同时提供手动安装 DMG、自动更新 ZIP、`latest-mac.yml` 与对应 blockmap。
+- 保持既有本地数据目录、SQLite 数据库和系统加密凭据存储不变。
+
 ## [0.4.5] - 2026-07-20
 
 ### 应用更新
