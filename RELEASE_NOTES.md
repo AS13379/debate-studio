@@ -1,19 +1,22 @@
-# Debate Studio v0.5.0
+# Debate Studio v0.5.1
 
 ## Highlights
 
-- Replaces the unsigned Squirrel.Mac installer with a Debate Studio project-signed community updater.
-- Verifies Ed25519 signatures, SHA256, package size, architecture, version and Bundle ID before installation.
-- Automatically backs up and restores the previous app if the new version cannot launch.
-- Keeps SQLite data, model configuration, prompts, API credentials, debate history and research data unchanged.
-- Adds explicit download, verification, installation, rollback and cache status in Settings.
+- Replaces the single research tool quota with a staged anti-loop policy.
+- Limits repeated model decisions, searches, page reads and downloaded text during exploration without blocking local research finalization.
+- Keeps note saving, claim drafting, evidence publication and normal research completion available after exploration limits are reached.
+- Automatically publishes reliable full-text sources that the model explicitly recommended before automatic research completes.
+- Adds Quick, Standard and Deep presets focused on waiting time and source coverage rather than API cost reduction.
+- Persists research phase, anti-loop counters and completion reasons through SQLite migration v16.
 
-## Upgrade notice
+## Compatibility
 
-Versions v0.4.9 and earlier require one final manual DMG installation of v0.5.0. In-app community updates are available starting with v0.5.0.
-
-The macOS build is not signed or notarized with Apple Developer ID. Debate Studio's Ed25519 signature verifies the origin and integrity of update packages; it does not bypass Gatekeeper.
+Existing research presets are migrated automatically. SQLite data, model configuration, prompts, API credentials, debate history and research records remain in the same local application data directory.
 
 ## Privacy
 
-The updater only contacts this repository's GitHub Releases. It does not read or upload API keys, local databases, debate content, research material, logs or user identity.
+All debate and research data remains local. Debate Studio does not upload API keys, databases, debate content, research material, logs or user identity.
+
+## macOS notice
+
+This community build is not signed or notarized with Apple Developer ID. The in-app updater verifies update packages with the Debate Studio project's Ed25519 key and SHA256 before installation; it does not bypass Gatekeeper.

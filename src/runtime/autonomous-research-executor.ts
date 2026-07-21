@@ -5,6 +5,7 @@ import type { LoggerLike } from '../observability'
 import type { UnifiedRequest, UnifiedResponse, UnifiedStreamEvent } from '../providers'
 import {
   ResearchApprovalController,
+  RESEARCH_BUDGET_PRESETS,
   ResearchToolLoop,
   TavilySearchTool,
   WebPageFetcher,
@@ -104,10 +105,14 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
     const configuredLimits = this.normalizedLimits(settings?.limits)
     const limits = request.stage === 'public_pool'
       ? {
-          maxToolCalls: Math.min(configuredLimits.maxToolCalls ?? 4, 4),
+          maxToolCalls: Math.min(configuredLimits.maxToolCalls ?? 16, 16),
           maxSearches: Math.min(configuredLimits.maxSearches ?? 1, 1),
           maxPageReads: Math.min(configuredLimits.maxPageReads ?? 1, 1),
-          maxBodyCharacters: Math.min(configuredLimits.maxBodyCharacters ?? 12_000, 12_000)
+          maxBodyCharacters: Math.min(configuredLimits.maxBodyCharacters ?? 12_000, 12_000),
+          maxDecisionRounds: Math.min(configuredLimits.maxDecisionRounds ?? 8, 8),
+          maxNoProgressRounds: Math.min(configuredLimits.maxNoProgressRounds ?? 2, 2),
+          maxFinalizationRounds: Math.min(configuredLimits.maxFinalizationRounds ?? 4, 4),
+          targetEvidenceCount: 1
         }
       : configuredLimits
     const loop = new ResearchToolLoop({
@@ -139,15 +144,13 @@ export class AutonomousResearchExecutor implements RuntimeResearchExecutor {
   }
 
   private normalizedLimits(limits?: Partial<ResearchToolLimits>): Partial<ResearchToolLimits> {
-    if (!limits) return { maxToolCalls: 7, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 30_000 }
-    // Previous releases exposed only these three presets, so translating their
-    // exact values is safe and prevents an old saved “standard” profile from
-    // silently keeping the former 12-request budget after an app update.
+    if (!limits) return RESEARCH_BUDGET_PRESETS.balanced
+    if (limits.maxDecisionRounds) return limits
     const legacy = `${limits.maxToolCalls}/${limits.maxSearches}/${limits.maxPageReads}/${limits.maxBodyCharacters}`
-    if (legacy === '8/2/2/25000') return { maxToolCalls: 5, maxSearches: 1, maxPageReads: 1, maxBodyCharacters: 15_000 }
-    if (legacy === '12/3/3/45000') return { maxToolCalls: 7, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 30_000 }
-    if (legacy === '20/5/5/80000') return { maxToolCalls: 12, maxSearches: 4, maxPageReads: 4, maxBodyCharacters: 60_000 }
-    return limits
+    if (['5/1/1/15000', '8/2/2/25000'].includes(legacy)) return RESEARCH_BUDGET_PRESETS.quick
+    if (['7/2/2/30000', '12/3/3/45000'].includes(legacy)) return RESEARCH_BUDGET_PRESETS.balanced
+    if (['12/4/4/60000', '20/5/5/80000'].includes(legacy)) return RESEARCH_BUDGET_PRESETS.deep
+    return { ...RESEARCH_BUDGET_PRESETS.balanced, ...limits }
   }
 
   private defaultSearchConnection() {

@@ -37,6 +37,7 @@ import type {
   SearchProviderConnectionDto,
   UpdateEvidenceStatusInput
 } from '../shared/research-dtos'
+import { RESEARCH_BUDGET_PRESETS } from '../shared/research-budget-presets'
 
 export interface ResearchApplicationDependencies {
   persistence: PersistenceContext
@@ -112,7 +113,7 @@ export class ResearchApplication {
     if (!runtimeSettingsResult.ok) return this.persistenceError(runtimeSettingsResult.error)
     const runtimeSettings = runtimeSettingsResult.value ?? {
       mode: 'automatic' as const,
-      limits: { maxToolCalls: 7, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 30_000 }
+      limits: RESEARCH_BUDGET_PRESETS.balanced
     }
 
     const ownerFor = (role: DebateParticipantRole) => participants.value.find((item) => item.role === role)?.id

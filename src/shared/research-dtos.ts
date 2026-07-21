@@ -123,5 +123,9 @@ export interface ResearchRuntimeSettingsInput {
     maxSearches: number
     maxPageReads: number
     maxBodyCharacters: number
+    maxDecisionRounds?: number
+    maxNoProgressRounds?: number
+    maxFinalizationRounds?: number
+    targetEvidenceCount?: number
   }
 }

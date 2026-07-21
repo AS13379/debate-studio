@@ -783,6 +783,17 @@ export const DEFAULT_MIGRATIONS: readonly Migration[] = [
         ('prompt-judge-v1', 'prompt-judge', 1, '按逻辑、证据、反驳、事实、深度和表达六个维度进行 0-10 分的公开评价，只输出最终评分、简短理由和可公开分析。', '内置默认版本', CURRENT_TIMESTAMP),
         ('prompt-review-v1', 'prompt-review', 1, '基于公开发言、证据和结构化评分生成简洁赛后复盘，指出具体转折与改进机会，不输出隐藏思维链。', '内置默认版本', CURRENT_TIMESTAMP);
     `
+  },
+  {
+    version: 16,
+    name: 'research_budget_policy_state',
+    sql: `
+      ALTER TABLE research_loop_states ADD COLUMN phase TEXT NOT NULL DEFAULT 'discovery';
+      ALTER TABLE research_loop_states ADD COLUMN decision_round_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE research_loop_states ADD COLUMN no_progress_round_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE research_loop_states ADD COLUMN finalization_round_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE research_loop_states ADD COLUMN completion_reason TEXT;
+    `
   }
 ]
 

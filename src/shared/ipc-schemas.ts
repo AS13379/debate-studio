@@ -270,10 +270,14 @@ export const searchCredentialInputSchema = z.object({
 export const researchRuntimeSettingsSchema = z.object({
   mode: z.enum(['automatic', 'step-confirmation']),
   limits: z.object({
-    maxToolCalls: z.number().int().min(1).max(50),
+    maxToolCalls: z.number().int().min(1).max(200),
     maxSearches: z.number().int().min(0).max(20),
     maxPageReads: z.number().int().min(0).max(20),
-    maxBodyCharacters: z.number().int().min(1_000).max(500_000)
+    maxBodyCharacters: z.number().int().min(1_000).max(500_000),
+    maxDecisionRounds: z.number().int().min(1).max(100).optional(),
+    maxNoProgressRounds: z.number().int().min(1).max(20).optional(),
+    maxFinalizationRounds: z.number().int().min(1).max(50).optional(),
+    targetEvidenceCount: z.number().int().min(1).max(20).optional()
   }).strict()
 }).strict()
 

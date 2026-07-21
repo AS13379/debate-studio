@@ -413,15 +413,21 @@ export class SQLiteResearchRepository implements ResearchRepository {
     return this.voidResult(this.database.run(
       `INSERT INTO research_loop_states
        (debate_session_id, research_session_id, owner_participant_id, role, mode, status, goal,
+        phase, decision_round_count, no_progress_round_count, finalization_round_count, completion_reason,
         tool_call_count, search_count, page_read_count, body_characters, limits_json, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(debate_session_id, role) DO UPDATE SET research_session_id = excluded.research_session_id,
         owner_participant_id = excluded.owner_participant_id, mode = excluded.mode, status = excluded.status,
-        goal = excluded.goal, tool_call_count = excluded.tool_call_count, search_count = excluded.search_count,
+        goal = excluded.goal, phase = excluded.phase, decision_round_count = excluded.decision_round_count,
+        no_progress_round_count = excluded.no_progress_round_count,
+        finalization_round_count = excluded.finalization_round_count, completion_reason = excluded.completion_reason,
+        tool_call_count = excluded.tool_call_count, search_count = excluded.search_count,
         page_read_count = excluded.page_read_count, body_characters = excluded.body_characters,
         limits_json = excluded.limits_json, updated_at = excluded.updated_at`,
       state.debateSessionId, state.researchSessionId, state.ownerParticipantId, state.role,
-      state.mode, state.status, state.goal ?? null, state.toolCallCount, state.searchCount,
+      state.mode, state.status, state.goal ?? null, state.phase ?? 'discovery',
+      state.decisionRoundCount ?? 0, state.noProgressRoundCount ?? 0, state.finalizationRoundCount ?? 0,
+      state.completionReason ?? null, state.toolCallCount, state.searchCount,
       state.pageReadCount, state.bodyCharacters, JSON.stringify(state.limits), state.updatedAt
     ))
   }
@@ -431,7 +437,11 @@ export class SQLiteResearchRepository implements ResearchRepository {
       debateSessionId: this.text(row, 'debate_session_id'), researchSessionId: this.text(row, 'research_session_id'),
       ownerParticipantId: this.text(row, 'owner_participant_id'), role: this.text(row, 'role') as ResearchOwnerRole,
       mode: this.text(row, 'mode') as ResearchLoopState['mode'], status: this.text(row, 'status') as ResearchLoopState['status'],
-      goal: this.optional(row, 'goal'), toolCallCount: Number(row.tool_call_count), searchCount: Number(row.search_count),
+      goal: this.optional(row, 'goal'), phase: this.text(row, 'phase') as ResearchLoopState['phase'],
+      decisionRoundCount: Number(row.decision_round_count), noProgressRoundCount: Number(row.no_progress_round_count),
+      finalizationRoundCount: Number(row.finalization_round_count),
+      completionReason: this.optional(row, 'completion_reason') as ResearchLoopState['completionReason'],
+      toolCallCount: Number(row.tool_call_count), searchCount: Number(row.search_count),
       pageReadCount: Number(row.page_read_count), bodyCharacters: Number(row.body_characters),
       limits: this.jsonObject(row, 'limits_json') as unknown as ResearchLoopState['limits'],
       updatedAt: this.text(row, 'updated_at')
@@ -446,7 +456,7 @@ export class SQLiteResearchRepository implements ResearchRepository {
     if (!result.ok) return result
     const loops = this.database.run(
       `UPDATE research_loop_states SET status = 'interrupted', updated_at = ?
-       WHERE status IN ('running', 'waiting-approval', 'summarizing')`, updatedAt
+       WHERE status IN ('running', 'waiting-approval', 'finalizing', 'summarizing')`, updatedAt
     )
     return loops.ok ? { ok: true, value: Number(result.value.changes) + Number(loops.value.changes) } : loops
   }

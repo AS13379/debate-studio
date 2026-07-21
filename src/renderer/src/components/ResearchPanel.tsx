@@ -6,6 +6,7 @@ import type {
   ResearchWorkspaceDto,
   RoleResearchWorkspaceDto
 } from '../../../shared/ipc-contract'
+import { RESEARCH_BUDGET_PRESETS } from '../../../shared/research-budget-presets'
 
 interface ResearchPanelProps {
   detail: DebateDetailDto
@@ -19,24 +20,24 @@ export type ResearchPresetId = 'quick' | 'balanced' | 'deep'
 
 export const RESEARCH_PRESETS = {
   quick: {
-    label: '精简', description: '更快、更省额度',
-    limits: { maxToolCalls: 5, maxSearches: 1, maxPageReads: 1, maxBodyCharacters: 15_000 }
+    label: '快速', description: '较少搜索和读页，优先尽快开辩',
+    limits: RESEARCH_BUDGET_PRESETS.quick
   },
   balanced: {
-    label: '标准', description: '搜索深度与消耗平衡',
-    limits: { maxToolCalls: 7, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 30_000 }
+    label: '标准', description: '兼顾等待时间、来源覆盖与交叉核对',
+    limits: RESEARCH_BUDGET_PRESETS.balanced
   },
   deep: {
-    label: '深入', description: '更多来源与正文阅读',
-    limits: { maxToolCalls: 12, maxSearches: 4, maxPageReads: 4, maxBodyCharacters: 60_000 }
+    label: '深入', description: '允许更多不同来源和正文核验',
+    limits: RESEARCH_BUDGET_PRESETS.deep
   }
 } as const
 
 export function researchPresetForLimits(limits: ResearchWorkspaceDto['runtimeSettings']['limits']): ResearchPresetId {
   const legacy = `${limits.maxToolCalls}/${limits.maxSearches}/${limits.maxPageReads}/${limits.maxBodyCharacters}`
-  if (legacy === '8/2/2/25000') return 'quick'
-  if (legacy === '12/3/3/45000') return 'balanced'
-  if (legacy === '20/5/5/80000') return 'deep'
+  if (legacy === '5/1/1/15000' || legacy === '8/2/2/25000') return 'quick'
+  if (legacy === '7/2/2/30000' || legacy === '12/3/3/45000') return 'balanced'
+  if (legacy === '12/4/4/60000' || legacy === '20/5/5/80000') return 'deep'
   const matching = (Object.entries(RESEARCH_PRESETS) as Array<[ResearchPresetId, typeof RESEARCH_PRESETS[ResearchPresetId]]>)
     .find(([, preset]) => Object.entries(preset.limits).every(([key, value]) => limits[key as keyof typeof limits] === value))
   return matching?.[0] ?? 'balanced'
@@ -73,7 +74,7 @@ export function ResearchPanel({ detail, refreshKey, activeTurnStartedAt, onSkipC
 
   const activeResearch = workspace
     ? ([['主持人', workspace.moderator], ['正方', workspace.affirmative], ['反方', workspace.negative]] as const)
-      .find(([, roleWorkspace]) => roleWorkspace.loopState && ['running', 'waiting-approval', 'summarizing'].includes(roleWorkspace.loopState.status))
+      .find(([, roleWorkspace]) => roleWorkspace.loopState && ['running', 'waiting-approval', 'summarizing', 'finalizing'].includes(roleWorkspace.loopState.status))
     : undefined
 
   useEffect(() => {
@@ -99,7 +100,7 @@ export function ResearchPanel({ detail, refreshKey, activeTurnStartedAt, onSkipC
 
   if (!workspace) return <section className="panel muted">正在加载研究与证据数据…</section>
 
-  const limits = RESEARCH_PRESETS[presetId].limits
+  const limits = { ...RESEARCH_PRESETS[presetId].limits }
   const activeLoop = activeResearch?.[1].loopState
   const latestCall = activeResearch?.[1].toolCalls.at(-1)
 
@@ -117,7 +118,8 @@ export function ResearchPanel({ detail, refreshKey, activeTurnStartedAt, onSkipC
             <span><b>当前动向</b>{latestCall ? `${toolLabel(latestCall.toolName)} · ${toolStatusLabel(latestCall.status)}` : '正在等待模型提出下一步动作'}</span>
             <span><b>本步骤耗时</b>{activeTurnStartedAt ? formatElapsed(clock - new Date(activeTurnStartedAt).getTime()) : '正在计算'}</span>
             <span><b>最近更新</b>{formatElapsed(clock - new Date(activeLoop.updatedAt).getTime())}前</span>
-            <span><b>调用进度</b>{activeLoop.toolCallCount}/{activeLoop.limits.maxToolCalls}</span>
+            <span><b>研究动作</b>{activeLoop.toolCallCount} 次</span>
+            <span><b>模型决策</b>{activeLoop.decisionRoundCount ?? 0}/{activeLoop.limits.maxDecisionRounds ?? '—'}</span>
             <span><b>搜索 / 读页</b>{activeLoop.searchCount}/{activeLoop.limits.maxSearches} · {activeLoop.pageReadCount}/{activeLoop.limits.maxPageReads}</span>
           </div>
           <p>{clock - new Date(activeLoop.updatedAt).getTime() > 20_000
@@ -265,8 +267,8 @@ function RoleWorkspace({ title, role, workspace, sessionId, participantId, disab
       <summary><div><strong>{title}</strong><span>{workspace.sources.length} 条资料 · {workspace.claims.length} 条暂定主张</span></div></summary>
       <div className="collapsible-body">
         {workspace.loopState && <div className="research-progress">
-          <strong>{['running', 'waiting-approval', 'summarizing'].includes(workspace.loopState.status) ? '研究中…' : '研究已记录'}</strong>
-          <span>工具 {workspace.loopState.toolCallCount}/{workspace.loopState.limits.maxToolCalls} · 搜索 {workspace.loopState.searchCount}/{workspace.loopState.limits.maxSearches} · 读页 {workspace.loopState.pageReadCount}/{workspace.loopState.limits.maxPageReads}</span>
+          <strong>{['running', 'waiting-approval', 'finalizing', 'summarizing'].includes(workspace.loopState.status) ? '研究中…' : '研究已记录'}</strong>
+          <span>研究动作 {workspace.loopState.toolCallCount} 次 · 决策 {workspace.loopState.decisionRoundCount ?? 0}/{workspace.loopState.limits.maxDecisionRounds ?? '—'} · 搜索 {workspace.loopState.searchCount}/{workspace.loopState.limits.maxSearches} · 读页 {workspace.loopState.pageReadCount}/{workspace.loopState.limits.maxPageReads}</span>
         </div>}
         <ResearchList title="研究目标" values={workspace.goals.map((item) => item.description)} />
         <ResearchList title="准备核实的问题" values={workspace.queries.map((item) => item.query)} />
@@ -314,7 +316,7 @@ function toolStatusLabel(status: string): string {
 }
 
 function researchLoopStatus(status: string): string {
-  return ({ running: '模型正在决定下一步', 'waiting-approval': '等待用户确认', summarizing: '正在汇总现有资料' } as Record<string, string>)[status] ?? status
+  return ({ running: '模型正在决定下一步', 'waiting-approval': '等待用户确认', finalizing: '探索结束，正在整理并发布成果', summarizing: '正在汇总现有资料' } as Record<string, string>)[status] ?? status
 }
 
 function plainToolSummary(call: RoleResearchWorkspaceDto['toolCalls'][number]): string {

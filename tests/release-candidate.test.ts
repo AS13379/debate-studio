@@ -31,7 +31,7 @@ describe('Release Candidate database lifecycle', () => {
     expect(initialized.ok).toBe(true)
     if (!initialized.ok) return
 
-    expect(initialized.value.migrations.currentVersion()).toEqual({ ok: true, value: 15 })
+    expect(initialized.value.migrations.currentVersion()).toEqual({ ok: true, value: 16 })
     expect(initialized.value.repositories.settings.set('release-probe', { ready: true })).toMatchObject({ ok: true })
     expect(initialized.value.repositories.settings.get('release-probe')).toEqual({ ok: true, value: { ready: true } })
     expect(initialized.value.backups.listBackups()).toEqual({ ok: true, value: [] })
@@ -41,14 +41,14 @@ describe('Release Candidate database lifecycle', () => {
   })
 
   for (const legacyVersion of [1, 5, 10, 12]) {
-    it(`upgrades schema v${legacyVersion} to v15 without losing supported records`, () => {
+    it(`upgrades schema v${legacyVersion} to the current version without losing supported records`, () => {
       const directory = temporaryDirectory()
       seedLegacyDatabase(directory, legacyVersion)
 
       const upgraded = initializePersistence({ appDataDirectory: directory })
       expect(upgraded.ok).toBe(true)
       if (!upgraded.ok) return
-      expect(upgraded.value.migrations.currentVersion()).toEqual({ ok: true, value: 15 })
+      expect(upgraded.value.migrations.currentVersion()).toEqual({ ok: true, value: 16 })
       expect(upgraded.value.database.get<{ topic: string }>('SELECT topic FROM debates WHERE id = ?', 'legacy-debate')).toEqual({
         ok: true, value: { topic: `v${legacyVersion} 保留辩题` }
       })
@@ -202,7 +202,7 @@ describe('Release Candidate packaging configuration', () => {
     const entitlements = readFileSync(join(root, 'build', 'entitlements.mac.plist'), 'utf8')
     const releaseWorkflow = readFileSync(join(root, '.github', 'workflows', 'macos-arm64-release.yml'), 'utf8')
 
-    expect(packageJson.version).toBe('0.5.0')
+    expect(packageJson.version).toBe('0.5.1')
     expect(packageJson.scripts['release:mac:arm64']).toContain('electron-builder --mac --arm64')
     expect(configuration).toContain('appId: com.leander.debatestudio')
     expect(configuration).toContain('from: build/icon.png')

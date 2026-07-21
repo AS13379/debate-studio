@@ -122,11 +122,29 @@ export type ResearchToolName =
   | 'finishResearch'
 
 export interface ResearchToolLimits {
+  /** Legacy aggregate action ceiling kept for settings compatibility and diagnostics. */
   maxToolCalls: number
   maxSearches: number
   maxPageReads: number
   maxBodyCharacters: number
+  /** Maximum model decisions during discovery before switching to local finalization tools. */
+  maxDecisionRounds?: number
+  /** Repeated rounds without a new source, page, note, claim or evidence trigger finalization. */
+  maxNoProgressRounds?: number
+  /** Finalization retains local tools but still has a generous loop guard. */
+  maxFinalizationRounds?: number
+  /** A quality target, not a requirement to publish unreliable material. */
+  targetEvidenceCount?: number
 }
+
+export type ResearchBudgetPhase = 'discovery' | 'finalizing'
+export type ResearchCompletionReason =
+  | 'model-finished'
+  | 'model-summary'
+  | 'decision-limit'
+  | 'no-progress'
+  | 'discovery-limit'
+  | 'finalization-limit'
 
 export interface ResearchToolCall extends OwnedResearchRecord {
   researchSessionId: string
@@ -147,8 +165,13 @@ export interface ResearchLoopState {
   ownerParticipantId: string
   role: ResearchOwnerRole
   mode: ResearchMode
-  status: 'idle' | 'running' | 'waiting-approval' | 'summarizing' | 'completed' | 'failed' | 'interrupted'
+  status: 'idle' | 'running' | 'waiting-approval' | 'finalizing' | 'summarizing' | 'completed' | 'failed' | 'interrupted'
   goal?: string
+  phase?: ResearchBudgetPhase
+  decisionRoundCount?: number
+  noProgressRoundCount?: number
+  finalizationRoundCount?: number
+  completionReason?: ResearchCompletionReason
   toolCallCount: number
   searchCount: number
   pageReadCount: number

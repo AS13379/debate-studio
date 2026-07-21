@@ -30,10 +30,11 @@ describe('research panel UI', () => {
   it('offers simple research presets instead of raw numeric limit inputs', () => {
     const html = renderToStaticMarkup(<ResearchPresetSelector value="balanced" onChange={() => undefined} />)
 
-    expect(html).toContain('精简')
+    expect(html).toContain('快速')
     expect(html).toContain('标准')
     expect(html).toContain('深入')
-    expect(html).toContain('更省额度')
+    expect(html).toContain('优先尽快开辩')
+    expect(html).not.toContain('省额度')
     expect(html).not.toContain('type="number"')
     expect(html).toContain('aria-pressed="true"')
     expect(researchPresetForLimits({ maxToolCalls: 5, maxSearches: 1, maxPageReads: 1, maxBodyCharacters: 15_000 })).toBe('quick')
@@ -42,5 +43,6 @@ describe('research panel UI', () => {
     // translates them to the faster budget automatically.
     expect(researchPresetForLimits({ maxToolCalls: 8, maxSearches: 2, maxPageReads: 2, maxBodyCharacters: 25_000 })).toBe('quick')
     expect(researchPresetForLimits({ maxToolCalls: 20, maxSearches: 5, maxPageReads: 5, maxBodyCharacters: 80_000 })).toBe('deep')
+    expect(researchPresetForLimits({ maxToolCalls: 64, maxSearches: 4, maxPageReads: 4, maxBodyCharacters: 80_000, maxDecisionRounds: 20, maxNoProgressRounds: 3, maxFinalizationRounds: 8, targetEvidenceCount: 2 })).toBe('balanced')
   })
 })

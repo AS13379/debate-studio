@@ -25,13 +25,7 @@ import type {
 import { SearchToolError } from './tavily-search-tool'
 import { WebPageFetcher, WebPageFetchError } from './web-page-fetcher'
 import { ResearchApprovalController } from './research-approval-controller'
-
-export const DEFAULT_RESEARCH_TOOL_LIMITS: ResearchToolLimits = {
-  maxToolCalls: 7,
-  maxSearches: 2,
-  maxPageReads: 2,
-  maxBodyCharacters: 30_000
-}
+import { ResearchBudgetPolicy } from './research-budget-policy'
 
 export interface ResearchToolLoopContext {
   debateSessionId: string
@@ -65,6 +59,7 @@ export interface ResearchToolLoopResult {
 interface ToolExecutionResult {
   content: string
   finished?: boolean
+  madeProgress?: boolean
 }
 
 export class ResearchToolLoop {
@@ -77,7 +72,8 @@ export class ResearchToolLoop {
   }
 
   async run(baseRequest: UnifiedRequest, context: ResearchToolLoopContext): Promise<ResearchToolLoopResult> {
-    const limits = { ...DEFAULT_RESEARCH_TOOL_LIMITS, ...context.limits }
+    const budget = new ResearchBudgetPolicy(context.limits)
+    const limits = budget.limits
     let state: ResearchLoopState = {
       debateSessionId: context.debateSessionId,
       researchSessionId: context.researchSession.id,
@@ -86,6 +82,10 @@ export class ResearchToolLoop {
       mode: context.mode,
       status: 'running',
       goal: context.goal,
+      phase: 'discovery',
+      decisionRoundCount: 0,
+      noProgressRoundCount: 0,
+      finalizationRoundCount: 0,
       toolCallCount: 0,
       searchCount: 0,
       pageReadCount: 0,
@@ -100,22 +100,49 @@ export class ResearchToolLoop {
         { role: 'user', content: this.loopInstructions(context, limits) }
       ]
       let finalContent = ''
+      let completionReason: ResearchLoopState['completionReason']
 
-      while (!baseRequest.signal.aborted && state.toolCallCount < limits.maxToolCalls) {
-        state = { ...state, status: 'running', updatedAt: this.timestamp() }
+      while (!baseRequest.signal.aborted) {
+        const transition = budget.transition(state)
+        if (transition.phase === 'finalizing' && state.phase !== 'finalizing') {
+          state = {
+            ...state,
+            phase: 'finalizing',
+            status: 'finalizing',
+            completionReason: transition.reason,
+            updatedAt: this.timestamp()
+          }
+          completionReason = transition.reason
+          this.persistState(state)
+          this.progress(this.finalizationActivity(transition.reason), state)
+          messages.push({
+            role: 'user',
+            content: '探索阶段已经结束。不要再搜索或读取新网页。请使用现有资料保存必要笔记与主张；有可靠来源时发布证据，然后调用 finishResearch。'
+          })
+          state = await this.publishRecommendedEvidence(context, state, baseRequest.signal)
+        }
+        if (state.phase === 'finalizing' && !budget.canRunAnotherFinalizationRound(state)) {
+          completionReason = 'finalization-limit'
+          break
+        }
+        state = { ...state, status: state.phase === 'finalizing' ? 'finalizing' : 'running', updatedAt: this.timestamp() }
         this.persistState(state)
+        const availableNames = budget.availableToolNames(state)
+        const availableTools = RESEARCH_TOOLS.filter((tool) => availableNames.has(tool.name as ResearchToolName))
         const response = await this.awaitModelResponse({
           ...baseRequest,
           stream: true,
           messages,
-          tools: context.supportsToolCalling ? [...RESEARCH_TOOLS] : undefined,
+          tools: context.supportsToolCalling ? availableTools : undefined,
           toolChoice: context.supportsToolCalling ? 'auto' : undefined
         }, state, this.modelActivity(state, context.role))
+        state = { ...budget.recordModelRound(state), updatedAt: this.timestamp() }
         const toolCalls = context.supportsToolCalling
           ? response.toolCalls ?? []
           : [this.parseFallback(response.content)]
         if (!toolCalls.length) {
           finalContent = response.content
+          completionReason = 'model-summary'
           break
         }
         const visibleModelProgress = response.content.trim()
@@ -123,7 +150,7 @@ export class ResearchToolLoop {
           this.progress(`模型说明：${visibleModelProgress.slice(0, 600)}`, state)
         }
 
-        const candidates = toolCalls.slice(0, Math.min(2, limits.maxToolCalls - state.toolCallCount))
+        const candidates = toolCalls.slice(0, 2)
         const remainingSearches = Math.max(0, limits.maxSearches - state.searchCount)
         const remainingPageReads = Math.max(0, limits.maxPageReads - state.pageReadCount)
         const selectedToolCalls = candidates.length > 1 && candidates.every((call) => call.name === 'searchWeb')
@@ -177,20 +204,27 @@ export class ResearchToolLoop {
             role: 'tool', name: selectedToolCalls[index].name,
             toolCallId: selectedToolCalls[index].id, content: item.result.content
           }))
+          state = budget.recordProgress(state, executed.some((item) => item.result.madeProgress === true))
         } else {
+          let roundMadeProgress = false
           for (const toolCall of selectedToolCalls) {
             state = { ...state, toolCallCount: state.toolCallCount + 1, updatedAt: this.timestamp() }
             const executed = await this.execute(toolCall, context, state, baseRequest.signal)
             state = executed.state
+            roundMadeProgress ||= executed.result.madeProgress === true
             messages.push(context.supportsToolCalling
               ? { role: 'tool', name: toolCall.name, toolCallId: toolCall.id, content: executed.result.content }
               : { role: 'user', content: `工具 ${toolCall.name} 返回：${executed.result.content}\n请继续输出下一个 JSON 工具调用，或调用 finishResearch。` })
             if (executed.result.finished) {
+              state = await this.publishRecommendedEvidence(context, state, baseRequest.signal)
               finalContent = executed.result.content
+              completionReason = 'model-finished'
               break
             }
           }
+          state = budget.recordProgress(state, roundMadeProgress)
         }
+        this.persistState({ ...state, updatedAt: this.timestamp() })
         if (finalContent) break
       }
 
@@ -198,6 +232,7 @@ export class ResearchToolLoop {
         throw new ModelAdapterError({ code: 'CANCELLED', message: 'Research tool loop was cancelled.', titleZh: '研究已取消', descriptionZh: '已保留完成的搜索、网页和研究记录。', retryable: true })
       }
       if (!finalContent) {
+        state = await this.publishRecommendedEvidence(context, state, baseRequest.signal)
         state = { ...state, status: 'summarizing', updatedAt: this.timestamp() }
         this.persistState(state)
         const summary = await this.awaitModelResponse({
@@ -207,12 +242,12 @@ export class ResearchToolLoop {
           toolChoice: undefined,
           messages: [...messages, {
             role: 'user',
-            content: '工具调用已达上限。请基于已有工具结果总结：已选资料、来源评价、暂定主张和未解决问题。不要声称执行了新工具。'
+            content: '研究探索与整理阶段已经结束。请基于已有工具结果总结：已选资料、来源评价、暂定主张、已发布证据和未解决问题。不要声称执行了新工具。'
           }]
-        }, state, '工具预算已用完，正在让模型用现有资料完成总结')
+        }, state, '防循环上限已触发，正在用已有资料完成最终总结')
         finalContent = summary.content
       }
-      state = { ...state, status: 'completed', updatedAt: this.timestamp() }
+      state = { ...state, status: 'completed', completionReason: completionReason ?? 'model-summary', updatedAt: this.timestamp() }
       this.persistState(state)
       return { content: finalContent, state }
     } catch (cause) {
@@ -267,9 +302,46 @@ export class ResearchToolLoop {
 
   private modelActivity(state: ResearchLoopState, role: ResearchOwnerRole): string {
     const actor = role === 'moderator' ? '主持人' : role === 'affirmative' ? '正方' : '反方'
+    if (state.phase === 'finalizing') return `${actor}模型正在整理已有资料、形成主张并发布可用证据`
     if (state.pageReadCount > 0) return `${actor}模型正在阅读已取得的正文并决定是否保存主张或发布证据`
     if (state.searchCount > 0) return `${actor}模型正在查看搜索结果并选择要读取的网页`
     return `${actor}模型正在制定第一步搜索动作`
+  }
+
+  private finalizationActivity(reason: ResearchLoopState['completionReason']): string {
+    if (reason === 'no-progress') return '连续多轮没有获得新资料，已停止重复探索并进入成果整理'
+    if (reason === 'decision-limit') return '研究决策已达到防循环上限，现有资料仍可继续整理和发布'
+    return '网页探索已达到当前深度，现有资料仍可继续整理和发布'
+  }
+
+  private async publishRecommendedEvidence(
+    context: ResearchToolLoopContext,
+    state: ResearchLoopState,
+    signal: AbortSignal
+  ): Promise<ResearchLoopState> {
+    if (context.mode !== 'automatic' || context.role === 'moderator' || signal.aborted) return state
+    const target = state.limits.targetEvidenceCount ?? 1
+    const existingCount = this.unwrap(this.dependencies.repository.countEvidenceByRole(context.debateSessionId, context.role))
+    if (existingCount >= target) return state
+    const evaluations = this.unwrap(this.dependencies.repository.listSourceEvaluations(context.debateSessionId))
+      .filter((item) => item.ownerParticipantId === context.researchSession.ownerParticipantId)
+      .filter((item) => item.recommendPublication && item.basedOn === 'full-text')
+    const existing = new Set(this.unwrap(this.dependencies.repository.listEvidence(context.debateSessionId))
+      .map((item) => item.sourceId).filter((item): item is string => Boolean(item)))
+    const candidates = evaluations.filter((item) => !existing.has(item.sourceId)).slice(0, target - existingCount)
+    let nextState = state
+    for (const evaluation of candidates) {
+      const toolCall: UnifiedToolCall = {
+        id: this.createId(),
+        name: 'publishEvidence',
+        arguments: { sourceId: evaluation.sourceId }
+      }
+      nextState = { ...nextState, toolCallCount: nextState.toolCallCount + 1, updatedAt: this.timestamp() }
+      const executed = await this.execute(toolCall, context, nextState, signal)
+      nextState = executed.state
+      this.progress(`自动整理：${executed.result.content}`, nextState)
+    }
+    return nextState
   }
 
   private async execute(
@@ -285,7 +357,7 @@ export class ResearchToolLoop {
     if (cached.value) {
       const message = `已复用先前完成的 ${toolName}：${cached.value.resultSummary ?? '已完成'}。`
       this.progress(message, state)
-      return { result: { content: message, finished: toolName === 'finishResearch' }, state }
+      return { result: { content: message, finished: toolName === 'finishResearch', madeProgress: false }, state }
     }
 
     const call: ResearchToolCall = {
@@ -315,7 +387,7 @@ export class ResearchToolLoop {
         this.saveCall(denied)
         state = { ...state, status: 'running', updatedAt: this.timestamp() }
         this.persistState(state)
-        return { result: { content: denied.resultSummary }, state }
+        return { result: { content: denied.resultSummary, madeProgress: false }, state }
       }
       call.status = 'running'
       this.saveCall(call)
@@ -325,10 +397,11 @@ export class ResearchToolLoop {
     try {
       const outcome = await this.invokeTool(toolName, toolCall.arguments, context, state, signal)
       state = outcome.state
-      this.saveCall({ ...call, status: 'completed', resultSummary: outcome.result.content.slice(0, 4_000), completedAt: this.timestamp() })
+      const result = { ...outcome.result, madeProgress: outcome.result.madeProgress ?? true }
+      this.saveCall({ ...call, status: 'completed', resultSummary: result.content.slice(0, 4_000), completedAt: this.timestamp() })
       this.persistState(state)
-      this.progress(`${toolName}：${outcome.result.content.slice(0, 180)}`, state)
-      return outcome
+      this.progress(`${toolName}：${result.content.slice(0, 180)}`, state)
+      return { ...outcome, result }
     } catch (cause) {
       if (signal.aborted) {
         this.saveCall({ ...call, status: 'interrupted', errorCode: 'RESEARCH_CANCELLED', errorDescriptionZh: '研究已取消，已保留完成的搜索和网页。', completedAt: this.timestamp() })
@@ -340,7 +413,7 @@ export class ResearchToolLoop {
       this.saveCall({ ...call, status: 'failed', errorCode: normalized.code, errorDescriptionZh: normalized.descriptionZh, completedAt: this.timestamp() })
       state = { ...state, status: 'running', updatedAt: this.timestamp() }
       this.persistState(state)
-      return { result: { content: `工具失败（${normalized.code}）：${normalized.descriptionZh}。可以调整搜索词、改读其他来源或结束研究。` }, state }
+      return { result: { content: `工具失败（${normalized.code}）：${normalized.descriptionZh}。可以调整搜索词、改读其他来源或结束研究。`, madeProgress: false }, state }
     }
   }
 
@@ -357,7 +430,7 @@ export class ResearchToolLoop {
       case 'saveResearchNote': return this.saveResearchNote(args, context, state)
       case 'saveProvisionalClaim': return this.saveClaim(args, context, state)
       case 'publishEvidence': return this.publishEvidence(args, context, state)
-      case 'finishResearch': return { result: { content: this.string(args.summary, '研究已完成。'), finished: true }, state }
+      case 'finishResearch': return { result: { content: this.string(args.summary, '研究已完成。'), finished: true, madeProgress: true }, state }
     }
   }
 
@@ -486,7 +559,7 @@ export class ResearchToolLoop {
     const sourceId = this.requiredString(args.sourceId, '来源 ID')
     const source = this.assertVisibleSource(sourceId, context)
     const existing = this.unwrap(this.dependencies.repository.listEvidence(context.debateSessionId)).find((item) => item.sourceId === sourceId)
-    if (existing) return { result: { content: `该来源已发布为 ${existing.publicCode}。` }, state }
+    if (existing) return { result: { content: `该来源已发布为 ${existing.publicCode}。`, madeProgress: false }, state }
     const page = this.unwrap(this.dependencies.repository.findFetchedPageBySource(sourceId))
     const verified = page?.status === 'completed'
     const count = this.unwrap(this.dependencies.repository.countEvidenceByRole(context.debateSessionId, context.role))
@@ -550,11 +623,11 @@ export class ResearchToolLoop {
   private loopInstructions(context: ResearchToolLoopContext, limits: ResearchToolLimits): string {
     const completionPriority = context.role === 'moderator'
       ? '主持人只整理公共方向和事实边界，不要代替任一方形成完整论证。'
-      : '在总工具次数用完前预留至少 2 次：有可靠来源时必须先用 publishEvidence 发布至少一条本方证据，再用 finishResearch 结束；不要把所有次数用在重复搜索或重复读页上。'
+      : `找到可靠来源后应及时保存研究笔记并发布证据，目标至少 ${limits.targetEvidenceCount ?? 1} 条；不要反复搜索相同问题。`
     return [
       '你正在执行受控的自主研究。只输出下一个工具调用，不要输出隐藏思维链。',
       `当前角色：${context.role}；研究目标：${context.goal ?? context.topic}。`,
-      `上限：总工具 ${limits.maxToolCalls}，搜索 ${limits.maxSearches}，读页 ${limits.maxPageReads}，正文总字符 ${limits.maxBodyCharacters}。`,
+      `探索护栏：最多 ${limits.maxDecisionRounds ?? limits.maxToolCalls} 轮模型决策、${limits.maxSearches} 次搜索、${limits.maxPageReads} 次网页读取、${limits.maxBodyCharacters} 个正文字符。护栏用于防止重复调用和长时间空转，不限制保存笔记、保存主张、发布证据或正常结束研究。`,
       '搜索摘要不等于已核验正文。发布前应先 readWebPage；如未读取仍发布，系统会明确标记“仅基于摘要”。',
       completionPriority,
       context.supportsToolCalling ? '使用提供的结构化工具。' : `模型不支持原生工具调用。每次必须只返回 JSON：{"tool":"searchWeb","arguments":{"query":"..."}}。最后返回 {"tool":"finishResearch","arguments":{"summary":"..."}}。`

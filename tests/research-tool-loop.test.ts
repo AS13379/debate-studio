@@ -250,7 +250,7 @@ describe('ResearchToolLoop', () => {
     seeded.persistence.database.close()
   })
 
-  it('instructs debate sides to reserve calls for publishing evidence and finishing', async () => {
+  it('explains that anti-loop guards do not block saving, publishing or finishing', async () => {
     const seeded = seed()
     let observedInstruction: string | undefined
     const adapter = new ScriptedAdapter((_index, currentRequest) => {
@@ -260,8 +260,47 @@ describe('ResearchToolLoop', () => {
 
     await loop(seeded, adapter, new RecordingSearchTool()).run(request(), context(seeded.researchSession, 'automatic'))
 
-    expect(observedInstruction).toContain('预留至少 2 次')
-    expect(observedInstruction).toContain('publishEvidence')
+    expect(observedInstruction).toContain('防止重复调用和长时间空转')
+    expect(observedInstruction).toContain('不限制保存笔记、保存主张、发布证据或正常结束研究')
+    seeded.persistence.database.close()
+  })
+
+  it('enters finalization at the discovery decision guard and auto-publishes a recommended full-text source', async () => {
+    const seeded = seed()
+    const adapter = new ScriptedAdapter((index, currentRequest) => {
+      const sources = seeded.persistence.repositories.research.listSources('session-1')
+      const sourceId = sources.ok ? sources.value[0]?.id : undefined
+      if (index === 3) {
+        const toolNames = currentRequest.tools?.map((item) => item.name) ?? []
+        expect(toolNames).not.toContain('searchWeb')
+        expect(toolNames).not.toContain('readWebPage')
+        expect(toolNames).toContain('publishEvidence')
+        expect(toolNames).toContain('finishResearch')
+      }
+      return [
+        tool('searchWeb', { query: '可靠资料' }),
+        tool('readWebPage', { sourceId }),
+        tool('saveResearchNote', { sourceId, content: '正文已核验。', evaluation: {
+          purpose: '核验主张', relevance: '直接相关', stance: '支持正方', sourceType: '官方机构',
+          credibility: '来源可靠', limitations: '范围有限', recommendPublication: true
+        } }),
+        tool('finishResearch', { summary: '已整理并发布可用证据。' })
+      ][index]!
+    })
+
+    const result = await loop(seeded, adapter, new RecordingSearchTool()).run(request(), {
+      ...context(seeded.researchSession, 'automatic'),
+      limits: {
+        maxToolCalls: 2, maxSearches: 1, maxPageReads: 1, maxBodyCharacters: 10_000,
+        maxDecisionRounds: 3, maxNoProgressRounds: 2, maxFinalizationRounds: 4, targetEvidenceCount: 1
+      }
+    })
+
+    expect(result.content).toContain('已整理')
+    expect(result.state.toolCallCount).toBeGreaterThan(2)
+    expect(seeded.persistence.repositories.research.listEvidence('session-1')).toMatchObject({
+      ok: true, value: [expect.objectContaining({ publicCode: 'A-S1' })]
+    })
     seeded.persistence.database.close()
   })
 

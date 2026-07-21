@@ -6,8 +6,9 @@ export { TavilySearchTool, SearchConnectionTestService, SearchToolError } from '
 export type { SearchConnectionTestResult, SearchFetch, SearchToolErrorCode, TavilySearchToolOptions } from './tavily-search-tool'
 export type { SearchCredentialStore } from './search-credential-store'
 export { ResearchApprovalController } from './research-approval-controller'
-export { DEFAULT_RESEARCH_TOOL_LIMITS, RESEARCH_TOOLS, ResearchToolLoop } from './research-tool-loop'
+export { RESEARCH_TOOLS, ResearchToolLoop } from './research-tool-loop'
 export type { ResearchToolLoopContext, ResearchToolLoopDependencies, ResearchToolLoopResult } from './research-tool-loop'
+export { DEFAULT_RESEARCH_TOOL_LIMITS, RESEARCH_BUDGET_PRESETS, ResearchBudgetPolicy, normalizeResearchToolLimits } from './research-budget-policy'
 export { WebContentExtractor, WebContentExtractionError } from './web-content-extractor'
 export type { ExtractedWebContent } from './web-content-extractor'
 export { WebPageFetcher, WebPageFetchError } from './web-page-fetcher'
@@ -46,6 +47,8 @@ export type {
   PublishedEvidence,
   ResearchAsset,
   ResearchAssetKind,
+  ResearchBudgetPhase,
+  ResearchCompletionReason,
   ResearchGoal,
   ResearchLoopState,
   ResearchMode,
