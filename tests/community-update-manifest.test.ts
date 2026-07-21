@@ -25,5 +25,6 @@ describe('community update manifest', () => {
     value = signedManifest({ platform: 'darwin' }); const bad = { ...value.manifest, arch: 'x64' }; expect(() => parseAndVerifyManifest(bad, '0.4.9', value.publicKey)).toThrow(/PLATFORM/)
     value = signedManifest({ size: 301 * 1024 * 1024 }); expect(() => parseAndVerifyManifest(value.manifest, '0.4.9', value.publicKey)).toThrow(/SIZE/)
   })
+  it('allows a signed older manifest only while discovering whether an update exists', () => { const value = signedManifest(); expect(parseAndVerifyManifest(value.manifest, '0.5.1', value.publicKey, { allowOlder: true }).version).toBe('0.5.0') })
   it('uses strict semantic ordering and resolves only a running app bundle', () => { expect(compareSemver('0.5.0', '0.4.99')).toBeGreaterThan(0); expect(resolveRunningAppPath('/Applications/Debate Studio.app/Contents/MacOS/Debate Studio')).toBe('/Applications/Debate Studio.app'); expect(resolveRunningAppPath('/tmp/electron')).toBe('') })
 })

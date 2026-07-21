@@ -1,21 +1,15 @@
-# Debate Studio v0.5.1
+# Debate Studio v0.5.2
 
-## Highlights
+## 社区更新修复
 
-- Replaces the single research tool quota with a staged anti-loop policy.
-- Limits repeated model decisions, searches, page reads and downloaded text during exploration without blocking local research finalization.
-- Keeps note saving, claim drafting, evidence publication and normal research completion available after exploration limits are reached.
-- Automatically publishes reliable full-text sources that the model explicitly recommended before automatic research completes.
-- Adds Quick, Standard and Deep presets focused on waiting time and source coverage rather than API cost reduction.
-- Persists research phase, anti-loop counters and completion reasons through SQLite migration v16.
+- 修复更新包重复下载与末段校验失败时缺少具体反馈的问题。
+- 增加分阶段校验错误码、缓存包 Finder 入口和重新下载并校验操作。
+- 设置中新增可选的自动下载开关；自动安装仍需手动确认。
 
-## Compatibility
+## 隐私
 
-Existing research presets are migrated automatically. SQLite data, model configuration, prompts, API credentials, debate history and research records remain in the same local application data directory.
-
-## Privacy
-
-All debate and research data remains local. Debate Studio does not upload API keys, databases, debate content, research material, logs or user identity.
+- 自动更新只访问 GitHub Releases，只替换程序文件。
+- 不读取或修改本地模型凭据、SQLite 数据库、辩论和研究记录。
 
 ## macOS notice
 

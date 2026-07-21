@@ -53,6 +53,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .update-cache-card p { margin: 0; color: #747782; line-height: 1.55; }
 .update-toggle { display: flex; align-items: center; gap: 9px; min-height: 44px; font-weight: 700; }
 .update-toggle input { width: 18px; height: 18px; }
+.update-toggle-group { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 22px; }
 .update-policy-note { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 16px; border-top: 1px solid #e1e2e7; }
 .update-release-card, .update-download-card { display: grid; gap: 18px; padding: 24px; }
 .update-release-name { overflow-wrap: anywhere; }
@@ -61,6 +62,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .update-progress span { display: block; height: 100%; background: linear-gradient(90deg, #6554da, #a496ff); border-radius: inherit; transition: width .2s ease; }
 .update-download-card .section-heading > strong { font-size: 22px; font-variant-numeric: tabular-nums; }
 .update-error-card { border-color: #e5aeb5; background: #fff4f5; }
+.update-error-card small { display: block; margin-top: 8px; color: #8f555d; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
 .update-build-notice { margin: 0; padding: 0 4px; color: #747782; font-size: 12px; line-height: 1.55; }
 .onboarding-settings-panel { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 28px; }
 .onboarding-settings-panel h2 { margin: 7px 0 8px; }
@@ -871,6 +873,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .update-release-notes { background: #1b1d22; }
   .update-progress { background: #343740; }
   .update-error-card { border-color: #76434a; background: #351f23; }
+  .update-error-card small { color: #d7a8ad; }
 }
 
 @media (max-width: 900px) {
@@ -889,5 +892,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .prompt-version-list article { align-items: stretch; flex-direction: column; }
   .update-summary-card, .update-preferences-card, .update-ready-card, .update-error-card { grid-template-columns: 1fr; }
   .update-policy-note { grid-column: 1; }
+  .update-toggle-group { justify-content: flex-start; }
   .update-summary-card > .button, .update-ready-card > .button, .update-error-card > .button { width: 100%; }
 }

@@ -11,6 +11,7 @@ const UPDATE_PREFERENCES_KEY = 'application.update.preferences'
 
 export interface ApplicationUpdatePreferences {
   automaticCheckEnabled: boolean
+  automaticDownloadEnabled: boolean
 }
 
 export interface CommunityUpdatePlatform {
@@ -52,7 +53,7 @@ export class ApplicationUpdateService {
       currentVersion: options.currentVersion,
       supported: options.supported && Boolean(options.platform),
       automaticCheckEnabled: stored.ok ? stored.value?.automaticCheckEnabled !== false : true,
-      automaticDownloadEnabled: false,
+      automaticDownloadEnabled: stored.ok ? stored.value?.automaticDownloadEnabled === true : false,
       status: 'idle',
       messageZh: '尚未检查更新。',
       verificationStatus: 'not-verified',
@@ -92,6 +93,7 @@ export class ApplicationUpdateService {
         this.updateState({ status: 'up-to-date', messageZh: '当前已是最新版本。', lastCheckedAt: this.now().toISOString(), availableVersion: undefined, error: undefined })
       } else {
         this.updateState({ status: 'available', messageZh: `发现新版本 v${info.version}。`, availableVersion: info.version, releaseName: info.releaseName, releaseNotes: info.releaseNotes, releaseDate: info.releaseDate, updatePackageSizeBytes: info.size, lastCheckedAt: this.now().toISOString(), error: undefined })
+        if (this.state.automaticDownloadEnabled) return this.downloadUpdate()
       }
       return { ok: true, value: this.getState() }
     } catch (cause) {
@@ -102,12 +104,12 @@ export class ApplicationUpdateService {
   setPreferences(input: ApplicationUpdatePreferences): ApplicationUpdateResultDto<ApplicationUpdateStateDto> {
     const saved = this.options.settings.set(UPDATE_PREFERENCES_KEY, input)
     if (!saved.ok) return this.setFailure('UPDATE_PREFERENCES_SAVE_FAILED', '保存更新设置失败', '无法保存自动检查更新偏好，请稍后重试。', true)
-    this.updateState({ automaticCheckEnabled: input.automaticCheckEnabled })
+    this.updateState({ automaticCheckEnabled: input.automaticCheckEnabled, automaticDownloadEnabled: input.automaticDownloadEnabled })
     return { ok: true, value: this.getState() }
   }
 
   async downloadUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> {
-    if (!this.options.platform || !this.checkedInfo || this.state.status !== 'available') return this.failure('UPDATE_NOT_AVAILABLE', '没有可下载的更新', '请先检查更新。', false)
+    if (!this.options.platform || !this.checkedInfo || (this.state.status !== 'available' && this.state.status !== 'error')) return this.failure('UPDATE_NOT_AVAILABLE', '没有可下载的更新', '请先检查更新。', false)
     const controller = new AbortController()
     this.downloadAbort = controller
     const startedAt = Date.now()
@@ -124,7 +126,8 @@ export class ApplicationUpdateService {
         this.updateState({ status: 'available', messageZh: '已取消下载，可以稍后重新开始。', progress: undefined })
         return { ok: true, value: this.getState() }
       }
-      return this.failFrom('UPDATE_DOWNLOAD_FAILED', '下载或校验更新失败', cause, true)
+      const cacheSizeBytes = await this.options.platform.cacheSize().catch(() => this.state.cacheSizeBytes)
+      return this.failFrom('UPDATE_DOWNLOAD_FAILED', '下载或校验更新失败', cause, true, 'error', { cacheSizeBytes, verificationStatus: 'failed' })
     } finally { this.downloadAbort = undefined }
   }
 
@@ -163,26 +166,34 @@ export class ApplicationUpdateService {
     try { await action(); return { ok: true, value: this.getState() } } catch (cause) { return this.failFrom(code, title, cause, true) }
   }
   private updateState(patch: Partial<ApplicationUpdateStateDto>): void { this.state = { ...this.state, ...patch }; const snapshot = this.getState(); for (const listener of this.listeners) listener(snapshot) }
-  private failFrom(code: string, title: string, cause: unknown, retryable: boolean, status: ApplicationUpdateStateDto['status'] = 'error'): ApplicationUpdateResultDto<ApplicationUpdateStateDto> {
-    this.options.logger.warn(title, { source: 'application-update', metadata: { code } })
+  private failFrom(code: string, title: string, cause: unknown, retryable: boolean, status: ApplicationUpdateStateDto['status'] = 'error', patch: Partial<ApplicationUpdateStateDto> = {}): ApplicationUpdateResultDto<ApplicationUpdateStateDto> {
+    const detailCode = safeUpdateFailureCode(cause)
+    this.options.logger.warn(title, { source: 'application-update', metadata: { code, detailCode } })
     const description = friendlyUpdateError(cause)
-    const error = updateError(code, title, description, retryable)
-    this.updateState({ status, messageZh: description, error, progress: undefined })
+    const error = updateError(code, title, description, retryable, detailCode)
+    this.updateState({ status, messageZh: description, error, progress: undefined, ...patch })
     return { ok: false, error }
   }
   private setFailure(code: string, title: string, description: string, retryable: boolean): ApplicationUpdateResultDto<ApplicationUpdateStateDto> { const error = updateError(code, title, description, retryable); this.updateState({ status: 'error', messageZh: description, error, progress: undefined }); return { ok: false, error } }
   private failure(code: string, title: string, description: string, retryable: boolean): ApplicationUpdateResultDto<ApplicationUpdateStateDto> { return { ok: false, error: updateError(code, title, description, retryable) } }
 }
 
-function updateError(code: string, titleZh: string, descriptionZh: string, retryable: boolean): ApplicationUpdateErrorDto { return { code, titleZh, descriptionZh, retryable } }
+function updateError(code: string, titleZh: string, descriptionZh: string, retryable: boolean, detailCode?: string): ApplicationUpdateErrorDto { return { code, titleZh, descriptionZh, retryable, detailCode } }
+function safeUpdateFailureCode(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : String(cause ?? '')
+  return message.match(/[A-Z][A-Z0-9_]{2,80}/)?.[0] ?? 'UNKNOWN_UPDATE_ERROR'
+}
 function friendlyUpdateError(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause ?? '')
   if (/ENOTFOUND|fetch|network/i.test(message)) return '无法连接 GitHub Releases，请检查网络后重试。'
-  if (/SIGNATURE/i.test(message)) return '更新包签名无效，已删除临时文件，不会安装。'
-  if (/HASH|SIZE/i.test(message)) return '更新包完整性校验失败，已删除临时文件。'
+  if (/SIGNATURE/i.test(message)) return '更新包签名无效，已停止安装；可以改用 GitHub Release 中的 DMG。'
+  if (/HASH|SIZE/i.test(message)) return '更新包大小或 SHA256 不一致，已停止安装；请重新下载。'
+  if (/ARCHIVE_PATH|ARCHIVE_SYMLINK/i.test(message)) return '更新包包含不安全路径，已停止安装；现有应用没有被修改。'
+  if (/ARCHIVE_LIST|ARCHIVE_EXTRACT|ARCHIVE_TREE/i.test(message)) return '更新包已下载，但无法完整解压或校验目录；可以在 Finder 中查看缓存包或重新下载。'
+  if (/APP_BUNDLE|BUNDLE_ID|BUNDLE_VERSION|PLIST/i.test(message)) return '更新包已下载，但应用身份或版本校验未通过；可以在 Finder 中查看缓存包或改用 DMG。'
   if (/READ_ONLY|NOT_WRITABLE|DMG/i.test(message)) return '当前应用位置不可写，请打开最新版 DMG 手动覆盖安装。'
   if (/TIMEOUT/i.test(message)) return '安装准备超时，应用没有退出，已恢复按钮供重试。'
-  return '社区更新暂时无法完成；现有应用和本地数据没有被修改。'
+  return `更新包处理在 ${safeUpdateFailureCode(cause)} 步骤失败；现有应用和本地数据没有被修改。`
 }
 function cloneState(state: ApplicationUpdateStateDto): ApplicationUpdateStateDto { return { ...state, progress: state.progress ? { ...state.progress } : undefined, error: state.error ? { ...state.error } : undefined } }
 

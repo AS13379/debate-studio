@@ -46,8 +46,8 @@ export function ApplicationUpdatePage() {
     if (action === 'show-in-finder') void run(() => window.debateStudio.showDownloadedUpdateInFinder())
     if (action === 'open-release') void run(() => window.debateStudio.openLatestRelease())
     if (action === 'clear-cache') void run(() => window.debateStudio.clearApplicationUpdateCache())
-  }} onAutomaticCheckChange={(automaticCheckEnabled) => {
-    void run(async () => window.debateStudio.setApplicationUpdatePreferences({ automaticCheckEnabled }))
+  }} onPreferencesChange={(preferences) => {
+    void run(async () => window.debateStudio.setApplicationUpdatePreferences(preferences))
   }} />
 }
 
@@ -55,10 +55,10 @@ interface ApplicationUpdatePanelProps {
   state: ApplicationUpdateStateDto
   busy?: boolean
   onAction(action: 'check' | 'download' | 'cancel' | 'defer' | 'install' | 'retry-install' | 'show-in-finder' | 'open-release' | 'clear-cache'): void
-  onAutomaticCheckChange(enabled: boolean): void
+  onPreferencesChange(preferences: { automaticCheckEnabled: boolean; automaticDownloadEnabled: boolean }): void
 }
 
-export function ApplicationUpdatePanel({ state, busy = false, onAction, onAutomaticCheckChange }: ApplicationUpdatePanelProps) {
+export function ApplicationUpdatePanel({ state, busy = false, onAction, onPreferencesChange }: ApplicationUpdatePanelProps) {
   const checking = state.status === 'checking'
   const downloading = state.status === 'downloading'
   return (
@@ -76,9 +76,12 @@ export function ApplicationUpdatePanel({ state, busy = false, onAction, onAutoma
         </button>
       </section>
       <section className="panel update-preferences-card">
-        <div><h3>更新偏好</h3><p>启动后在后台检查，不会阻塞窗口，也不会自动下载安装包。</p></div>
-        <label className="update-toggle"><input type="checkbox" checked={state.automaticCheckEnabled} onChange={(event) => onAutomaticCheckChange(event.target.checked)} /><span>自动检查更新</span></label>
-        <div className="update-policy-note"><strong>自动下载：关闭</strong><span>发现新版本后由你决定何时下载和安装。</span></div>
+        <div><h3>更新偏好</h3><p>后台检查不会阻塞窗口；是否自动下载由你决定，安装始终需要手动确认。</p></div>
+        <div className="update-toggle-group">
+          <label className="update-toggle"><input type="checkbox" checked={state.automaticCheckEnabled} onChange={(event) => onPreferencesChange({ automaticCheckEnabled: event.target.checked, automaticDownloadEnabled: state.automaticDownloadEnabled })} /><span>自动检查更新</span></label>
+          <label className="update-toggle"><input type="checkbox" checked={state.automaticDownloadEnabled} onChange={(event) => onPreferencesChange({ automaticCheckEnabled: state.automaticCheckEnabled, automaticDownloadEnabled: event.target.checked })} /><span>发现新版后自动下载</span></label>
+        </div>
+        <div className="update-policy-note"><strong>自动下载：{state.automaticDownloadEnabled ? '开启' : '关闭'}</strong><span>{state.automaticDownloadEnabled ? '发现新版本后自动下载并校验，完成后由你决定何时安装。' : '发现新版本后由你决定何时下载和安装。'}</span></div>
       </section>
       {state.status === 'available' && (
         <section className="panel update-release-card">
@@ -102,7 +105,7 @@ export function ApplicationUpdatePanel({ state, busy = false, onAction, onAutoma
         <section className="panel update-ready-card"><div><h3>{state.status === 'preparing-install' ? '正在验证更新' : '即将重启安装'}</h3><p>{state.messageZh}</p></div><span className="thinking-shimmer">请稍候…</span></section>
       )}
       {(state.status === 'error' || state.status === 'install-failed' || state.status === 'rolled-back') && (
-        <section className="panel update-error-card"><div><h3>{state.error?.titleZh ?? '更新失败'}</h3><p>{state.error?.descriptionZh ?? state.messageZh}</p></div><div className="button-row">{(state.status === 'install-failed' || state.status === 'rolled-back') && <button className="button secondary" disabled={busy} onClick={() => onAction('retry-install')}>重试安装</button>}<button className="button secondary" disabled={busy} onClick={() => onAction('open-release')}>手动下载 DMG</button></div></section>
+        <section className="panel update-error-card"><div><h3>{state.error?.titleZh ?? '更新失败'}</h3><p>{state.error?.descriptionZh ?? state.messageZh}</p>{state.error?.detailCode && <small>校验步骤：{state.error.detailCode}</small>}</div><div className="button-row">{state.status === 'error' && state.availableVersion && <button className="button secondary" disabled={busy} onClick={() => onAction('download')}>重新下载并校验</button>}{state.cacheSizeBytes > 0 && <button className="button secondary" disabled={busy} onClick={() => onAction('show-in-finder')}>在 Finder 中显示</button>}{(state.status === 'install-failed' || state.status === 'rolled-back') && <button className="button secondary" disabled={busy} onClick={() => onAction('retry-install')}>重试安装</button>}<button className="button secondary" disabled={busy} onClick={() => onAction('open-release')}>手动下载 DMG</button></div></section>
       )}
       <section className="panel update-cache-card"><div><h3>更新缓存</h3><p>{formatBytes(state.cacheSizeBytes)} · 自动安装成功后清理；手动下载的 DMG 不会由应用删除。</p></div><button className="button secondary" disabled={busy || state.cacheSizeBytes === 0} onClick={() => onAction('clear-cache')}>清理更新缓存</button></section>
       <p className="update-build-notice">{state.supported ? 'v0.5.0 起使用 Debate Studio 项目签名校验更新来源与完整性；旧版本升级到 v0.5.0 仍需最后一次手动覆盖安装。' : '社区更新只在安装后的 macOS arm64 应用中启用。'}</p>

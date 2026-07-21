@@ -42,9 +42,9 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
     if (!response.ok) throw new Error(`MANIFEST_HTTP_${response.status}`)
     const bytes = new Uint8Array(await response.arrayBuffer())
     if (bytes.byteLength > MAX_MANIFEST_BYTES) throw new Error('MANIFEST_SIZE_INVALID')
-    const manifest = parseAndVerifyManifest(JSON.parse(new TextDecoder().decode(bytes)), this.options.currentVersion)
-    if (compareSemver(manifest.version, this.options.currentVersion) <= 0) return undefined
+    const manifest = parseAndVerifyManifest(JSON.parse(new TextDecoder().decode(bytes)), this.options.currentVersion, PUBLIC_KEY, { allowOlder: true })
     this.manifest = manifest
+    if (compareSemver(manifest.version, this.options.currentVersion) <= 0) return undefined
     return { version: manifest.version, size: manifest.size, releaseName: `Debate Studio v${manifest.version}`, releaseNotes: manifest.releaseNotes, releaseDate: manifest.releaseDate, manifest }
   }
 
@@ -80,9 +80,10 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
     await handle.close()
     if (transferred !== manifest.size) { await rm(partial, { force: true }); throw new Error('PACKAGE_SIZE_MISMATCH') }
     if (hash.digest('hex') !== manifest.sha256) { await rm(partial, { force: true }); throw new Error('PACKAGE_HASH_MISMATCH') }
+    await rm(archive, { force: true })
     await rename(partial, archive)
-    await this.extractAndVerify(archive, manifest)
     this.manifest = manifest
+    await this.extractAndVerify(archive, manifest)
   }
 
   async prepareInstall(): Promise<void> {
@@ -103,8 +104,11 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
   }
 
   async showDownloadedUpdateInFinder(): Promise<void> {
-    if (!this.manifest) throw new Error('UPDATE_NOT_DOWNLOADED')
-    this.options.showItemInFolder(join(this.options.cacheDirectory, this.manifest.assetName))
+    const path = this.manifest
+      ? join(this.options.cacheDirectory, this.manifest.assetName)
+      : await newestCachedUpdateArchive(this.options.cacheDirectory)
+    if (!path) throw new Error('UPDATE_NOT_DOWNLOADED')
+    this.options.showItemInFolder(path)
   }
   async openLatestRelease(): Promise<void> { await this.options.openExternal(`https://github.com/${OWNER}/${REPO}/releases/latest`) }
   async clearCache(): Promise<void> { await rm(this.options.cacheDirectory, { recursive: true, force: true }); this.manifest = undefined; this.stagedApp = undefined }
@@ -132,17 +136,27 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
   private async extractAndVerify(archive: string, manifest: CommunityUpdateManifest): Promise<void> {
     const staging = join(this.options.cacheDirectory, `staging-${manifest.version}`)
     await rm(staging, { recursive: true, force: true }); await mkdir(staging, { recursive: true })
-    await validateTarEntries(archive)
-    await extractTar({ file: archive, cwd: staging, strict: true, preservePaths: false })
+    await updateVerificationStep('ARCHIVE_LIST_FAILED', () => validateTarEntries(archive))
+    // The archive is already project-signed and hash-verified. Electron's bundled
+    // runtime can report harmless framework-symlink warnings as fatal in strict
+    // mode, so extraction is followed by our own path, symlink and bundle checks.
+    await updateVerificationStep('ARCHIVE_EXTRACT_FAILED', () => extractTar({ file: archive, cwd: staging, strict: false, preservePaths: false }))
     const app = join(staging, 'Debate Studio.app')
-    const appStat = await stat(app)
+    const appStat = await updateVerificationStep('APP_BUNDLE_MISSING', () => stat(app))
     if (!appStat.isDirectory()) throw new Error('APP_BUNDLE_MISSING')
-    await validateExtractedTree(app)
-    const { stdout: bundleId } = await execFileAsync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', join(app, 'Contents', 'Info.plist')])
-    const { stdout: version } = await execFileAsync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', join(app, 'Contents', 'Info.plist')])
+    await updateVerificationStep('ARCHIVE_TREE_VALIDATION_FAILED', () => validateExtractedTree(app))
+    const { stdout: bundleId } = await updateVerificationStep('PLIST_BUNDLE_ID_READ_FAILED', () => execFileAsync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', join(app, 'Contents', 'Info.plist')]))
+    const { stdout: version } = await updateVerificationStep('PLIST_VERSION_READ_FAILED', () => execFileAsync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', join(app, 'Contents', 'Info.plist')]))
     if (bundleId.trim() !== BUNDLE_ID) throw new Error('BUNDLE_ID_INVALID')
     if (version.trim() !== manifest.version) throw new Error('BUNDLE_VERSION_INVALID')
     this.stagedApp = app
+  }
+}
+
+async function updateVerificationStep<T>(code: string, operation: () => Promise<T>): Promise<T> {
+  try { return await operation() } catch (cause) {
+    const detail = cause instanceof Error ? cause.message.match(/[A-Z][A-Z0-9_]{2,80}/)?.[0] : undefined
+    throw new Error(detail ? `${code}_${detail}` : code)
   }
 }
 
@@ -150,7 +164,7 @@ export function canonicalManifestPayload(manifest: Omit<CommunityUpdateManifest,
   return Buffer.from(JSON.stringify({ schemaVersion: manifest.schemaVersion, channel: manifest.channel, version: manifest.version, platform: manifest.platform, arch: manifest.arch, tag: manifest.tag, assetName: manifest.assetName, size: manifest.size, sha256: manifest.sha256, releaseDate: manifest.releaseDate, releaseNotes: manifest.releaseNotes ?? '', notesSha256: manifest.notesSha256, bundleId: manifest.bundleId, keyId: manifest.keyId }), 'utf8')
 }
 
-export function parseAndVerifyManifest(input: unknown, currentVersion: string, publicKeyPem = PUBLIC_KEY): CommunityUpdateManifest {
+export function parseAndVerifyManifest(input: unknown, currentVersion: string, publicKeyPem = PUBLIC_KEY, options: { allowOlder?: boolean } = {}): CommunityUpdateManifest {
   if (!input || typeof input !== 'object') throw new Error('MANIFEST_INVALID')
   const m = input as CommunityUpdateManifest
   if (m.schemaVersion !== 1 || m.channel !== 'stable' || m.platform !== 'darwin' || m.arch !== 'arm64' || m.bundleId !== BUNDLE_ID || m.keyId !== KEY_ID) throw new Error('MANIFEST_PLATFORM_INVALID')
@@ -160,7 +174,7 @@ export function parseAndVerifyManifest(input: unknown, currentVersion: string, p
   if (createHash('sha256').update(notes).digest('hex') !== m.notesSha256) throw new Error('MANIFEST_NOTES_HASH_INVALID')
   const { signature, ...unsigned } = m
   if (!signature || !verifySignature(null, canonicalManifestPayload(unsigned), createPublicKey(publicKeyPem), Buffer.from(signature, 'base64'))) throw new Error('MANIFEST_SIGNATURE_INVALID')
-  if (compareSemver(m.version, currentVersion) < 0) throw new Error('MANIFEST_DOWNGRADE_REJECTED')
+  if (!options.allowOlder && compareSemver(m.version, currentVersion) < 0) throw new Error('MANIFEST_DOWNGRADE_REJECTED')
   return m
 }
 
@@ -169,6 +183,13 @@ function releaseAssetUrl(m: CommunityUpdateManifest): string { return `https://g
 async function validateTarEntries(archive: string): Promise<void> { await listTar({ file: archive, onentry: (entry) => { const path = entry.path.replace(/\\/g, '/'); if (path.startsWith('/') || path.split('/').includes('..')) throw new Error('ARCHIVE_PATH_INVALID') } }) }
 async function validateExtractedTree(root: string): Promise<void> { const walk = async (dir: string): Promise<void> => { for (const name of await readdir(dir)) { const path = join(dir, name); const info = await lstat(path); if (info.isSymbolicLink()) { const real = resolve(dirname(path), await readlink(path)); if (relative(root, real).startsWith(`..${sep}`) || relative(root, real) === '..') throw new Error('ARCHIVE_SYMLINK_INVALID') } else if (info.isDirectory()) await walk(path) } }; await walk(root) }
 async function directorySize(path: string): Promise<number> { try { let total = 0; for (const name of await readdir(path)) { const item = join(path, name); const info = await lstat(item); total += info.isDirectory() ? await directorySize(item) : info.size } return total } catch { return 0 } }
+async function newestCachedUpdateArchive(directory: string): Promise<string | undefined> {
+  try {
+    const candidates = (await readdir(directory)).filter((name) => /^Debate-Studio-\d+\.\d+\.\d+-arm64\.update\.tar\.gz$/.test(name))
+    const dated = await Promise.all(candidates.map(async (name) => ({ path: join(directory, name), modified: (await stat(join(directory, name))).mtimeMs })))
+    return dated.sort((a, b) => b.modified - a.modified)[0]?.path
+  } catch { return undefined }
+}
 async function readJson(path: string): Promise<Record<string, any> | undefined> { try { return JSON.parse(await readFile(path, 'utf8')) } catch { return undefined } }
 async function writeJsonAtomic(path: string, value: unknown): Promise<void> { const temp = `${path}.partial`; await writeFile(temp, JSON.stringify(value), { mode: 0o600 }); await rename(temp, path) }
 

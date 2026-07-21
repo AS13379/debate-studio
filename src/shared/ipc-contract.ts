@@ -264,7 +264,7 @@ export interface DebateStudioApi extends LanDesktopApi {
   getAppVersion(): Promise<string>
   getApplicationUpdateState(): Promise<ApplicationUpdateStateDto>
   checkApplicationUpdates(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
-  setApplicationUpdatePreferences(input: { automaticCheckEnabled: boolean }): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  setApplicationUpdatePreferences(input: { automaticCheckEnabled: boolean; automaticDownloadEnabled: boolean }): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
   downloadApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
   cancelApplicationUpdateDownload(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
   deferApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
