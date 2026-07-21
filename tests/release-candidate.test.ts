@@ -202,7 +202,7 @@ describe('Release Candidate packaging configuration', () => {
     const entitlements = readFileSync(join(root, 'build', 'entitlements.mac.plist'), 'utf8')
     const releaseWorkflow = readFileSync(join(root, '.github', 'workflows', 'macos-arm64-release.yml'), 'utf8')
 
-    expect(packageJson.version).toBe('0.4.9')
+    expect(packageJson.version).toBe('0.5.0')
     expect(packageJson.scripts['release:mac:arm64']).toContain('electron-builder --mac --arm64')
     expect(configuration).toContain('appId: com.leander.debatestudio')
     expect(configuration).toContain('from: build/icon.png')
@@ -223,6 +223,8 @@ describe('Release Candidate packaging configuration', () => {
     expect(releaseWorkflow).toContain('runs-on: macos-14')
     expect(releaseWorkflow).toContain('uses: actions/setup-node@v7')
     expect(releaseWorkflow).toContain('npm run release:mac:arm64')
+    expect(releaseWorkflow).toContain('npm run release:community-update')
+    expect(releaseWorkflow).toContain('debate-studio-mac-arm64.json')
     expect(releaseWorkflow).toContain('uses: actions/upload-artifact@v6')
     expect(releaseWorkflow).toContain('release/latest-mac.yml')
     expect(releaseWorkflow).toContain('release/Debate-Studio-*-arm64.dmg.blockmap')

@@ -1,45 +1,35 @@
 import type { LoggerLike } from '../observability'
 import type { SettingsRepository } from '../persistence'
 import type {
-  ApplicationUpdateInfo,
+  ApplicationUpdateErrorDto,
   ApplicationUpdateResultDto,
-  ApplicationUpdateStateDto
+  ApplicationUpdateStateDto,
+  CommunityUpdateInfo
 } from '../shared/update-dtos'
 
 const UPDATE_PREFERENCES_KEY = 'application.update.preferences'
-const MAX_RELEASE_NOTES_LENGTH = 12_000
 
 export interface ApplicationUpdatePreferences {
   automaticCheckEnabled: boolean
 }
 
-export interface ApplicationUpdateCancellationToken {
-  cancel(): void
-}
-
-export type ApplicationUpdaterEvent =
-  | { type: 'checking' }
-  | { type: 'available'; info: ApplicationUpdateInfo }
-  | { type: 'not-available'; info?: ApplicationUpdateInfo }
-  | { type: 'progress'; progress: { percent: number; transferred: number; total: number; bytesPerSecond: number } }
-  | { type: 'downloaded'; info: ApplicationUpdateInfo }
-  | { type: 'cancelled' }
-  | { type: 'error'; error: unknown }
-
-export interface ApplicationUpdaterPort {
-  configure(options: { autoDownload: false; autoInstallOnAppQuit: false }): void
-  subscribe(listener: (event: ApplicationUpdaterEvent) => void): () => void
-  checkForUpdates(): Promise<unknown>
-  createCancellationToken(): ApplicationUpdateCancellationToken
-  downloadUpdate(token: ApplicationUpdateCancellationToken): Promise<unknown>
-  quitAndInstall(): void
+export interface CommunityUpdatePlatform {
+  check(): Promise<CommunityUpdateInfo | undefined>
+  download(info: CommunityUpdateInfo, signal: AbortSignal, onProgress: (progress: { transferredBytes: number; totalBytes: number; bytesPerSecond: number }) => void): Promise<void>
+  prepareInstall(): Promise<void>
+  launchInstaller(): Promise<void>
+  showDownloadedUpdateInFinder(): Promise<void>
+  openLatestRelease(): Promise<void>
+  clearCache(): Promise<void>
+  cacheSize(): Promise<number>
+  readStartupResult(): Promise<{ type: 'updated' | 'rolled-back' | 'interrupted'; version?: string; messageZh: string } | undefined>
 }
 
 export interface ApplicationUpdateServiceOptions {
   currentVersion: string
   supported: boolean
   settings: SettingsRepository
-  updater?: ApplicationUpdaterPort
+  platform?: CommunityUpdatePlatform
   logger: LoggerLike
   now?: () => Date
   beforeInstall?: () => Promise<void>
@@ -51,50 +41,61 @@ export class ApplicationUpdateService {
   private state: ApplicationUpdateStateDto
   private readonly listeners = new Set<ApplicationUpdateListener>()
   private readonly now: () => Date
-  private unsubscribeUpdater: () => void = () => undefined
-  private downloadToken?: ApplicationUpdateCancellationToken
+  private downloadAbort?: AbortController
+  private checkedInfo?: CommunityUpdateInfo
   private closed = false
 
   constructor(private readonly options: ApplicationUpdateServiceOptions) {
     this.now = options.now ?? (() => new Date())
     const stored = options.settings.get<Partial<ApplicationUpdatePreferences>>(UPDATE_PREFERENCES_KEY)
-    const automaticCheckEnabled = stored.ok ? stored.value?.automaticCheckEnabled !== false : true
     this.state = {
       currentVersion: options.currentVersion,
-      supported: options.supported && Boolean(options.updater),
-      automaticCheckEnabled,
+      supported: options.supported && Boolean(options.platform),
+      automaticCheckEnabled: stored.ok ? stored.value?.automaticCheckEnabled !== false : true,
       automaticDownloadEnabled: false,
       status: 'idle',
-      messageZh: '尚未检查更新。'
+      messageZh: '尚未检查更新。',
+      verificationStatus: 'not-verified',
+      manualInstallAvailable: true,
+      cacheSizeBytes: 0
     }
-    options.updater?.configure({ autoDownload: false, autoInstallOnAppQuit: false })
-    if (options.updater) this.unsubscribeUpdater = options.updater.subscribe((event) => this.handleUpdaterEvent(event))
   }
 
-  getState(): ApplicationUpdateStateDto {
-    return cloneState(this.state)
+  async initialize(): Promise<void> {
+    if (!this.options.platform) return
+    try {
+      const [result, cacheSizeBytes] = await Promise.all([this.options.platform.readStartupResult(), this.options.platform.cacheSize()])
+      if (result?.type === 'updated') this.updateState({ status: 'up-to-date', messageZh: result.messageZh, cacheSizeBytes })
+      else if (result?.type === 'rolled-back') this.updateState({ status: 'rolled-back', messageZh: result.messageZh, cacheSizeBytes, error: updateError('UPDATE_ROLLED_BACK', '更新已回滚', result.messageZh, true) })
+      else if (result?.type === 'interrupted') this.updateState({ status: 'install-failed', messageZh: result.messageZh, cacheSizeBytes, error: updateError('UPDATE_INSTALL_INTERRUPTED', '上次安装未完成', result.messageZh, true) })
+      else this.updateState({ cacheSizeBytes })
+    } catch {
+      this.options.logger.warn('读取社区更新恢复状态失败', { source: 'application-update' })
+    }
   }
 
-  subscribe(listener: ApplicationUpdateListener): () => void {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
+  getState(): ApplicationUpdateStateDto { return cloneState(this.state) }
+  subscribe(listener: ApplicationUpdateListener): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener) }
 
-  async checkForUpdates(options: { automatic?: boolean } = {}): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> {
+  async checkForUpdates(input: { automatic?: boolean } = {}): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> {
     if (this.closed) return this.failure('UPDATE_SERVICE_CLOSED', '更新服务已关闭', '应用正在退出，无法继续检查更新。', false)
-    if (this.state.status === 'checking') return { ok: true, value: this.getState() }
-    if (options.automatic && !this.state.automaticCheckEnabled) return { ok: true, value: this.getState() }
-    if (!this.state.supported || !this.options.updater) {
-      if (options.automatic) return { ok: true, value: this.getState() }
-      return this.setFailure('UPDATE_UNAVAILABLE_IN_DEVELOPMENT', '当前环境无法检查更新', '请在已安装的 macOS 应用中使用自动更新。', false)
+    if (input.automatic && !this.state.automaticCheckEnabled) return { ok: true, value: this.getState() }
+    if (!this.state.supported || !this.options.platform) {
+      if (input.automatic) return { ok: true, value: this.getState() }
+      return this.setFailure('UPDATE_UNAVAILABLE_IN_DEVELOPMENT', '当前环境无法检查更新', '请在已安装的 macOS arm64 应用中使用社区更新。', false)
     }
     this.updateState({ status: 'checking', messageZh: '正在检查 GitHub Releases…', error: undefined, progress: undefined })
     try {
-      await this.options.updater.checkForUpdates()
+      const info = await this.options.platform.check()
+      this.checkedInfo = info
+      if (!info) {
+        this.updateState({ status: 'up-to-date', messageZh: '当前已是最新版本。', lastCheckedAt: this.now().toISOString(), availableVersion: undefined, error: undefined })
+      } else {
+        this.updateState({ status: 'available', messageZh: `发现新版本 v${info.version}。`, availableVersion: info.version, releaseName: info.releaseName, releaseNotes: info.releaseNotes, releaseDate: info.releaseDate, updatePackageSizeBytes: info.size, lastCheckedAt: this.now().toISOString(), error: undefined })
+      }
       return { ok: true, value: this.getState() }
     } catch (cause) {
-      this.options.logger.warn('应用更新检查失败', { source: 'application-update', metadata: { code: 'UPDATE_CHECK_FAILED' } })
-      return this.setFailure('UPDATE_CHECK_FAILED', '检查更新失败', friendlyUpdateError(cause), true)
+      return this.failFrom('UPDATE_CHECK_FAILED', '检查更新失败', cause, true)
     }
   }
 
@@ -106,151 +107,87 @@ export class ApplicationUpdateService {
   }
 
   async downloadUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> {
-    if (!this.options.updater || !this.state.supported || !this.state.availableVersion) {
-      return this.failure('UPDATE_NOT_AVAILABLE', '没有可下载的更新', '请先检查更新，确认存在新版本后再下载。', false)
-    }
-    if (this.state.status === 'downloading') return { ok: true, value: this.getState() }
-    this.downloadToken = this.options.updater.createCancellationToken()
-    this.updateState({ status: 'downloading', messageZh: '正在下载更新…', progress: { percent: 0, transferredBytes: 0, totalBytes: 0, bytesPerSecond: 0 }, error: undefined })
+    if (!this.options.platform || !this.checkedInfo || this.state.status !== 'available') return this.failure('UPDATE_NOT_AVAILABLE', '没有可下载的更新', '请先检查更新。', false)
+    const controller = new AbortController()
+    this.downloadAbort = controller
+    const startedAt = Date.now()
+    this.updateState({ status: 'downloading', messageZh: '正在下载项目签名更新包…', verificationStatus: 'not-verified', progress: { percent: 0, transferredBytes: 0, totalBytes: this.checkedInfo.size, bytesPerSecond: 0 }, error: undefined })
     try {
-      await this.options.updater.downloadUpdate(this.downloadToken)
+      await this.options.platform.download(this.checkedInfo, controller.signal, ({ transferredBytes, totalBytes, bytesPerSecond }) => {
+        const percent = totalBytes > 0 ? Math.min(100, transferredBytes / totalBytes * 100) : 0
+        this.updateState({ progress: { percent, transferredBytes, totalBytes, bytesPerSecond: bytesPerSecond || transferredBytes / Math.max(1, (Date.now() - startedAt) / 1000) }, messageZh: `正在下载项目签名更新包（${percent.toFixed(1)}%）…` })
+      })
+      this.updateState({ status: 'downloaded', messageZh: '更新包已完成签名、哈希和应用身份校验。', verificationStatus: 'verified', progress: undefined, cacheSizeBytes: await this.options.platform.cacheSize() })
       return { ok: true, value: this.getState() }
     } catch (cause) {
-      if (this.state.status === 'available' && this.state.messageZh === '已取消下载，可以稍后重新开始。') {
+      if (controller.signal.aborted) {
+        this.updateState({ status: 'available', messageZh: '已取消下载，可以稍后重新开始。', progress: undefined })
         return { ok: true, value: this.getState() }
       }
-      this.options.logger.warn('应用更新下载失败', { source: 'application-update', metadata: { code: 'UPDATE_DOWNLOAD_FAILED' } })
-      return this.setFailure('UPDATE_DOWNLOAD_FAILED', '下载更新失败', friendlyUpdateError(cause), true)
-    } finally {
-      this.downloadToken = undefined
-    }
+      return this.failFrom('UPDATE_DOWNLOAD_FAILED', '下载或校验更新失败', cause, true)
+    } finally { this.downloadAbort = undefined }
   }
 
-  cancelDownload(): ApplicationUpdateResultDto<ApplicationUpdateStateDto> {
-    if (!this.downloadToken || this.state.status !== 'downloading') return { ok: true, value: this.getState() }
-    this.downloadToken.cancel()
-    this.updateState({ status: 'available', messageZh: '已取消下载，可以稍后重新开始。', progress: undefined })
-    return { ok: true, value: this.getState() }
-  }
-
-  deferUpdate(): ApplicationUpdateResultDto<ApplicationUpdateStateDto> {
-    if (this.state.status === 'available') this.updateState({ messageZh: '已稍后提醒；下次启动仍会检查更新。' })
-    return { ok: true, value: this.getState() }
-  }
+  cancelDownload(): ApplicationUpdateResultDto<ApplicationUpdateStateDto> { this.downloadAbort?.abort(); return { ok: true, value: this.getState() } }
+  deferUpdate(): ApplicationUpdateResultDto<ApplicationUpdateStateDto> { if (this.state.status === 'available') this.updateState({ messageZh: '已稍后提醒；下次启动仍会检查更新。' }); return { ok: true, value: this.getState() } }
 
   async installUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> {
-    if (!this.options.updater || this.state.status !== 'downloaded') {
-      return this.failure('UPDATE_NOT_READY', '更新尚未准备完成', '请等待下载完成后再重启安装。', false)
-    }
+    if (!this.options.platform || (this.state.status !== 'downloaded' && this.state.status !== 'install-failed' && this.state.status !== 'rolled-back')) return this.failure('UPDATE_NOT_READY', '更新尚未准备完成', '请等待下载和安全校验完成。', false)
+    this.updateState({ status: 'preparing-install', messageZh: '正在验证更新并准备退出…', error: undefined })
     try {
-      await this.options.beforeInstall?.()
-      this.options.updater.quitAndInstall()
+      await this.options.platform.prepareInstall()
+      this.updateState({ status: 'waiting-for-restart', messageZh: '校验完成，即将退出并安装新版本。' })
+      await Promise.race([
+        (async () => { await this.options.beforeInstall?.(); await this.options.platform!.launchInstaller() })(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('INSTALL_START_TIMEOUT')), 5_000))
+      ])
       return { ok: true, value: this.getState() }
-    } catch {
-      return this.setFailure('UPDATE_INSTALL_PREPARE_FAILED', '无法开始安装', '关闭运行任务或保存本地数据时发生错误，请稍后重试。', true)
+    } catch (cause) {
+      return this.failFrom('UPDATE_INSTALL_PREPARE_FAILED', '无法开始安装', cause, true, 'install-failed')
     }
   }
 
-  close(): void {
-    if (this.closed) return
-    this.closed = true
-    this.downloadToken?.cancel()
-    this.unsubscribeUpdater()
-    this.listeners.clear()
+  retryUpdateInstall(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> { return this.installUpdate() }
+  async showDownloadedUpdateInFinder(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> { return this.platformAction(() => this.options.platform!.showDownloadedUpdateInFinder(), 'UPDATE_REVEAL_FAILED', '无法在 Finder 中显示更新包') }
+  async openLatestRelease(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> { return this.platformAction(() => this.options.platform!.openLatestRelease(), 'UPDATE_RELEASE_OPEN_FAILED', '无法打开 GitHub Release') }
+  async clearCache(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> {
+    const result = await this.platformAction(() => this.options.platform!.clearCache(), 'UPDATE_CACHE_CLEAR_FAILED', '清理更新缓存失败')
+    if (result.ok) this.updateState({ cacheSizeBytes: 0, verificationStatus: 'not-verified', status: 'idle', messageZh: '更新缓存已清理。' })
+    return result.ok ? { ok: true, value: this.getState() } : result
   }
 
-  private handleUpdaterEvent(event: ApplicationUpdaterEvent): void {
-    if (this.closed) return
-    if (event.type === 'checking') {
-      this.updateState({ status: 'checking', messageZh: '正在检查 GitHub Releases…', error: undefined })
-      return
-    }
-    if (event.type === 'available') {
-      const info = normalizeUpdateInfo(event.info)
-      this.updateState({
-        ...info,
-        status: 'available',
-        messageZh: `发现新版本 ${info.availableVersion}。`,
-        lastCheckedAt: this.now().toISOString(),
-        progress: undefined,
-        error: undefined
-      })
-      return
-    }
-    if (event.type === 'not-available') {
-      this.updateState({ status: 'up-to-date', messageZh: '当前已是最新版本。', lastCheckedAt: this.now().toISOString(), progress: undefined, error: undefined })
-      return
-    }
-    if (event.type === 'progress') {
-      this.updateState({
-        status: 'downloading',
-        messageZh: `正在下载更新（${Math.max(0, Math.min(100, event.progress.percent)).toFixed(1)}%）…`,
-        progress: {
-          percent: Math.max(0, Math.min(100, event.progress.percent)),
-          transferredBytes: Math.max(0, event.progress.transferred),
-          totalBytes: Math.max(0, event.progress.total),
-          bytesPerSecond: Math.max(0, event.progress.bytesPerSecond)
-        }
-      })
-      return
-    }
-    if (event.type === 'downloaded') {
-      const info = normalizeUpdateInfo(event.info)
-      this.updateState({ ...info, status: 'downloaded', messageZh: '更新已准备完成，重启应用安装。', progress: undefined, error: undefined })
-      return
-    }
-    if (event.type === 'cancelled') {
-      this.updateState({ status: 'available', messageZh: '已取消下载，可以稍后重新开始。', progress: undefined })
-      return
-    }
-    this.setFailure('UPDATE_OPERATION_FAILED', '更新操作失败', friendlyUpdateError(event.error), true)
-  }
+  close(): void { this.closed = true; this.downloadAbort?.abort(); this.listeners.clear() }
 
-  private updateState(patch: Partial<ApplicationUpdateStateDto>): void {
-    this.state = { ...this.state, ...patch }
-    const snapshot = this.getState()
-    for (const listener of this.listeners) listener(snapshot)
+  private async platformAction(action: () => Promise<void>, code: string, title: string): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>> {
+    if (!this.options.platform) return this.failure(code, title, '当前环境不支持此操作。', false)
+    try { await action(); return { ok: true, value: this.getState() } } catch (cause) { return this.failFrom(code, title, cause, true) }
   }
-
-  private setFailure(code: string, titleZh: string, descriptionZh: string, retryable: boolean): ApplicationUpdateResultDto<ApplicationUpdateStateDto> {
-    const error = { code, titleZh, descriptionZh, retryable }
-    this.updateState({ status: 'error', messageZh: descriptionZh, error, progress: undefined })
+  private updateState(patch: Partial<ApplicationUpdateStateDto>): void { this.state = { ...this.state, ...patch }; const snapshot = this.getState(); for (const listener of this.listeners) listener(snapshot) }
+  private failFrom(code: string, title: string, cause: unknown, retryable: boolean, status: ApplicationUpdateStateDto['status'] = 'error'): ApplicationUpdateResultDto<ApplicationUpdateStateDto> {
+    this.options.logger.warn(title, { source: 'application-update', metadata: { code } })
+    const description = friendlyUpdateError(cause)
+    const error = updateError(code, title, description, retryable)
+    this.updateState({ status, messageZh: description, error, progress: undefined })
     return { ok: false, error }
   }
-
-  private failure(code: string, titleZh: string, descriptionZh: string, retryable: boolean): ApplicationUpdateResultDto<ApplicationUpdateStateDto> {
-    return { ok: false, error: { code, titleZh, descriptionZh, retryable } }
-  }
+  private setFailure(code: string, title: string, description: string, retryable: boolean): ApplicationUpdateResultDto<ApplicationUpdateStateDto> { const error = updateError(code, title, description, retryable); this.updateState({ status: 'error', messageZh: description, error, progress: undefined }); return { ok: false, error } }
+  private failure(code: string, title: string, description: string, retryable: boolean): ApplicationUpdateResultDto<ApplicationUpdateStateDto> { return { ok: false, error: updateError(code, title, description, retryable) } }
 }
 
-export function normalizeReleaseNotes(notes: ApplicationUpdateInfo['releaseNotes']): string | undefined {
-  const text = typeof notes === 'string'
-    ? notes
-    : notes?.map((item) => [item.version, item.note].filter(Boolean).join('\n')).join('\n\n')
-  const normalized = text?.replace(/<[^>]*>/g, '').replace(/\r\n/g, '\n').trim()
-  return normalized ? normalized.slice(0, MAX_RELEASE_NOTES_LENGTH) : undefined
-}
-
-function normalizeUpdateInfo(info: ApplicationUpdateInfo): Pick<ApplicationUpdateStateDto, 'availableVersion' | 'releaseName' | 'releaseNotes' | 'releaseDate'> {
-  return {
-    availableVersion: info.version,
-    releaseName: info.releaseName?.slice(0, 500),
-    releaseNotes: normalizeReleaseNotes(info.releaseNotes),
-    releaseDate: info.releaseDate
-  }
-}
-
+function updateError(code: string, titleZh: string, descriptionZh: string, retryable: boolean): ApplicationUpdateErrorDto { return { code, titleZh, descriptionZh, retryable } }
 function friendlyUpdateError(cause: unknown): string {
-  const message = cause instanceof Error ? cause.message.toLowerCase() : ''
-  if (message.includes('network') || message.includes('fetch') || message.includes('enotfound')) return '无法连接 GitHub Releases，请检查网络后重试。'
-  if (message.includes('404')) return '暂未找到适用于当前版本的更新文件。'
-  return '更新服务暂时不可用，请稍后重试。'
+  const message = cause instanceof Error ? cause.message : String(cause ?? '')
+  if (/ENOTFOUND|fetch|network/i.test(message)) return '无法连接 GitHub Releases，请检查网络后重试。'
+  if (/SIGNATURE/i.test(message)) return '更新包签名无效，已删除临时文件，不会安装。'
+  if (/HASH|SIZE/i.test(message)) return '更新包完整性校验失败，已删除临时文件。'
+  if (/READ_ONLY|NOT_WRITABLE|DMG/i.test(message)) return '当前应用位置不可写，请打开最新版 DMG 手动覆盖安装。'
+  if (/TIMEOUT/i.test(message)) return '安装准备超时，应用没有退出，已恢复按钮供重试。'
+  return '社区更新暂时无法完成；现有应用和本地数据没有被修改。'
 }
+function cloneState(state: ApplicationUpdateStateDto): ApplicationUpdateStateDto { return { ...state, progress: state.progress ? { ...state.progress } : undefined, error: state.error ? { ...state.error } : undefined } }
 
-function cloneState(state: ApplicationUpdateStateDto): ApplicationUpdateStateDto {
-  return {
-    ...state,
-    progress: state.progress ? { ...state.progress } : undefined,
-    error: state.error ? { ...state.error } : undefined
-  }
+export function normalizeReleaseNotes(notes: string | Array<{ version?: string; note?: string }> | undefined): string | undefined {
+  const text = typeof notes === 'string' ? notes : notes?.map((item) => [item.version, item.note].filter(Boolean).join('\n')).join('\n\n')
+  const normalized = text?.replace(/<[^>]*>/g, '').replace(/\r\n/g, '\n').trim()
+  return normalized ? normalized.slice(0, 12_000) : undefined
 }

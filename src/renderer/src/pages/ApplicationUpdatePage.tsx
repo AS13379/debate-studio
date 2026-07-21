@@ -8,7 +8,10 @@ const fallbackState: ApplicationUpdateStateDto = {
   automaticCheckEnabled: true,
   automaticDownloadEnabled: false,
   status: 'idle',
-  messageZh: '正在读取更新状态…'
+  messageZh: '正在读取更新状态…',
+  verificationStatus: 'not-verified',
+  manualInstallAvailable: true,
+  cacheSizeBytes: 0
 }
 
 export function ApplicationUpdatePage() {
@@ -39,6 +42,10 @@ export function ApplicationUpdatePage() {
     if (action === 'cancel') void run(async () => window.debateStudio.cancelApplicationUpdateDownload())
     if (action === 'defer') void run(async () => window.debateStudio.deferApplicationUpdate())
     if (action === 'install') void run(() => window.debateStudio.installApplicationUpdate())
+    if (action === 'retry-install') void run(() => window.debateStudio.retryApplicationUpdateInstall())
+    if (action === 'show-in-finder') void run(() => window.debateStudio.showDownloadedUpdateInFinder())
+    if (action === 'open-release') void run(() => window.debateStudio.openLatestRelease())
+    if (action === 'clear-cache') void run(() => window.debateStudio.clearApplicationUpdateCache())
   }} onAutomaticCheckChange={(automaticCheckEnabled) => {
     void run(async () => window.debateStudio.setApplicationUpdatePreferences({ automaticCheckEnabled }))
   }} />
@@ -47,7 +54,7 @@ export function ApplicationUpdatePage() {
 interface ApplicationUpdatePanelProps {
   state: ApplicationUpdateStateDto
   busy?: boolean
-  onAction(action: 'check' | 'download' | 'cancel' | 'defer' | 'install'): void
+  onAction(action: 'check' | 'download' | 'cancel' | 'defer' | 'install' | 'retry-install' | 'show-in-finder' | 'open-release' | 'clear-cache'): void
   onAutomaticCheckChange(enabled: boolean): void
 }
 
@@ -89,18 +96,22 @@ export function ApplicationUpdatePanel({ state, busy = false, onAction, onAutoma
         </section>
       )}
       {state.status === 'downloaded' && (
-        <section className="panel update-ready-card"><div><h3>更新已准备完成</h3><p>重启后安装新版本；本地数据和 API Key 保持原位。</p></div><button className="button primary" disabled={busy} onClick={() => onAction('install')}>重启并安装</button></section>
+        <section className="panel update-ready-card"><div><h3>更新已准备完成</h3><p>项目签名、SHA256 与应用身份均已验证；重启后只替换程序文件。</p></div><div className="button-row"><button className="button secondary" disabled={busy} onClick={() => onAction('show-in-finder')}>在 Finder 中显示</button><button className="button primary" disabled={busy} onClick={() => onAction('install')}>重启并安装</button></div></section>
       )}
-      {state.status === 'error' && (
-        <section className="panel update-error-card"><div><h3>{state.error?.titleZh ?? '更新失败'}</h3><p>{state.error?.descriptionZh ?? state.messageZh}</p></div>{state.error?.retryable !== false && <button className="button secondary" disabled={busy} onClick={() => onAction('check')}>重新检查</button>}</section>
+      {(state.status === 'preparing-install' || state.status === 'waiting-for-restart') && (
+        <section className="panel update-ready-card"><div><h3>{state.status === 'preparing-install' ? '正在验证更新' : '即将重启安装'}</h3><p>{state.messageZh}</p></div><span className="thinking-shimmer">请稍候…</span></section>
       )}
-      <p className="update-build-notice">{state.supported ? '当前社区构建未使用 Apple Developer ID 签名；若 macOS 拒绝自动安装，可下载新版 DMG 覆盖安装，本地数据仍会保留。' : '自动更新只在安装后的 macOS 应用中启用。当前未签名构建仍可能受到 macOS 安装限制。'}</p>
+      {(state.status === 'error' || state.status === 'install-failed' || state.status === 'rolled-back') && (
+        <section className="panel update-error-card"><div><h3>{state.error?.titleZh ?? '更新失败'}</h3><p>{state.error?.descriptionZh ?? state.messageZh}</p></div><div className="button-row">{(state.status === 'install-failed' || state.status === 'rolled-back') && <button className="button secondary" disabled={busy} onClick={() => onAction('retry-install')}>重试安装</button>}<button className="button secondary" disabled={busy} onClick={() => onAction('open-release')}>手动下载 DMG</button></div></section>
+      )}
+      <section className="panel update-cache-card"><div><h3>更新缓存</h3><p>{formatBytes(state.cacheSizeBytes)} · 自动安装成功后清理；手动下载的 DMG 不会由应用删除。</p></div><button className="button secondary" disabled={busy || state.cacheSizeBytes === 0} onClick={() => onAction('clear-cache')}>清理更新缓存</button></section>
+      <p className="update-build-notice">{state.supported ? 'v0.5.0 起使用 Debate Studio 项目签名校验更新来源与完整性；旧版本升级到 v0.5.0 仍需最后一次手动覆盖安装。' : '社区更新只在安装后的 macOS arm64 应用中启用。'}</p>
     </section>
   )
 }
 
 function statusLabel(status: ApplicationUpdateStateDto['status']): string {
-  return ({ idle: '等待检查', checking: '检查中', 'up-to-date': '已是最新', available: '有新版本', downloading: '下载中', downloaded: '等待安装', error: '更新失败' })[status]
+  return ({ idle: '等待检查', checking: '检查中', 'up-to-date': '已是最新', available: '有新版本', downloading: '下载中', downloaded: '等待安装', 'preparing-install': '正在验证', 'waiting-for-restart': '即将重启', 'install-failed': '安装失败', 'rolled-back': '已回滚', error: '更新失败' })[status]
 }
 
 function formatBytes(bytes: number): string {

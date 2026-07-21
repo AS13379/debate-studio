@@ -48,8 +48,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .update-version-block strong { font-size: 28px; font-variant-numeric: tabular-nums; }
 .update-status p, .update-preferences-card p, .update-release-card p, .update-download-card p, .update-ready-card p, .update-error-card p { margin: 0; color: #747782; line-height: 1.55; }
 .update-status > span { width: max-content; padding: 4px 9px; color: #5449ad; background: #eeebff; border-radius: 999px; font-weight: 700; }
-.update-preferences-card, .update-ready-card, .update-error-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px; align-items: center; padding: 24px; }
-.update-preferences-card h3, .update-release-card h3, .update-download-card h3, .update-ready-card h3, .update-error-card h3 { margin: 0 0 6px; }
+.update-preferences-card, .update-ready-card, .update-error-card, .update-cache-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px; align-items: center; padding: 24px; }
+.update-preferences-card h3, .update-release-card h3, .update-download-card h3, .update-ready-card h3, .update-error-card h3, .update-cache-card h3 { margin: 0 0 6px; }
+.update-cache-card p { margin: 0; color: #747782; line-height: 1.55; }
 .update-toggle { display: flex; align-items: center; gap: 9px; min-height: 44px; font-weight: 700; }
 .update-toggle input { width: 18px; height: 18px; }
 .update-policy-note { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 16px; border-top: 1px solid #e1e2e7; }

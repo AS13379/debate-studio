@@ -117,6 +117,10 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
   ipcMain.handle(IPC_CHANNELS.cancelApplicationUpdateDownload, () => dependencies.updates?.cancelDownload() ?? updateUnavailable())
   ipcMain.handle(IPC_CHANNELS.deferApplicationUpdate, () => dependencies.updates?.deferUpdate() ?? updateUnavailable())
   ipcMain.handle(IPC_CHANNELS.installApplicationUpdate, () => dependencies.updates?.installUpdate() ?? updateUnavailable())
+  ipcMain.handle(IPC_CHANNELS.retryApplicationUpdateInstall, () => dependencies.updates?.retryUpdateInstall() ?? updateUnavailable())
+  ipcMain.handle(IPC_CHANNELS.showDownloadedUpdateInFinder, () => dependencies.updates?.showDownloadedUpdateInFinder() ?? updateUnavailable())
+  ipcMain.handle(IPC_CHANNELS.openLatestRelease, () => dependencies.updates?.openLatestRelease() ?? updateUnavailable())
+  ipcMain.handle(IPC_CHANNELS.clearApplicationUpdateCache, () => dependencies.updates?.clearCache() ?? updateUnavailable())
   ipcMain.handle(IPC_CHANNELS.getLanServerStatus, () => dependencies.lanServer?.statusWithCredentialState() ?? lanUnavailable())
   ipcMain.handle(IPC_CHANNELS.startLanServer, () => dependencies.lanServer?.start() ?? lanUnavailable())
   ipcMain.handle(IPC_CHANNELS.stopLanServer, () => dependencies.lanServer?.stop() ?? lanUnavailable())
@@ -267,7 +271,10 @@ function updateUnavailableState(currentVersion: string): ApplicationUpdateStateD
     automaticCheckEnabled: true,
     automaticDownloadEnabled: false,
     status: 'idle',
-    messageZh: '当前环境无法使用自动更新。'
+    messageZh: '当前环境无法使用自动更新。',
+    verificationStatus: 'not-verified',
+    manualInstallAvailable: true,
+    cacheSizeBytes: 0
   }
 }
 

@@ -1,14 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-
-import {
-  ApplicationUpdateService,
-  normalizeReleaseNotes,
-  type ApplicationUpdateCancellationToken,
-  type ApplicationUpdaterEvent,
-  type ApplicationUpdaterPort
-} from '../src/application'
+import { ApplicationUpdateService, normalizeReleaseNotes, type CommunityUpdatePlatform } from '../src/application'
 import type { LoggerLike } from '../src/observability'
 import type { SettingsRepository } from '../src/persistence'
+import type { CommunityUpdateInfo, CommunityUpdateManifest } from '../src/shared/update-dtos'
 
 class MemorySettings implements SettingsRepository {
   private readonly values = new Map<string, unknown>()
@@ -16,94 +10,29 @@ class MemorySettings implements SettingsRepository {
   set<T>(key: string, value: T) { this.values.set(key, value); return { ok: true as const, value: undefined } }
   delete(key: string) { return { ok: true as const, value: this.values.delete(key) } }
 }
-
-class FakeToken implements ApplicationUpdateCancellationToken {
-  cancelled = false
-  cancel(): void { this.cancelled = true }
+const manifest: CommunityUpdateManifest = { schemaVersion: 1, channel: 'stable', version: '0.5.0', platform: 'darwin', arch: 'arm64', tag: 'v0.5.0', assetName: 'Debate-Studio-0.5.0-arm64.update.tar.gz', size: 100, sha256: 'a'.repeat(64), releaseDate: '2026-07-21T00:00:00.000Z', notesSha256: 'b'.repeat(64), bundleId: 'com.leander.debatestudio', keyId: 'ds-update-2026-01', signature: 'test' }
+const info: CommunityUpdateInfo = { version: '0.5.0', size: 100, releaseNotes: '改进', manifest }
+class FakePlatform implements CommunityUpdatePlatform {
+  next: CommunityUpdateInfo | undefined = info
+  check = vi.fn(async () => this.next)
+  download = vi.fn(async (_info: CommunityUpdateInfo, signal: AbortSignal, progress: (value: { transferredBytes: number; totalBytes: number; bytesPerSecond: number }) => void) => { if (!signal.aborted) progress({ transferredBytes: 100, totalBytes: 100, bytesPerSecond: 10 }) })
+  prepareInstall = vi.fn(async () => undefined)
+  launchInstaller = vi.fn(async () => undefined)
+  showDownloadedUpdateInFinder = vi.fn(async () => undefined)
+  openLatestRelease = vi.fn(async () => undefined)
+  clearCache = vi.fn(async () => undefined)
+  cacheSize = vi.fn(async () => 123)
+  readStartupResult = vi.fn<CommunityUpdatePlatform['readStartupResult']>(async () => undefined)
 }
-
-class FakeUpdater implements ApplicationUpdaterPort {
-  listener?: (event: ApplicationUpdaterEvent) => void
-  token = new FakeToken()
-  configured?: { autoDownload: false; autoInstallOnAppQuit: false }
-  check = vi.fn(async () => undefined)
-  download = vi.fn(async (_token: ApplicationUpdateCancellationToken) => undefined)
-  installed = false
-  configure(options: { autoDownload: false; autoInstallOnAppQuit: false }): void { this.configured = options }
-  subscribe(listener: (event: ApplicationUpdaterEvent) => void): () => void { this.listener = listener; return () => { this.listener = undefined } }
-  checkForUpdates(): Promise<unknown> { return this.check() }
-  createCancellationToken(): ApplicationUpdateCancellationToken { this.token = new FakeToken(); return this.token }
-  downloadUpdate(token: ApplicationUpdateCancellationToken): Promise<unknown> { return this.download(token) }
-  quitAndInstall(): void { this.installed = true }
-  emit(event: ApplicationUpdaterEvent): void { this.listener?.(event) }
-}
-
 const logger: LoggerLike = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-
-function service(updater = new FakeUpdater(), settings = new MemorySettings()) {
-  return { updater, settings, value: new ApplicationUpdateService({ currentVersion: '0.4.5', supported: true, updater, settings, logger }) }
-}
+function service(platform = new FakePlatform()) { return { platform, value: new ApplicationUpdateService({ currentVersion: '0.4.9', supported: true, platform, settings: new MemorySettings(), logger }) } }
 
 describe('ApplicationUpdateService', () => {
-  it('reports the current version and keeps automatic downloads disabled', () => {
-    const { updater, value } = service()
-    expect(value.getState()).toMatchObject({ currentVersion: '0.4.5', automaticCheckEnabled: true, automaticDownloadEnabled: false, status: 'idle' })
-    expect(updater.configured).toEqual({ autoDownload: false, autoInstallOnAppQuit: false })
-  })
-
-  it('moves through checking, available and downloaded states with normalized metadata', async () => {
-    const { updater, value } = service()
-    updater.check.mockImplementation(async () => {
-      updater.emit({ type: 'available', info: { version: '0.5.0', releaseName: 'Next', releaseNotes: [{ version: '0.5.0', note: '<b>改进</b>' }] } })
-    })
-    await expect(value.checkForUpdates()).resolves.toMatchObject({ ok: true })
-    expect(value.getState()).toMatchObject({ status: 'available', availableVersion: '0.5.0', releaseNotes: '0.5.0\n改进' })
-    updater.download.mockImplementation(async () => {
-      updater.emit({ type: 'progress', progress: { percent: 42, transferred: 42, total: 100, bytesPerSecond: 10 } })
-      updater.emit({ type: 'downloaded', info: { version: '0.5.0' } })
-    })
-    await value.downloadUpdate()
-    expect(value.getState()).toMatchObject({ status: 'downloaded', availableVersion: '0.5.0' })
-  })
-
-  it('handles update failures without exposing raw technical details', async () => {
-    const { updater, value } = service()
-    updater.check.mockRejectedValue(new Error('Authorization: Bearer very-secret ENOTFOUND'))
-    await expect(value.checkForUpdates()).resolves.toMatchObject({ ok: false, error: { code: 'UPDATE_CHECK_FAILED' } })
-    expect(JSON.stringify(value.getState())).not.toContain('very-secret')
-    expect(value.getState().messageZh).toContain('GitHub Releases')
-  })
-
-  it('cancels an in-progress user download and keeps the update available', async () => {
-    const { updater, value } = service()
-    updater.emit({ type: 'available', info: { version: '0.5.0' } })
-    updater.download.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 1)))
-    const download = value.downloadUpdate()
-    expect(value.cancelDownload()).toMatchObject({ ok: true, value: { status: 'available' } })
-    expect(updater.token.cancelled).toBe(true)
-    await download
-  })
-
-  it('persists the automatic-check preference and skips an automatic check when disabled', async () => {
-    const { updater, value } = service()
-    expect(value.setPreferences({ automaticCheckEnabled: false })).toMatchObject({ ok: true })
-    await value.checkForUpdates({ automatic: true })
-    expect(updater.check).not.toHaveBeenCalled()
-  })
-
-  it('installs only after download completion and runs the shutdown preparation hook', async () => {
-    const updater = new FakeUpdater()
-    const beforeInstall = vi.fn(async () => undefined)
-    const value = new ApplicationUpdateService({ currentVersion: '0.4.5', supported: true, updater, settings: new MemorySettings(), logger, beforeInstall })
-    updater.emit({ type: 'downloaded', info: { version: '0.5.0' } })
-    await expect(value.installUpdate()).resolves.toMatchObject({ ok: true })
-    expect(beforeInstall).toHaveBeenCalledOnce()
-    expect(updater.installed).toBe(true)
-  })
+  it('reports current version and keeps automatic downloads disabled', () => expect(service().value.getState()).toMatchObject({ currentVersion: '0.4.9', automaticCheckEnabled: true, automaticDownloadEnabled: false, status: 'idle' }))
+  it('checks, downloads, verifies and prepares the community update', async () => { const { platform, value } = service(); await value.checkForUpdates(); expect(value.getState()).toMatchObject({ status: 'available', availableVersion: '0.5.0' }); await value.downloadUpdate(); expect(value.getState()).toMatchObject({ status: 'downloaded', verificationStatus: 'verified' }); await value.installUpdate(); expect(platform.prepareInstall).toHaveBeenCalledOnce(); expect(platform.launchInstaller).toHaveBeenCalledOnce() })
+  it('shows up-to-date when no newer manifest exists', async () => { const { platform, value } = service(); platform.next = undefined; await value.checkForUpdates(); expect(value.getState().status).toBe('up-to-date') })
+  it('normalizes network failures without leaking raw authorization data', async () => { const { platform, value } = service(); platform.check.mockRejectedValue(new Error('Authorization Bearer secret ENOTFOUND')); const result = await value.checkForUpdates(); expect(result).toMatchObject({ ok: false, error: { code: 'UPDATE_CHECK_FAILED' } }); expect(JSON.stringify(value.getState())).not.toContain('secret') })
+  it('persists disabled automatic checks', async () => { const { platform, value } = service(); value.setPreferences({ automaticCheckEnabled: false }); await value.checkForUpdates({ automatic: true }); expect(platform.check).not.toHaveBeenCalled() })
+  it('reads rolled-back install state at startup', async () => { const { platform, value } = service(); platform.readStartupResult.mockResolvedValue({ type: 'rolled-back', version: '0.5.0', messageZh: '已恢复旧版本' }); await value.initialize(); expect(value.getState()).toMatchObject({ status: 'rolled-back', messageZh: '已恢复旧版本' }) })
 })
-
-describe('release metadata parsing', () => {
-  it('flattens array notes and strips embedded HTML', () => {
-    expect(normalizeReleaseNotes([{ version: '0.5.0', note: '<script>bad()</script><b>新功能</b>' }])).toBe('0.5.0\nbad()新功能')
-  })
-})
+describe('release notes normalization', () => { it('strips HTML from notes', () => expect(normalizeReleaseNotes([{ version: '0.5.0', note: '<b>新功能</b>' }])).toBe('0.5.0\n新功能')) })

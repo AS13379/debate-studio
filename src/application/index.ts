@@ -39,9 +39,7 @@ export { DebateQualityApplication } from './debate-quality-application'
 export { PromptStudioApplication } from '../prompt-studio'
 export { ApplicationUpdateService, normalizeReleaseNotes } from './application-update-service'
 export type {
-  ApplicationUpdateCancellationToken,
   ApplicationUpdateListener,
   ApplicationUpdatePreferences,
-  ApplicationUpdaterEvent,
-  ApplicationUpdaterPort
+  CommunityUpdatePlatform
 } from './application-update-service'

@@ -10,8 +10,7 @@ import { registerDebateIpc } from './ipc-handlers'
 import { createWindowOptions } from './window-options'
 import { resolveAppDataDirectory } from './app-paths'
 import { LanServerManager } from '../lan'
-import { autoUpdater } from 'electron-updater'
-import { ElectronApplicationUpdaterAdapter } from './electron-updater-adapter'
+import { MacCommunityUpdatePlatform, resolveRunningAppPath } from './community-update-platform'
 
 let desktopApplication: DebateDesktopApplication | undefined
 let lanServer: LanServerManager | undefined
@@ -92,7 +91,14 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     appDataDirectory,
     credentialStore,
     appVersion: app.getVersion(),
-    applicationUpdater: new ElectronApplicationUpdaterAdapter(autoUpdater),
+    applicationUpdatePlatform: new MacCommunityUpdatePlatform({
+      currentVersion: app.getVersion(),
+      cacheDirectory: join(app.getPath('home'), 'Library', 'Caches', 'debate-studio-community-updater'),
+      appPath: resolveRunningAppPath(process.execPath),
+      quit: () => app.quit(),
+      showItemInFolder: (path) => shell.showItemInFolder(path),
+      openExternal: (url) => shell.openExternal(url)
+    }),
     applicationUpdaterSupported: app.isPackaged && process.platform === 'darwin',
     beforeInstallUpdate: prepareForUpdateInstall,
     createImageThumbnail: (bytes) => {
@@ -119,6 +125,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     throw new Error(`${applicationResult.error.code}: ${applicationResult.error.message}`)
   }
   desktopApplication = applicationResult.value
+  await desktopApplication.updates.initialize()
   lanServer = new LanServerManager({
     application: desktopApplication.lanWeb,
     webRoot: join(__dirname, '../lan-renderer'),

@@ -8,7 +8,10 @@ const base = {
   supported: true,
   automaticCheckEnabled: true,
   automaticDownloadEnabled: false as const,
-  messageZh: '发现新版本 0.5.0。'
+  messageZh: '发现新版本 0.5.0。',
+  cacheSizeBytes: 0,
+  verificationStatus: 'not-verified' as const,
+  manualInstallAvailable: true
 }
 
 describe('ApplicationUpdatePanel', () => {

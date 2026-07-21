@@ -2,6 +2,22 @@
 
 本文件记录 Debate Studio 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.5.0] - 2026-07-21
+
+### 社区自动更新
+
+- 使用 Debate Studio 项目 Ed25519 签名的社区更新包替代未签名 macOS 上不可用的 Squirrel 安装流程。
+- 下载后严格校验签名、SHA256、文件大小、版本、arm64 架构与 `com.leander.debatestudio` Bundle ID。
+- 安装时先备份当前应用；新版本无法启动会自动恢复并重新打开旧版本。
+- 设置页显示下载、校验、安装、回滚和缓存状态，可在 Finder 中查看更新包、清理缓存或转到 GitHub 手动下载 DMG。
+- 更新只替换 `.app` 程序文件，不读取或修改 SQLite、模型配置、Prompt、API Key、辩论和研究数据。
+
+### 升级说明
+
+- v0.4.9 及更早版本需要最后一次手动下载 v0.5.0 DMG 并覆盖安装。
+- 从 v0.5.0 开始，后续版本可以通过应用内项目签名更新完成升级。
+- 当前构建仍未使用 Apple Developer ID 签名和公证；项目签名用于验证更新来源与完整性，不会绕过 Gatekeeper。
+
 ## [0.4.9] - 2026-07-21
 
 ### 官方模型能力预设

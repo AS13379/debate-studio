@@ -43,7 +43,7 @@ import { PromptStudioApplication } from '../prompt-studio'
 import { DebateEvaluationService, DebateReviewService } from '../debate-quality'
 import { DebateQualityApplication } from './debate-quality-application'
 import { LanWebApplication } from '../lan/lan-web-application'
-import { ApplicationUpdateService, type ApplicationUpdaterPort } from './application-update-service'
+import { ApplicationUpdateService, type CommunityUpdatePlatform } from './application-update-service'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -56,7 +56,7 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
   onDatabaseRestoreCompleted?(): void
   createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined
   visionAdapter?: VisionAdapter
-  applicationUpdater?: ApplicationUpdaterPort
+  applicationUpdatePlatform?: CommunityUpdatePlatform
   applicationUpdaterSupported?: boolean
   beforeInstallUpdate?(): Promise<void>
 }
@@ -236,7 +236,7 @@ export function initializeDebateDesktopApplication(
       currentVersion: options.appVersion ?? '0.1.0',
       supported: options.applicationUpdaterSupported ?? false,
       settings: persistence.repositories.settings,
-      updater: options.applicationUpdater,
+      platform: options.applicationUpdatePlatform,
       logger,
       now: options.now,
       beforeInstall: options.beforeInstallUpdate
