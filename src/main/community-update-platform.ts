@@ -144,6 +144,7 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
     if (this.confirmedStartupVersion) {
       const version = this.confirmedStartupVersion
       this.confirmedStartupVersion = undefined
+      await this.cleanupConfirmedInstall()
       return { type: 'updated', version, messageZh: `已安全更新到 v${version}。` }
     }
     const resultPath = join(this.options.cacheDirectory, 'install-result.json')
@@ -161,6 +162,18 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
     }
     if (pending && Date.now() - Date.parse(String(pending.startedAt)) > 10 * 60_000) return { type: 'interrupted', version: pending.version, messageZh: '上次更新在安装过程中中断，旧版本仍可使用。' }
     return undefined
+  }
+
+  private async cleanupConfirmedInstall(): Promise<void> {
+    const keep = new Set(['install-last.log'])
+    const names = await readdir(this.options.cacheDirectory).catch(() => [])
+    await Promise.allSettled(names
+      .filter((name) => !keep.has(name))
+      .map((name) => rm(join(this.options.cacheDirectory, name), { recursive: true, force: true })))
+    // Backup cleanup is deliberately best-effort. The replacement already
+    // launched successfully, so a transient filesystem cleanup error must not
+    // turn a successful update into a false failure state.
+    await rm(`${this.options.appPath}.community-update-backup`, { recursive: true, force: true }).catch(() => undefined)
   }
 
   private async extractAndVerify(archive: string, manifest: CommunityUpdateManifest): Promise<void> {
@@ -230,8 +243,6 @@ export interface InstallHelperScriptOptions {
   sleepCommand?: string
   sleepSeconds?: number
   parentWaitIterations?: number
-  confirmationWaitIterations?: number
-  launchWaitIterations?: number
   settleSeconds?: number
   languageSelectionSeconds?: number
   successCloseSeconds?: number
@@ -244,9 +255,7 @@ export function createInstallHelperScript(options: InstallHelperScriptOptions = 
   const sleepCommand = shellLiteral(options.sleepCommand ?? '/bin/sleep')
   const sleepSeconds = positiveNumber(options.sleepSeconds, 0.25)
   const parentWaitIterations = positiveInteger(options.parentWaitIterations, 240)
-  const confirmationWaitIterations = positiveInteger(options.confirmationWaitIterations, 120)
-  const launchWaitIterations = positiveInteger(options.launchWaitIterations, 40)
-  const settleSeconds = positiveNumber(options.settleSeconds, 2)
+  const settleSeconds = positiveNumber(options.settleSeconds, 6)
   const languageSelectionSeconds = positiveNumber(options.languageSelectionSeconds, 4)
   const successCloseSeconds = positiveNumber(options.successCloseSeconds, 3)
   return `#!/bin/zsh
@@ -256,9 +265,8 @@ PARENT_PID="$1"; APP_PATH="$2"; STAGED_APP="$3"; CACHE_DIR="$4"; VERSION="$5"
 BACKUP_PATH="$APP_PATH.community-update-backup"
 RESULT="$CACHE_DIR/install-result.json"; CONFIRMED="$CACHE_DIR/launch-confirmed.json"; PENDING="$CACHE_DIR/install-pending.json"
 LOG="$CACHE_DIR/install-last.log"
-LAUNCH_LOG="$CACHE_DIR/launch-last.log"
 OPEN_COMMAND=${openCommand}; XATTR_COMMAND=${xattrCommand}; PRIVILEGED_XATTR_COMMAND=${privilegedXattrCommand}; SLEEP_COMMAND=${sleepCommand}
-SLEEP_SECONDS=${sleepSeconds}; PARENT_WAIT_ITERATIONS=${parentWaitIterations}; CONFIRMATION_WAIT_ITERATIONS=${confirmationWaitIterations}; LAUNCH_WAIT_ITERATIONS=${launchWaitIterations}
+SLEEP_SECONDS=${sleepSeconds}; PARENT_WAIT_ITERATIONS=${parentWaitIterations}
 LANGUAGE_SELECTION_SECONDS=${languageSelectionSeconds}; SUCCESS_CLOSE_SECONDS=${successCloseSeconds}
 INTERACTIVE=0; [ -t 0 ] && INTERACTIVE=1
 LANGUAGE="\${DEBATE_UPDATE_LANGUAGE:-zh}"
@@ -297,24 +305,20 @@ message() {
     en:REPLACE) printf 'Replacing application files…' ;;
     zh:QUARANTINE) printf '正在清除已验证新版本的 macOS 隔离属性…' ;;
     en:QUARANTINE) printf 'Removing the macOS quarantine attribute from the verified update…' ;;
-    zh:QUARANTINE_DONE) printf '隔离属性已清除，正在进行启动前复查。' ;;
-    en:QUARANTINE_DONE) printf 'The quarantine attribute was removed; running a final pre-launch check.' ;;
+    zh:QUARANTINE_DONE) printf '隔离属性已清除。' ;;
+    en:QUARANTINE_DONE) printf 'The quarantine attribute was removed.' ;;
     zh:QUARANTINE_AUTH) printf '普通权限无法清除隔离属性。是否允许 macOS 弹出系统授权窗口后重试？[y/N] ' ;;
     en:QUARANTINE_AUTH) printf 'Normal permissions could not remove quarantine. Allow a macOS authorization prompt and retry? [y/N] ' ;;
     zh:QUARANTINE_DENIED) printf '未获得授权，已停止安装并恢复旧版本。' ;;
     en:QUARANTINE_DENIED) printf 'Authorization was not granted. Installation stopped and the previous version will be restored.' ;;
-    zh:LAUNCH) printf '正在启动新版本（只启动一次，不会循环拉起）…' ;;
-    en:LAUNCH) printf 'Launching the new version once; repeated launch attempts are disabled.' ;;
-    zh:WAIT_CONFIRM) printf '新版本进程已启动，正在等待 Electron 就绪确认…' ;;
-    en:WAIT_CONFIRM) printf 'The new process is running; waiting for Electron readiness confirmation…' ;;
-    zh:HEALTH_PROGRESS) printf '仍在等待新版本健康确认，已等待 %s 秒；不会重复启动。' "$2" ;;
-    en:HEALTH_PROGRESS) printf 'Still waiting for startup confirmation after %s seconds; the app will not be launched again.' "$2" ;;
-    zh:SUCCESS) printf '更新成功：Debate Studio v%s 已启动，旧版本备份已清理。' "$VERSION" ;;
-    en:SUCCESS) printf 'Update succeeded: Debate Studio v%s is running and the old backup was removed.' "$VERSION" ;;
+    zh:LAUNCH) printf '正在交给 macOS 打开新版本…' ;;
+    en:LAUNCH) printf 'Asking macOS to open the new version…' ;;
+    zh:SUCCESS) printf '替换完成：macOS 已接受打开 Debate Studio v%s 的请求。' "$VERSION" ;;
+    en:SUCCESS) printf 'Replacement complete: macOS accepted the request to open Debate Studio v%s.' "$VERSION" ;;
     zh:CLOSE) printf '此窗口将在 %s 秒后自动关闭。' "$SUCCESS_CLOSE_SECONDS" ;;
     en:CLOSE) printf 'This window will close automatically in %s seconds.' "$SUCCESS_CLOSE_SECONDS" ;;
-    zh:ROLLBACK) printf '新版本未通过启动确认，正在恢复旧版本…' ;;
-    en:ROLLBACK) printf 'The new version did not confirm startup; restoring the previous version…' ;;
+    zh:ROLLBACK) printf '安装步骤失败，正在恢复旧版本…' ;;
+    en:ROLLBACK) printf 'An installation step failed; restoring the previous version…' ;;
     zh:ROLLBACK_DONE) printf '旧版本已恢复并重新启动，本地数据没有被修改。' ;;
     en:ROLLBACK_DONE) printf 'The previous version was restored and reopened; local data was not modified.' ;;
     zh:FAILED) printf '更新未完成。错误代码：%s' "$2" ;;
@@ -451,52 +455,17 @@ say REPLACE
 if ! mv "$STAGED_APP" "$APP_PATH"; then rollback UPDATE_REPLACE_FAILED '无法替换应用文件，已自动恢复旧版本。'; exit 1; fi
 if ! clear_verified_app_quarantine; then rollback UPDATE_QUARANTINE_REMOVE_FAILED '无法清除新版本的 macOS 隔离属性，已自动恢复旧版本。'; exit 1; fi
 say LAUNCH
-APP_EXECUTABLE="$APP_PATH/Contents/MacOS/Debate Studio"
-: > "$LAUNCH_LOG"
-if [ -x "$APP_EXECUTABLE" ]; then
-  "$APP_EXECUTABLE" >> "$LAUNCH_LOG" 2>&1 &
-else
-  technical "launch_executable=missing"
+if ! "$OPEN_COMMAND" -n "$APP_PATH"; then
+  technical "open_request=failed"
   rollback UPDATE_LAUNCH_FAILED 'macOS 未能启动新版本，已自动恢复旧版本。'
   exit 1
 fi
-NEW_APP_PID=$!
-technical "launch_process_pid=$NEW_APP_PID attempt=1"
-i=0
-while [ ! -f "$CONFIRMED" ] && kill -0 "$NEW_APP_PID" 2>/dev/null && [ "$i" -lt "$LAUNCH_WAIT_ITERATIONS" ]; do
-  "$SLEEP_COMMAND" "$SLEEP_SECONDS"
-  i=$((i+1))
-done
-if [ ! -f "$CONFIRMED" ] && ! kill -0 "$NEW_APP_PID" 2>/dev/null; then
-  technical "launch_process=exited-before-ready pid=$NEW_APP_PID"
-  if [ -s "$LAUNCH_LOG" ]; then
-    technical "launch_log_tail_begin"
-    tail -n 30 "$LAUNCH_LOG"
-    technical "launch_log_tail_end"
-  fi
-  rollback UPDATE_LAUNCH_FAILED '新版本进程在就绪前退出，已自动恢复旧版本。'
-  exit 1
-fi
-say WAIT_CONFIRM
-i=0
-while [ ! -f "$CONFIRMED" ] && [ "$i" -lt "$CONFIRMATION_WAIT_ITERATIONS" ]; do
-  "$SLEEP_COMMAND" "$SLEEP_SECONDS"
-  i=$((i+1))
-  if [ "$i" -gt 0 ] && [ $((i % 40)) -eq 0 ]; then say HEALTH_PROGRESS "$((i * SLEEP_SECONDS))"; fi
-done
-if [ -f "$CONFIRMED" ]; then
-  rm -rf "$BACKUP_PATH" 2>/dev/null || true
-  for cached_item in "$CACHE_DIR"/*; do
-    [ "$cached_item" = "$LOG" ] && continue
-    rm -rf "$cached_item" 2>/dev/null || true
-  done
-  say SUCCESS
-  say CLOSE
-  close_terminal_after_success
-  exit 0
-fi
-rollback UPDATE_STARTUP_CONFIRMATION_TIMEOUT '新版本未能成功启动，已自动恢复旧版本。'
-exit 1
+rm -rf "$BACKUP_PATH" 2>/dev/null || true
+technical "open_request=accepted backup_cleanup=completed"
+say SUCCESS
+say CLOSE
+close_terminal_after_success
+exit 0
 `
 }
 

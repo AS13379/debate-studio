@@ -17,19 +17,24 @@ describe('community update install helper', () => {
   it('confirms a pending replacement as soon as Electron is ready', async () => {
     const root = await mkdtemp(join(tmpdir(), 'debate-studio-ready-'))
     roots.push(root)
-    await mkdir(root, { recursive: true })
+    const appPath = join(root, 'Debate Studio.app')
+    const backupPath = `${appPath}.community-update-backup`
+    await mkdir(backupPath, { recursive: true })
+    await writeFile(join(root, 'cached-update.tar.gz'), 'cached')
     await writeFile(join(root, 'install-pending.json'), JSON.stringify({ version: '0.5.8' }))
     const platform = new MacCommunityUpdatePlatform({
-      currentVersion: '0.5.8', cacheDirectory: root, appPath: '/Applications/Debate Studio.app',
+      currentVersion: '0.5.8', cacheDirectory: root, appPath,
       quit: () => undefined, showItemInFolder: () => undefined, openExternal: async () => undefined
     })
 
     await expect(platform.confirmPendingStartup()).resolves.toBe(true)
     expect(JSON.parse(await readFile(join(root, 'launch-confirmed.json'), 'utf8'))).toMatchObject({ version: '0.5.8', phase: 'electron-ready' })
     await expect(platform.readStartupResult()).resolves.toMatchObject({ type: 'updated', version: '0.5.8' })
+    await expect(access(backupPath)).rejects.toThrow()
+    await expect(access(join(root, 'cached-update.tar.gz'))).rejects.toThrow()
   })
 
-  it('clears quarantine and launches only once before accepting startup confirmation', async () => {
+  it('clears quarantine, replaces the app, and asks macOS to open it once', async () => {
     const fixture = await createFixture(true)
     await execFileAsync('/bin/zsh', [fixture.helper, '99999999', fixture.currentApp, fixture.stagedApp, fixture.cache, '0.5.4'])
 
@@ -37,10 +42,10 @@ describe('community update install helper', () => {
     await expect(access(`${fixture.currentApp}.community-update-backup`)).rejects.toThrow()
     expect(Number(await readFile(fixture.attempts, 'utf8'))).toBe(1)
     expect(await readFile(fixture.xattrCalls, 'utf8')).toContain(`-dr com.apple.quarantine ${fixture.currentApp}`)
-    expect(await readFile(join(fixture.cache, 'install-last.log'), 'utf8')).toContain('更新成功：Debate Studio v0.5.4 已启动')
+    expect(await readFile(join(fixture.cache, 'install-last.log'), 'utf8')).toContain('替换完成：macOS 已接受打开 Debate Studio v0.5.4 的请求')
   })
 
-  it('restores the previous app immediately when the new process exits before readiness', async () => {
+  it('restores the previous app when macOS rejects the open request', async () => {
     const fixture = await createFixture(false)
     await expect(execFileAsync('/bin/zsh', [fixture.helper, '99999999', fixture.currentApp, fixture.stagedApp, fixture.cache, '0.5.4'])).rejects.toThrow()
 
@@ -49,10 +54,9 @@ describe('community update install helper', () => {
     await expect(access(join(fixture.cache, 'install-pending.json'))).rejects.toThrow()
     expect(JSON.parse(await readFile(join(fixture.cache, 'install-result.json'), 'utf8'))).toMatchObject({ status: 'rolled-back', version: '0.5.4', detailCode: 'UPDATE_LAUNCH_FAILED' })
     const log = await readFile(join(fixture.cache, 'install-last.log'), 'utf8')
-    expect(log).toContain('正在恢复旧版本')
+    expect(log).toContain('安装步骤失败，正在恢复旧版本')
     expect(log).toContain('UPDATE_LAUNCH_FAILED')
-    expect(log.match(/launch_process_pid=/g)).toHaveLength(1)
-    expect(Number(await readFile(fixture.attempts, 'utf8'))).toBe(2) // new app once, restored app once
+    expect(Number(await readFile(fixture.attempts, 'utf8'))).toBe(2) // rejected new app request, then restored app
   })
 
   it('can render the same installation progress in English', async () => {
@@ -63,7 +67,7 @@ describe('community update install helper', () => {
 
     const log = await readFile(join(fixture.cache, 'install-last.log'), 'utf8')
     expect(log).toContain('Starting installation of Debate Studio v0.5.5.')
-    expect(log).toContain('Update succeeded: Debate Studio v0.5.5 is running')
+    expect(log).toContain('Replacement complete: macOS accepted the request to open Debate Studio v0.5.5.')
   })
 
   it('does not launch an app when quarantine removal fails', async () => {
@@ -101,7 +105,7 @@ describe('community update install helper', () => {
   })
 })
 
-async function createFixture(confirmOnLaunch: boolean, xattrSucceeds = true) {
+async function createFixture(openSucceeds: boolean, xattrSucceeds = true) {
   const root = await mkdtemp(join(tmpdir(), 'debate-studio-updater-'))
   roots.push(root)
   const currentApp = join(root, 'Debate Studio.app')
@@ -109,11 +113,10 @@ async function createFixture(confirmOnLaunch: boolean, xattrSucceeds = true) {
   const cache = join(root, 'cache')
   const helper = join(cache, 'install-update.sh')
   const openShim = join(root, 'open-shim.sh')
-  const stagedExecutable = join(stagedApp, 'Contents', 'MacOS', 'Debate Studio')
   const xattrShim = join(root, 'xattr-shim.sh')
   const xattrCalls = join(root, 'xattr-calls.txt')
   const attempts = join(root, 'launch-attempts.txt')
-  await Promise.all([mkdir(currentApp, { recursive: true }), mkdir(join(stagedApp, 'Contents', 'MacOS'), { recursive: true }), mkdir(cache, { recursive: true })])
+  await Promise.all([mkdir(currentApp, { recursive: true }), mkdir(stagedApp, { recursive: true }), mkdir(cache, { recursive: true })])
   await Promise.all([
     writeFile(join(currentApp, 'version.txt'), 'old'),
     writeFile(join(stagedApp, 'version.txt'), 'new'),
@@ -126,25 +129,21 @@ async function createFixture(confirmOnLaunch: boolean, xattrSucceeds = true) {
 COUNT=$(cat '${attempts}')
 COUNT=$((COUNT+1))
 printf '%s' "$COUNT" > '${attempts}'
-${confirmOnLaunch ? `printf '{}' > '${join(cache, 'launch-confirmed.json')}'` : ':'}
-exit 0
+exit ${openSucceeds ? 0 : 1}
 `
   const xattr = `#!/bin/sh
 printf '%s\n' "$*" >> '${xattrCalls}'
 exit ${xattrSucceeds ? 0 : 1}
 `
   await writeFile(openShim, shim, { mode: 0o700 })
-  await writeFile(stagedExecutable, shim, { mode: 0o700 })
   await writeFile(xattrShim, xattr, { mode: 0o700 })
   await chmod(openShim, 0o700)
-  await chmod(stagedExecutable, 0o700)
   await chmod(xattrShim, 0o700)
   await writeFile(helper, createInstallHelperScript({
     openCommand: openShim,
     xattrCommand: xattrShim,
     sleepSeconds: 0.01,
     parentWaitIterations: 2,
-    confirmationWaitIterations: 8,
     settleSeconds: 0,
     languageSelectionSeconds: 0,
     successCloseSeconds: 0

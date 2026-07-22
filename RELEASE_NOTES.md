@@ -1,9 +1,10 @@
-# Debate Studio v0.5.9
+# Debate Studio v0.5.10
 
-## 自动更新链路复验
+## 自动更新流程简化
 
-- 这是一个没有产品功能或业务逻辑变化的空版本。
-- 仅用于验证 v0.5.8 修复后的项目签名下载、直接进程启动、Electron 就绪确认和失败回滚流程。
+- 安装过程现在只执行退出旧版、替换应用、清除隔离属性和打开新版，不再等待容易误判的进程健康确认。
+- macOS 接受打开请求后安装终端会显示完成并自动关闭，不会因新版短暂退出而擅自回滚。
+- 旧版临时备份只用于安装步骤失败时回滚；macOS 接受打开新版后由安装终端立即清理。
 - 更新仍只替换 Debate Studio 应用程序文件，不修改 SQLite、API Key、模型配置、Prompt、辩论或研究数据。
 
 ## 隐私
@@ -12,4 +13,4 @@
 
 ## macOS notice
 
-This is an empty validation release for the project-signed community updater. It contains no product feature changes.
+This release simplifies the project-signed community updater and removes false startup-health rollbacks. It contains no product feature changes.
