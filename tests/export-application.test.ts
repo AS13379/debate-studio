@@ -21,6 +21,22 @@ afterEach(() => {
 })
 
 describe('debate export application', () => {
+  it('writes to the exact file selected by the trusted desktop save dialog', async () => {
+    const fixture = createFixture()
+    const selectedPath = join(fixture.directory, '我的辩论归档.md')
+    const result = fixture.application.exportDebateMarkdown(
+      'debate-1',
+      { includePrivateResearch: false },
+      selectedPath
+    )
+
+    expect(result).toMatchObject({ ok: true, value: { filePath: selectedPath, status: 'generating' } })
+    if (!result.ok) return
+    const completed = await waitForExport(fixture.application, result.value.exportId)
+    expect(completed.filePath).toBe(selectedPath)
+    expect(existsSync(selectedPath)).toBe(true)
+  })
+
   it('exports structured Markdown in chronological order without private research or secrets by default', async () => {
     const fixture = createFixture()
     const result = fixture.application.exportDebateMarkdown('debate-1', { includePrivateResearch: false })

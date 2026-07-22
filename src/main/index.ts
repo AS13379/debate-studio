@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, powerMonitor, safeStorage, shell } from 'electron'
 import { join } from 'node:path'
 import {
   initializeDebateDesktopApplication,
@@ -74,6 +74,14 @@ function configureDockIcon(): void {
     : join(app.getAppPath(), 'build', 'icon.png')
   const icon = nativeImage.createFromPath(iconPath)
   if (!icon.isEmpty()) app.dock.setIcon(icon)
+}
+
+function safeExportName(title: string): string {
+  return title.normalize('NFKC')
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80) || '辩论导出'
 }
 
 if (hasSingleInstanceLock) void app.whenReady().then(async () => {
@@ -162,6 +170,20 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     getAppVersion: () => app.getVersion(),
     openExternalUrl: (url) => shell.openExternal(url),
     openLanPreviewUrl: (url) => shell.openExternal(url),
+    selectExportFile: async ({ debateTitle, type }) => {
+      const extension = type === 'html' ? 'html' : 'md'
+      const result = await dialog.showSaveDialog({
+        title: type === 'html' ? '保存 HTML 辩论记录' : '保存 Markdown 辩论记录',
+        defaultPath: join(app.getPath('documents'), `${safeExportName(debateTitle)}.${extension}`),
+        buttonLabel: '开始导出',
+        filters: [{
+          name: type === 'html' ? 'HTML 文件' : 'Markdown 文件',
+          extensions: [extension]
+        }],
+        properties: ['showOverwriteConfirmation', 'createDirectory']
+      })
+      return result.canceled ? undefined : result.filePath
+    },
     broadcastRunEvent: (event) => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.runEvent, event)

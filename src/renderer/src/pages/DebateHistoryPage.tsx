@@ -29,6 +29,7 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
   const [exports, setExports] = useState<DebateExportRecordDto[]>([])
   const [exportMessage, setExportMessage] = useState<string>()
   const [exportError, setExportError] = useState<string>()
+  const [activeExportId, setActiveExportId] = useState<string>()
   const [confirmExportDeleteId, setConfirmExportDeleteId] = useState<string>()
 
   const load = async (): Promise<void> => {
@@ -54,6 +55,14 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
     const interval = window.setInterval(() => void loadExports(), 500)
     return () => window.clearInterval(interval)
   }, [debateId, hasGeneratingExport])
+  useEffect(() => {
+    if (!activeExportId) return
+    const record = exports.find((item) => item.exportId === activeExportId)
+    if (!record || record.status === 'generating') return
+    if (record.status === 'completed') setExportMessage(`导出成功：${record.filePath}`)
+    else setExportError(record.error?.descriptionZh ?? '导出没有完成，请重新选择保存位置后重试。')
+    setActiveExportId(undefined)
+  }, [activeExportId, exports])
 
   const runExport = async (type: 'markdown' | 'html'): Promise<void> => {
     setExporting(type)
@@ -64,9 +73,10 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
       ? await window.debateStudio.exportMarkdown(input)
       : await window.debateStudio.exportHtml(input)
     if (result.ok) {
-      setExportMessage('导出任务已开始，可继续使用应用；进度会自动更新。')
+      setActiveExportId(result.value.exportId)
+      setExportMessage('已选择保存位置并创建导出任务；完成后会再次提示。')
       await loadExports()
-    } else setExportError(result.error.descriptionZh)
+    } else if (result.error.code !== 'EXPORT_DESTINATION_CANCELLED') setExportError(result.error.descriptionZh)
     setExporting(undefined)
   }
 
@@ -200,6 +210,8 @@ export function DebateHistoryPage({ debateId, onBack, onOpenDebate, onChanged }:
         records={exports}
         message={exportMessage}
         error={exportError}
+        onDismissMessage={() => setExportMessage(undefined)}
+        onDismissError={() => setExportError(undefined)}
         confirmDeleteId={confirmExportDeleteId}
         onIncludePrivateResearchChange={setIncludePrivateResearch}
         onExport={(type) => void runExport(type)}
@@ -253,7 +265,9 @@ export function DebateExportPanel({
   onCancelDelete,
   onConfirmDelete,
   onCancelExport = () => undefined,
-  onRetryExport = () => undefined
+  onRetryExport = () => undefined,
+  onDismissMessage = () => undefined,
+  onDismissError = () => undefined
 }: {
   completed: boolean
   includePrivateResearch: boolean
@@ -269,6 +283,8 @@ export function DebateExportPanel({
   onConfirmDelete(exportId: string): void
   onCancelExport?(exportId: string): void
   onRetryExport?(record: DebateExportRecordDto): void
+  onDismissMessage?(): void
+  onDismissError?(): void
 }) {
   return <section className="panel debate-export-panel" aria-labelledby="debate-export-title">
     <div className="section-heading">
@@ -284,8 +300,8 @@ export function DebateExportPanel({
       包含私有研究
     </label>
     {includePrivateResearch && <div className="notice warning" role="alert"><strong>隐私提醒：</strong>导出的文件会包含正反方和主持人的私有研究内容。请确认接收者与分享范围。</div>}
-    {message && <div className="notice success export-path" role="status">{message}</div>}
-    {error && <div className="notice error" role="alert">导出失败：{error}</div>}
+    {message && <div className="notice success export-path dismissible-notice" role="status"><span>{message}</span><button aria-label="关闭导出提示" onClick={onDismissMessage}>×</button></div>}
+    {error && <div className="notice error dismissible-notice" role="alert"><span>导出失败：{error}</span><button aria-label="关闭导出错误" onClick={onDismissError}>×</button></div>}
     <details className="export-history" open={records.length > 0}>
       <summary>导出历史（{records.length}）</summary>
       {records.length === 0 ? <p className="muted">尚未生成导出文件。</p> : <div className="export-record-list">
@@ -300,7 +316,7 @@ export function DebateExportPanel({
           {record.status === 'generating' && <div className="export-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={record.progress}><span style={{ width: `${record.progress}%` }} /></div>}
           {record.error && <div className="notice error"><strong>{record.error.titleZh}</strong>：{record.error.descriptionZh}</div>}
           {record.status === 'generating' ? <button className="button secondary export-delete" onClick={() => onCancelExport(record.exportId)}>取消导出</button> : confirmDeleteId === record.exportId ? <div className="compact-actions export-delete-confirm">
-            <span>同时删除本地文件？</span>
+            <span>删除导出记录？已保存到自选位置的文件会保留。</span>
             <button className="button ghost" onClick={onCancelDelete}>取消</button>
             <button className="button danger" onClick={() => onConfirmDelete(record.exportId)}>确认删除</button>
           </div> : <div className="compact-actions export-record-actions">

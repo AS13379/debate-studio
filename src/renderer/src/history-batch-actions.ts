@@ -18,6 +18,7 @@ export interface HistoryBatchIssue {
 export interface HistoryBatchResult {
   action: HistoryBatchAction
   succeeded: string[]
+  exportIds: string[]
   skipped: HistoryBatchIssue[]
   failed: HistoryBatchIssue[]
 }
@@ -36,7 +37,7 @@ export async function executeHistoryBatchAction(
   includePrivateResearch = false,
   onProgress: (completed: number, total: number) => void = () => undefined
 ): Promise<HistoryBatchResult> {
-  const result: HistoryBatchResult = { action, succeeded: [], skipped: [], failed: [] }
+  const result: HistoryBatchResult = { action, succeeded: [], exportIds: [], skipped: [], failed: [] }
 
   for (const [index, debate] of debates.entries()) {
     const skipReason = getSkipReason(debate, action)
@@ -48,8 +49,12 @@ export async function executeHistoryBatchAction(
 
     try {
       const operation = await runAction(api, debate, action, includePrivateResearch)
-      if (operation.ok) result.succeeded.push(debate.id)
-      else result.failed.push(issue(debate, operation.error.descriptionZh))
+      if (operation.ok) {
+        result.succeeded.push(debate.id)
+        if (action.startsWith('export-') && 'exportId' in operation.value) result.exportIds.push(operation.value.exportId)
+      } else if (operation.error.code === 'EXPORT_DESTINATION_CANCELLED') {
+        result.skipped.push(issue(debate, '已取消选择保存位置。'))
+      } else result.failed.push(issue(debate, operation.error.descriptionZh))
     } catch (error) {
       result.failed.push(issue(debate, error instanceof Error ? error.message : '未知错误'))
     }

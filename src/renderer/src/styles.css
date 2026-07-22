@@ -112,6 +112,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .notice.error { color: #9d2034; background: #fff0f2; border-color: #f3c4cc; }
 .notice.success { color: #17654e; background: #e9f8f2; border-color: #bce8d7; }
 .notice.warning { color: #805615; background: #fff6dd; border-color: #ecd18d; }
+.dismissible-notice { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dismissible-notice > span { min-width: 0; overflow-wrap: anywhere; }
+.dismissible-notice > button, .notice-dismiss { flex: 0 0 auto; width: 28px; height: 28px; margin: -7px -8px -7px 0; padding: 0; color: currentColor; background: transparent; border: 0; border-radius: 7px; font-size: 20px; line-height: 1; opacity: .72; }
+.dismissible-notice > button:hover, .notice-dismiss:hover { background: rgba(0,0,0,.08); opacity: 1; }
 .empty-state { padding: 64px 28px; text-align: center; }
 .empty-state.compact { padding: 36px 24px; }
 .empty-state h2 { margin: 14px 0 6px; }
@@ -144,7 +148,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .history-batch-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .history-batch-private { grid-column: 1 / -1; display: flex; width: fit-content; gap: 8px; align-items: center; color: #666a75; font-size: 12px; }
 .history-batch-warning { grid-column: 1 / -1; margin: -5px 0 0; color: #8a5b0a; font-size: 12px; }
+.history-operation-issues { position: relative; padding-right: 46px; }
 .history-operation-issues summary { cursor: pointer; font-weight: 700; }
+.history-operation-issues .notice-dismiss { position: absolute; top: 13px; right: 15px; margin: 0; }
 .history-operation-issues ul { margin: 10px 0 0; padding-left: 20px; }
 .history-operation-issues li { margin: 6px 0; line-height: 1.5; }
 .debate-card { position: relative; display: flex; min-width: 0; flex-direction: column; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
@@ -156,9 +162,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .history-favorite:hover { background: rgba(208,145,50,.12); }
 .history-card-actions { align-items: center; margin-top: auto; padding-top: 18px; }
 .history-card-menu { position: relative; }
+.history-card-menu[open] { z-index: 60; }
+.debate-card:has(.history-card-menu[open]) { z-index: 50; transform: none; }
 .history-card-menu > summary { display: inline-flex; align-items: center; cursor: pointer; list-style: none; }
 .history-card-menu > summary::-webkit-details-marker { display: none; }
-.history-card-menu-popover { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 5; display: grid; width: 220px; padding: 7px; background: #fff; border: 1px solid #dadce3; border-radius: 11px; box-shadow: 0 16px 44px rgba(20,22,28,.18); }
+.history-card-menu-popover { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 70; display: grid; width: 220px; padding: 7px; background: #fff; border: 1px solid #dadce3; border-radius: 11px; box-shadow: 0 16px 44px rgba(20,22,28,.18); }
 .history-card-menu-popover button { padding: 9px 10px; color: #3e414b; text-align: left; background: transparent; border: 0; border-radius: 7px; }
 .history-card-menu-popover button:hover { background: #f2f0ff; }
 .history-card-menu-popover button.danger { color: #aa2539; }
@@ -488,7 +496,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .performance-fact { display: flex; flex-direction: column; gap: 6px; padding: 13px 15px; border-radius: 10px; background: #f6f5fb; }
 .performance-fact span { color: #777b85; font-size: 12px; }
 .performance-fact strong { font-size: 14px; }
-.turn-card, .debate-card, .evidence-card, .asset-row { content-visibility: auto; contain-intrinsic-size: auto 180px; }
+.turn-card, .evidence-card, .asset-row { content-visibility: auto; contain-intrinsic-size: auto 180px; }
 .diagnostics-grid { display: grid; grid-template-columns: minmax(340px, 1.15fr) minmax(300px, .85fr); gap: 20px; align-items: start; }
 .diagnostics-section { padding: 24px; }
 .diagnostics-section h2 { margin: 0; font-size: 18px; }

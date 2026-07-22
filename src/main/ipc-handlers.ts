@@ -12,6 +12,7 @@ import {
   IPC_CHANNELS,
   type ApplicationUpdateStateDto,
   type ConfigurationResultDto,
+  type DebateExportTypeDto,
   type DebateTurnDto,
   type DebatePlannerProgressDto,
   type RunCommandResultDto,
@@ -92,6 +93,7 @@ export interface DebateIpcDependencies {
   getAppVersion(): string
   openExternalUrl?(url: string): Promise<void>
   openLanPreviewUrl?(url: string): Promise<void>
+  selectExportFile?(input: { debateId: string; debateTitle: string; type: DebateExportTypeDto }): Promise<string | undefined>
   broadcastRunEvent(event: RunEventDto): void
   broadcastPlannerProgress(event: DebatePlannerProgressDto): void
   broadcastLanStatus?(status: LanServerStatusDto): void
@@ -244,8 +246,8 @@ export function registerDebateIpc(dependencies: DebateIpcDependencies): () => vo
     restoreDatabaseBackupSchema,
     (input) => dependencies.dataManagement.restoreBackup(input.backupId, input.confirmed)
   ))
-  ipcMain.handle(IPC_CHANNELS.exportMarkdown, validated(exportDebateSchema, (input) => dependencies.exports.exportDebateMarkdown(input.debateId, input.exportOptions)))
-  ipcMain.handle(IPC_CHANNELS.exportHtml, validated(exportDebateSchema, (input) => dependencies.exports.exportDebateHtml(input.debateId, input.exportOptions)))
+  ipcMain.handle(IPC_CHANNELS.exportMarkdown, validated(exportDebateSchema, (input) => startDesktopExport(dependencies, input, 'markdown')))
+  ipcMain.handle(IPC_CHANNELS.exportHtml, validated(exportDebateSchema, (input) => startDesktopExport(dependencies, input, 'html')))
   ipcMain.handle(IPC_CHANNELS.listExports, () => dependencies.exports.getExportHistory())
   ipcMain.handle(IPC_CHANNELS.deleteExport, validated(deleteExportSchema, (input) => dependencies.exports.deleteExportRecord(input.exportId)))
   ipcMain.handle(IPC_CHANNELS.cancelExport, validated(cancelExportSchema, (input) => dependencies.exports.cancelExport(input.exportId)))
@@ -299,7 +301,7 @@ function observedIpcMain(dependencies: DebateIpcDependencies): IpcMainLike {
         }
         try {
           const result = await listener(event, input)
-          if (isFailureResult(result)) {
+          if (isFailureResult(result) && result.error.code !== 'EXPORT_DESTINATION_CANCELLED') {
             dependencies.logger.warn('IPC 调用返回错误', {
               source: 'ipc', metadata: { channel, code: result.error.code }
             })
@@ -355,6 +357,37 @@ function validated<T>(schema: ZodType<T>, action: (input: T) => unknown): (event
     if (!parsed.success) return validationFailure()
     return action(parsed.data)
   }
+}
+
+async function startDesktopExport(
+  dependencies: DebateIpcDependencies,
+  input: { debateId: string; exportOptions: { includePrivateResearch: boolean } },
+  type: DebateExportTypeDto
+) {
+  let destinationFilePath: string | undefined
+  if (dependencies.selectExportFile) {
+    const detail = dependencies.history.getDebateDetail(input.debateId)
+    if (!detail.ok) return detail
+    destinationFilePath = await dependencies.selectExportFile({
+      debateId: input.debateId,
+      debateTitle: detail.value.displayTitle,
+      type
+    })
+    if (!destinationFilePath) {
+      return {
+        ok: false as const,
+        error: {
+          code: 'EXPORT_DESTINATION_CANCELLED',
+          titleZh: '已取消导出',
+          descriptionZh: '没有选择保存位置，因此没有创建导出任务。',
+          retryable: true
+        }
+      }
+    }
+  }
+  return type === 'markdown'
+    ? dependencies.exports.exportDebateMarkdown(input.debateId, input.exportOptions, destinationFilePath)
+    : dependencies.exports.exportDebateHtml(input.debateId, input.exportOptions, destinationFilePath)
 }
 
 function validationFailure(): ConfigurationResultDto<never> {

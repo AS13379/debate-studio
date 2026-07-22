@@ -37,6 +37,7 @@ export function HomePage({
   const [batchProgress, setBatchProgress] = useState('')
   const [operationMessage, setOperationMessage] = useState<string>()
   const [operationIssues, setOperationIssues] = useState<HistoryBatchResult>()
+  const [trackedExportIds, setTrackedExportIds] = useState<string[]>([])
   const [includePrivateResearch, setIncludePrivateResearch] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<DebateHistorySummaryDto[]>([])
   const availableTags = [...new Set([
@@ -51,6 +52,26 @@ export function HomePage({
     const visible = new Set(debates.map((debate) => debate.id))
     setSelectedIds((current) => new Set([...current].filter((id) => visible.has(id))))
   }, [debates])
+
+  useEffect(() => {
+    if (!trackedExportIds.length) return
+    let disposed = false
+    const refresh = async (): Promise<void> => {
+      const result = await window.debateStudio.listExports()
+      if (!result.ok || disposed) return
+      const records = result.value.filter((record) => trackedExportIds.includes(record.exportId))
+      if (records.length !== trackedExportIds.length || records.some((record) => record.status === 'generating')) return
+      const completed = records.filter((record) => record.status === 'completed')
+      const failed = records.filter((record) => record.status === 'failed' || record.status === 'cancelled')
+      setOperationMessage(completed.length === 1 && failed.length === 0
+        ? `导出成功：${completed[0].filePath}`
+        : `导出完成：成功 ${completed.length} 个${failed.length ? ` · 失败 ${failed.length} 个` : ''}`)
+      setTrackedExportIds([])
+    }
+    void refresh()
+    const interval = window.setInterval(() => void refresh(), 500)
+    return () => { disposed = true; window.clearInterval(interval) }
+  }, [trackedExportIds])
 
   const toggleSelection = (id: string): void => setSelectedIds((current) => {
     const next = new Set(current)
@@ -73,8 +94,11 @@ export function HomePage({
       includePrivateResearch,
       (completed, total) => setBatchProgress(`${completed} / ${total}`)
     )
-    setOperationMessage(summarizeHistoryBatchResult(result))
-    setOperationIssues(result.failed.length || result.skipped.length ? result : undefined)
+    const onlyCancelledDestination = action.startsWith('export-') && result.succeeded.length === 0 && result.failed.length === 0 &&
+      result.skipped.length > 0 && result.skipped.every((item) => item.reason === '已取消选择保存位置。')
+    setOperationMessage(onlyCancelledDestination ? undefined : summarizeHistoryBatchResult(result))
+    setOperationIssues(!onlyCancelledDestination && (result.failed.length || result.skipped.length) ? result : undefined)
+    if (result.exportIds.length) setTrackedExportIds(result.exportIds)
     setBatchAction(undefined)
     setBatchProgress('')
     if (operatesOnCurrentSelection) setSelectedIds(new Set())
@@ -182,9 +206,9 @@ export function HomePage({
         {includePrivateResearch && <p className="history-batch-warning">批量导出将包含各方私有研究，请确认分享范围。</p>}
       </section>}
 
-      {operationMessage && <div className="notice success" role="status">{operationMessage}</div>}
+      {operationMessage && <div className="notice success dismissible-notice" role="status"><span>{operationMessage}</span><button aria-label="关闭导出提示" onClick={() => setOperationMessage(undefined)}>×</button></div>}
       {operationIssues && <details className="notice warning history-operation-issues">
-        <summary>查看跳过或失败的记录</summary>
+        <summary>查看跳过或失败的记录</summary><button className="notice-dismiss" aria-label="关闭操作提示" onClick={() => setOperationIssues(undefined)}>×</button>
         <ul>{[...operationIssues.skipped, ...operationIssues.failed].map((item) => <li key={`${item.debateId}-${item.reason}`}><strong>{item.title}</strong>：{item.reason}</li>)}</ul>
       </details>}
 

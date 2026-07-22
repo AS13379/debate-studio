@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { initializeDebateDesktopApplication, type DebateDesktopApplication } from '../src/application'
-import { registerDebateIpc, type IpcMainLike } from '../src/main/ipc-handlers'
+import { registerDebateIpc, type DebateIpcDependencies, type IpcMainLike } from '../src/main/ipc-handlers'
 import {
   MockAdapter,
   MockHttpTransport,
@@ -97,7 +97,11 @@ function createApplication(path: string, adapter: ModelAdapter = new ControlledM
   return initialized.value
 }
 
-function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()): {
+function register(
+  application: DebateDesktopApplication,
+  ipc = new FakeIpcMain(),
+  overrides: Partial<DebateIpcDependencies> = {}
+): {
   ipc: FakeIpcMain
   events: RunEventDto[]
   dispose: () => void
@@ -118,7 +122,8 @@ function register(application: DebateDesktopApplication, ipc = new FakeIpcMain()
     errorCenter: application.errorCenter,
     getAppVersion: () => '0.1.0-test',
     broadcastRunEvent: (event) => events.push(event),
-    broadcastPlannerProgress: () => undefined
+    broadcastPlannerProgress: () => undefined,
+    ...overrides
   })
   return { ipc, events, dispose }
 }
@@ -263,7 +268,10 @@ describe('typed IPC UI flow', () => {
   it('creates and completes the Mock demo through UI commands, broadcasts deltas, and reloads Turns from SQLite', async () => {
     const path = temporaryDirectory()
     const firstApplication = createApplication(path)
-    const first = register(firstApplication)
+    const selectedExportPath = join(path, '用户选择的辩论归档.md')
+    const first = register(firstApplication, new FakeIpcMain(), {
+      selectExportFile: async () => selectedExportPath
+    })
 
     const demo = await first.ipc.invoke<{ ok: true; value: { id: string; sessionId: string } }>(IPC_CHANNELS.createMockDemoDebate)
     const completed = await first.ipc.invoke<{ ok: boolean; state: { status: string } }>(
@@ -291,6 +299,7 @@ describe('typed IPC UI flow', () => {
       { debateId: demo.value.id, exportOptions: { includePrivateResearch: false } }
     )
     expect(exported).toMatchObject({ ok: true, value: { status: 'generating' } })
+    expect(exported.value.filePath).toBe(selectedExportPath)
     let exportedStatus = 'generating'
     for (let attempt = 0; attempt < 100 && exportedStatus === 'generating'; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10))

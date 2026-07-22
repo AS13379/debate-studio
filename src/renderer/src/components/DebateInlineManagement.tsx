@@ -16,6 +16,7 @@ export function DebateInlineManagement({ debateId, onChanged, onExit }: {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
+  const [activeExportId, setActiveExportId] = useState<string>()
 
   const load = async (): Promise<void> => {
     const result = await window.debateStudio.getDebateDetail({ id: debateId })
@@ -28,6 +29,22 @@ export function DebateInlineManagement({ debateId, onChanged, onExit }: {
   }
 
   useEffect(() => { void load() }, [debateId])
+  useEffect(() => {
+    if (!activeExportId) return
+    let disposed = false
+    const refresh = async (): Promise<void> => {
+      const result = await window.debateStudio.listExports()
+      if (!result.ok || disposed) return
+      const record = result.value.find((item) => item.exportId === activeExportId)
+      if (!record || record.status === 'generating') return
+      if (record.status === 'completed') setMessage(`导出成功：${record.filePath}`)
+      else setError(record.error?.descriptionZh ?? '导出没有完成，请重新选择保存位置后重试。')
+      setActiveExportId(undefined)
+    }
+    void refresh()
+    const interval = window.setInterval(() => void refresh(), 500)
+    return () => { disposed = true; window.clearInterval(interval) }
+  }, [activeExportId])
 
   const update = async (
     operation: Promise<DebateHistoryResultDto<DebateHistoryDetailDto>>,
@@ -53,8 +70,10 @@ export function DebateInlineManagement({ debateId, onChanged, onExit }: {
     const result = type === 'markdown'
       ? await window.debateStudio.exportMarkdown(input)
       : await window.debateStudio.exportHtml(input)
-    if (result.ok) setMessage(`${type === 'markdown' ? 'Markdown' : 'HTML'} 导出任务已开始，可继续查看辩论。`)
-    else setError(result.error.descriptionZh)
+    if (result.ok) {
+      setActiveExportId(result.value.exportId)
+      setMessage('已选择保存位置并创建导出任务；完成后会再次提示。')
+    } else if (result.error.code !== 'EXPORT_DESTINATION_CANCELLED') setError(result.error.descriptionZh)
     setBusy(false)
   }
 
@@ -64,8 +83,8 @@ export function DebateInlineManagement({ debateId, onChanged, onExit }: {
     <details className="panel collapsible-section live-management-panel">
       <summary><div><strong>管理与导出</strong><span>{detail ? `${detail.favorite ? '已收藏 · ' : ''}${detail.tags.length} 个标签 · 点击展开` : '正在读取历史信息…'}</span></div></summary>
       <div className="collapsible-body live-management-body">
-        {error && <div className="notice error" role="alert">{error}</div>}
-        {message && <div className="notice success" role="status">{message}</div>}
+        {error && <div className="notice error dismissible-notice" role="alert"><span>{error}</span><button aria-label="关闭错误提示" onClick={() => setError(undefined)}>×</button></div>}
+        {message && <div className="notice success dismissible-notice" role="status"><span>{message}</span><button aria-label="关闭导出提示" onClick={() => setMessage(undefined)}>×</button></div>}
         {detail && <>
           <div className="live-management-grid">
             <section>

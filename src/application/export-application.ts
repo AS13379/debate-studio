@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { basename, join, resolve, sep } from 'node:path'
+import { basename, extname, join, resolve, sep } from 'node:path'
 
 import {
   ExportSnapshotBuilder,
@@ -60,12 +60,20 @@ export class ExportApplication {
     this.now = dependencies.now ?? (() => new Date())
   }
 
-  exportDebateMarkdown(debateId: string, exportOptions: { includePrivateResearch: boolean }): DebateExportResultDto<DebateExportRecordDto> {
-    return this.startExport(debateId, 'markdown', exportOptions.includePrivateResearch)
+  exportDebateMarkdown(
+    debateId: string,
+    exportOptions: { includePrivateResearch: boolean },
+    destinationFilePath?: string
+  ): DebateExportResultDto<DebateExportRecordDto> {
+    return this.startExport(debateId, 'markdown', exportOptions.includePrivateResearch, destinationFilePath)
   }
 
-  exportDebateHtml(debateId: string, exportOptions: { includePrivateResearch: boolean }): DebateExportResultDto<DebateExportRecordDto> {
-    return this.startExport(debateId, 'html', exportOptions.includePrivateResearch)
+  exportDebateHtml(
+    debateId: string,
+    exportOptions: { includePrivateResearch: boolean },
+    destinationFilePath?: string
+  ): DebateExportResultDto<DebateExportRecordDto> {
+    return this.startExport(debateId, 'html', exportOptions.includePrivateResearch, destinationFilePath)
   }
 
   getExportHistory(): DebateExportResultDto<DebateExportRecordDto[]> {
@@ -128,15 +136,13 @@ export class ExportApplication {
     if (found.value.status === 'generating') {
       return this.failure('EXPORT_STILL_RUNNING', '导出仍在进行', '请先取消导出任务，再删除记录。', true)
     }
-    if (!this.isManagedPath(found.value.filePath)) {
-      return this.failure('EXPORT_PATH_REJECTED', '导出路径不安全', '为保护本地文件，只能删除应用导出目录中的文件。', false)
-    }
-
-    try {
-      await this.fileStore.delete(found.value.filePath)
-    } catch (cause) {
-      this.dependencies.logger?.error('删除导出文件失败', { source: 'export', metadata: { exportId } })
-      return this.failure('EXPORT_FILE_DELETE_FAILED', '无法删除导出文件', this.safeFailureMessage(cause), true)
+    if (this.isManagedPath(found.value.filePath)) {
+      try {
+        await this.fileStore.delete(found.value.filePath)
+      } catch (cause) {
+        this.dependencies.logger?.error('删除导出文件失败', { source: 'export', metadata: { exportId } })
+        return this.failure('EXPORT_FILE_DELETE_FAILED', '无法删除导出文件', this.safeFailureMessage(cause), true)
+      }
     }
     const deleted = this.dependencies.persistence.repositories.exports.delete(exportId)
     if (!deleted.ok) return this.persistenceFailure(deleted.error)
@@ -152,7 +158,12 @@ export class ExportApplication {
     await Promise.allSettled(active.map((task) => task.promise))
   }
 
-  private startExport(debateId: string, type: ExportType, includePrivateResearch: boolean): DebateExportResultDto<DebateExportRecordDto> {
+  private startExport(
+    debateId: string,
+    type: ExportType,
+    includePrivateResearch: boolean,
+    destinationFilePath?: string
+  ): DebateExportResultDto<DebateExportRecordDto> {
     if (this.closed) return this.failure('EXPORT_APPLICATION_CLOSED', '导出服务已关闭', '应用正在退出，无法创建新的导出任务。', true)
     const detail = this.dependencies.history.getDebateDetail(debateId)
     if (!detail.ok) return detail
@@ -174,7 +185,9 @@ export class ExportApplication {
       status: 'generating',
       progress: 0
     }
-    record.filePath = this.filePath(detail.value.displayTitle, exporter.extension, createdAt, record.id)
+    record.filePath = destinationFilePath
+      ? this.normalizeSelectedFilePath(destinationFilePath, exporter.extension)
+      : this.filePath(detail.value.displayTitle, exporter.extension, createdAt, record.id)
     const created = this.dependencies.persistence.repositories.exports.create(record)
     if (!created.ok) return this.persistenceFailure(created.error)
     this.dependencies.logger?.info('开始生成辩论导出', {
@@ -325,6 +338,12 @@ export class ExportApplication {
     const stamp = createdAt.replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
     const idSuffix = exportId.replace(/[^A-Za-z0-9_-]/g, '').slice(-12) || 'export'
     return join(this.rootDirectory, `${safeTitle}_${stamp}_${idSuffix}.${extension}`)
+  }
+
+  private normalizeSelectedFilePath(filePath: string, extension: string): string {
+    const selected = resolve(filePath)
+    if (extname(selected).toLowerCase() === `.${extension.toLowerCase()}`) return selected
+    return `${selected}.${extension}`
   }
 
   private isManagedPath(filePath: string): boolean {
