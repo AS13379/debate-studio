@@ -2,7 +2,7 @@ import { createHash, createPublicKey, verify as verifySignature } from 'node:cry
 import { access, chmod, lstat, mkdir, open, readFile, readlink, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
-import { execFile, spawn } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { x as extractTar, t as listTar } from 'tar'
 import type { CommunityUpdateInfo, CommunityUpdateManifest } from '../shared/update-dtos'
@@ -96,11 +96,23 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
   async launchInstaller(): Promise<void> {
     if (!this.manifest || !this.stagedApp) throw new Error('UPDATE_NOT_STAGED')
     const script = join(this.options.cacheDirectory, 'install-update.sh')
+    const launcher = join(this.options.cacheDirectory, 'install-update.command')
     await writeFile(script, createInstallHelperScript(), { mode: 0o700 })
     await chmod(script, 0o700)
-    const child = spawn('/bin/sh', [script, String(process.pid), this.options.appPath, this.stagedApp, this.options.cacheDirectory, this.manifest.version], { detached: true, stdio: 'ignore' })
-    child.unref()
-    setTimeout(() => this.options.quit(), 40)
+    await writeFile(launcher, createInstallTerminalLauncherScript({
+      helperPath: script,
+      parentPid: process.pid,
+      appPath: this.options.appPath,
+      stagedApp: this.stagedApp,
+      cacheDirectory: this.options.cacheDirectory,
+      version: this.manifest.version
+    }), { mode: 0o700 })
+    await chmod(launcher, 0o700)
+    // Opening a local .command file avoids silently installing in a detached
+    // background process. Terminal becomes the visible, self-contained update
+    // console and keeps failures on screen for diagnosis.
+    await execFileAsync('/usr/bin/open', ['-a', 'Terminal', launcher])
+    setTimeout(() => this.options.quit(), 300)
   }
 
   async showDownloadedUpdateInFinder(): Promise<void> {
@@ -201,6 +213,8 @@ export interface InstallHelperScriptOptions {
   confirmationWaitIterations?: number
   retryEveryIterations?: number
   settleSeconds?: number
+  languageSelectionSeconds?: number
+  successCloseSeconds?: number
 }
 
 export function createInstallHelperScript(options: InstallHelperScriptOptions = {}): string {
@@ -211,47 +225,204 @@ export function createInstallHelperScript(options: InstallHelperScriptOptions = 
   const confirmationWaitIterations = positiveInteger(options.confirmationWaitIterations, 480)
   const retryEveryIterations = positiveInteger(options.retryEveryIterations, 20)
   const settleSeconds = positiveNumber(options.settleSeconds, 2)
-  return `#!/bin/sh
+  const languageSelectionSeconds = positiveNumber(options.languageSelectionSeconds, 4)
+  const successCloseSeconds = positiveNumber(options.successCloseSeconds, 3)
+  return `#!/bin/zsh
 set -u
+unsetopt BG_NICE 2>/dev/null || true
 PARENT_PID="$1"; APP_PATH="$2"; STAGED_APP="$3"; CACHE_DIR="$4"; VERSION="$5"
 BACKUP_PATH="$APP_PATH.community-update-backup"
 RESULT="$CACHE_DIR/install-result.json"; CONFIRMED="$CACHE_DIR/launch-confirmed.json"; PENDING="$CACHE_DIR/install-pending.json"
-LOG="$CACHE_DIR/install-helper.log"
+LOG="$CACHE_DIR/install-last.log"
 OPEN_COMMAND=${openCommand}; SLEEP_COMMAND=${sleepCommand}
 SLEEP_SECONDS=${sleepSeconds}; PARENT_WAIT_ITERATIONS=${parentWaitIterations}; CONFIRMATION_WAIT_ITERATIONS=${confirmationWaitIterations}; RETRY_EVERY_ITERATIONS=${retryEveryIterations}
-exec >> "$LOG" 2>&1
-printf '[%s] installer started for v%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$VERSION"
+LANGUAGE_SELECTION_SECONDS=${languageSelectionSeconds}; SUCCESS_CLOSE_SECONDS=${successCloseSeconds}
+INTERACTIVE=0; [ -t 0 ] && INTERACTIVE=1
+LANGUAGE="\${DEBATE_UPDATE_LANGUAGE:-zh}"
+mkdir -p "$CACHE_DIR"
+: > "$LOG"
+exec > >(tee -a "$LOG") 2>&1
+
+if [ "$INTERACTIVE" -eq 1 ] && [ -z "\${DEBATE_UPDATE_LANGUAGE:-}" ]; then
+  printf '\nDebate Studio Update / Debate Studio 更新安装\n'
+  printf '  1. 中文（默认）\n  2. English\n'
+  printf '请在 %s 秒内选择 1 或 2；未选择将自动使用中文：' "$LANGUAGE_SELECTION_SECONDS"
+  if read -r -t "$LANGUAGE_SELECTION_SECONDS" choice; then
+    [ "$choice" = "2" ] && LANGUAGE="en" || LANGUAGE="zh"
+  else
+    LANGUAGE="zh"
+    printf '\n未收到选择，已自动使用中文。\n'
+  fi
+fi
+[ "$LANGUAGE" = "en" ] || LANGUAGE="zh"
+
+message() {
+  case "$LANGUAGE:$1" in
+    zh:START) printf '开始安装 Debate Studio v%s。' "$VERSION" ;;
+    en:START) printf 'Starting installation of Debate Studio v%s.' "$VERSION" ;;
+    zh:SAFETY) printf '本次只替换应用程序，不会修改数据库、API Key 或辩论记录。' ;;
+    en:SAFETY) printf 'Only the application is replaced; databases, API keys, and debate records are untouched.' ;;
+    zh:WAIT_PARENT) printf '正在等待旧版本安全退出…' ;;
+    en:WAIT_PARENT) printf 'Waiting for the previous version to exit safely…' ;;
+    zh:WAIT_PROGRESS) printf '旧版本仍在退出，已等待 %s 秒。' "$2" ;;
+    en:WAIT_PROGRESS) printf 'The previous version is still exiting (%s seconds elapsed).' "$2" ;;
+    zh:PARENT_DONE) printf '旧版本已完全退出。' ;;
+    en:PARENT_DONE) printf 'The previous version has fully exited.' ;;
+    zh:BACKUP) printf '正在创建当前应用的临时回滚备份…' ;;
+    en:BACKUP) printf 'Creating a temporary rollback backup…' ;;
+    zh:REPLACE) printf '正在替换应用程序文件…' ;;
+    en:REPLACE) printf 'Replacing application files…' ;;
+    zh:LAUNCH) printf '正在启动新版本（第 %s 次尝试）…' "$2" ;;
+    en:LAUNCH) printf 'Launching the new version (attempt %s)…' "$2" ;;
+    zh:WAIT_CONFIRM) printf '新版本已启动，正在等待健康确认…' ;;
+    en:WAIT_CONFIRM) printf 'The new version was launched; waiting for health confirmation…' ;;
+    zh:SUCCESS) printf '更新成功：Debate Studio v%s 已启动，旧版本备份已清理。' "$VERSION" ;;
+    en:SUCCESS) printf 'Update succeeded: Debate Studio v%s is running and the old backup was removed.' "$VERSION" ;;
+    zh:CLOSE) printf '此窗口将在 %s 秒后自动关闭。' "$SUCCESS_CLOSE_SECONDS" ;;
+    en:CLOSE) printf 'This window will close automatically in %s seconds.' "$SUCCESS_CLOSE_SECONDS" ;;
+    zh:ROLLBACK) printf '新版本未通过启动确认，正在恢复旧版本…' ;;
+    en:ROLLBACK) printf 'The new version did not confirm startup; restoring the previous version…' ;;
+    zh:ROLLBACK_DONE) printf '旧版本已恢复并重新启动，本地数据没有被修改。' ;;
+    en:ROLLBACK_DONE) printf 'The previous version was restored and reopened; local data was not modified.' ;;
+    zh:FAILED) printf '更新未完成。错误代码：%s' "$2" ;;
+    en:FAILED) printf 'The update did not complete. Error code: %s' "$2" ;;
+    zh:LOG_PATH) printf '完整日志保存在：%s' "$LOG" ;;
+    en:LOG_PATH) printf 'The complete log is saved at: %s' "$LOG" ;;
+    zh:KEEP_OPEN) printf '窗口将保留以便排查。确认记录完成后，按回车关闭。' ;;
+    en:KEEP_OPEN) printf 'This window will remain open for diagnosis. Press Return when you are ready to close it.' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+say() {
+  printf '[%s] ' "$(date '+%H:%M:%S')"
+  message "$@"
+  printf '\n'
+}
+
+technical() { printf '    [debug] %s\n' "$*"; }
+
+keep_failure_visible() {
+  say LOG_PATH
+  if [ "$INTERACTIVE" -eq 1 ]; then
+    say KEEP_OPEN
+    read -r _ || true
+  fi
+}
+
+close_terminal_after_success() {
+  [ "$INTERACTIVE" -eq 1 ] || return 0
+  local target_tty="$(tty)"
+  "$SLEEP_COMMAND" "$SUCCESS_CLOSE_SECONDS"
+  (
+    /usr/bin/osascript - "$target_tty" <<'APPLESCRIPT' >/dev/null 2>&1
+on run argv
+  set targetTTY to item 1 of argv
+  tell application "Terminal"
+    repeat with terminalWindow in windows
+      repeat with terminalTab in tabs of terminalWindow
+        if tty of terminalTab is targetTTY then
+          close terminalWindow
+          return
+        end if
+      end repeat
+    end repeat
+  end tell
+end run
+APPLESCRIPT
+  ) &!
+}
+
+write_failure_result() {
+  local code="$1"; local text="$2"
+  printf '{"status":"rolled-back","version":"%s","messageZh":"%s","detailCode":"%s"}' "$VERSION" "$text" "$code" > "$RESULT"
+}
+
+say START
+say SAFETY
+technical "pid=$PARENT_PID version=$VERSION app=$(basename "$APP_PATH")"
+say WAIT_PARENT
 i=0
-while kill -0 "$PARENT_PID" 2>/dev/null && [ "$i" -lt "$PARENT_WAIT_ITERATIONS" ]; do "$SLEEP_COMMAND" "$SLEEP_SECONDS"; i=$((i+1)); done
+while kill -0 "$PARENT_PID" 2>/dev/null && [ "$i" -lt "$PARENT_WAIT_ITERATIONS" ]; do
+  "$SLEEP_COMMAND" "$SLEEP_SECONDS"; i=$((i+1))
+  if [ $((i % 20)) -eq 0 ]; then say WAIT_PROGRESS "$((i * SLEEP_SECONDS))"; fi
+done
 if kill -0 "$PARENT_PID" 2>/dev/null; then
-  printf '{"status":"rolled-back","version":"%s","messageZh":"旧版本未能及时退出，安装尚未执行。"}' "$VERSION" > "$RESULT"
+  say FAILED UPDATE_PARENT_EXIT_TIMEOUT
+  write_failure_result UPDATE_PARENT_EXIT_TIMEOUT '旧版本未能及时退出，安装尚未执行。'
   rm -f "$PENDING" "$CONFIRMED" 2>/dev/null || true
+  keep_failure_visible
   exit 1
 fi
+say PARENT_DONE
 "$SLEEP_COMMAND" ${settleSeconds}
 rollback() {
-  printf '[%s] startup confirmation timed out; rolling back\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  local code="$1"; local text="$2"
+  say ROLLBACK
+  technical "rollback_reason=$code"
   rm -rf "$APP_PATH" 2>/dev/null || true
   if [ -d "$BACKUP_PATH" ]; then mv "$BACKUP_PATH" "$APP_PATH" 2>/dev/null || true; "$OPEN_COMMAND" "$APP_PATH" >/dev/null 2>&1 || true; fi
   rm -f "$PENDING" "$CONFIRMED" 2>/dev/null || true
-  printf '{"status":"rolled-back","version":"%s","messageZh":"新版本未能成功启动，已自动恢复旧版本。"}' "$VERSION" > "$RESULT"
+  write_failure_result "$code" "$text"
+  say ROLLBACK_DONE
+  say FAILED "$code"
+  keep_failure_visible
 }
 rm -rf "$BACKUP_PATH" 2>/dev/null || true
 rm -f "$CONFIRMED" "$RESULT" 2>/dev/null || true
-mv "$APP_PATH" "$BACKUP_PATH" || { rm -f "$PENDING" 2>/dev/null || true; printf '{"status":"rolled-back","version":"%s","messageZh":"无法备份当前应用，安装未执行。"}' "$VERSION" > "$RESULT"; exit 1; }
-mv "$STAGED_APP" "$APP_PATH" || { rollback; exit 1; }
+say BACKUP
+if ! mv "$APP_PATH" "$BACKUP_PATH"; then
+  rm -f "$PENDING" 2>/dev/null || true
+  say FAILED UPDATE_BACKUP_FAILED
+  write_failure_result UPDATE_BACKUP_FAILED '无法备份当前应用，安装未执行。'
+  keep_failure_visible
+  exit 1
+fi
+say REPLACE
+if ! mv "$STAGED_APP" "$APP_PATH"; then rollback UPDATE_REPLACE_FAILED '无法替换应用文件，已自动恢复旧版本。'; exit 1; fi
 i=0
 while [ ! -f "$CONFIRMED" ] && [ "$i" -lt "$CONFIRMATION_WAIT_ITERATIONS" ]; do
   if [ $((i % RETRY_EVERY_ITERATIONS)) -eq 0 ]; then
-    printf '[%s] launch attempt %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$((i / RETRY_EVERY_ITERATIONS + 1))"
-    "$OPEN_COMMAND" -n "$APP_PATH" >/dev/null 2>&1 || true
+    say LAUNCH "$((i / RETRY_EVERY_ITERATIONS + 1))"
+    if "$OPEN_COMMAND" -n "$APP_PATH"; then
+      technical "launch_request=accepted attempt=$((i / RETRY_EVERY_ITERATIONS + 1))"
+    else
+      launch_status=$?
+      technical "launch_request=failed attempt=$((i / RETRY_EVERY_ITERATIONS + 1)) exit_status=$launch_status"
+    fi
   fi
+  if [ "$i" -eq 1 ]; then say WAIT_CONFIRM; fi
   "$SLEEP_COMMAND" "$SLEEP_SECONDS"
   i=$((i+1))
 done
-if [ -f "$CONFIRMED" ]; then rm -rf "$BACKUP_PATH" "$CACHE_DIR"/* 2>/dev/null || true; exit 0; fi
-rollback
+if [ -f "$CONFIRMED" ]; then
+  rm -rf "$BACKUP_PATH" 2>/dev/null || true
+  for cached_item in "$CACHE_DIR"/*; do
+    [ "$cached_item" = "$LOG" ] && continue
+    rm -rf "$cached_item" 2>/dev/null || true
+  done
+  say SUCCESS
+  say CLOSE
+  close_terminal_after_success
+  exit 0
+fi
+rollback UPDATE_STARTUP_CONFIRMATION_TIMEOUT '新版本未能成功启动，已自动恢复旧版本。'
 exit 1
+`
+}
+
+export interface InstallTerminalLauncherScriptOptions {
+  helperPath: string
+  parentPid: number
+  appPath: string
+  stagedApp: string
+  cacheDirectory: string
+  version: string
+}
+
+export function createInstallTerminalLauncherScript(options: InstallTerminalLauncherScriptOptions): string {
+  return `#!/bin/zsh
+exec /bin/zsh ${shellLiteral(options.helperPath)} ${shellLiteral(String(options.parentPid))} ${shellLiteral(options.appPath)} ${shellLiteral(options.stagedApp)} ${shellLiteral(options.cacheDirectory)} ${shellLiteral(options.version)}
 `
 }
 
