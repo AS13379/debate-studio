@@ -34,6 +34,7 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
   private readonly fetchImpl: typeof fetch
   private manifest?: CommunityUpdateManifest
   private stagedApp?: string
+  private confirmedStartupVersion?: string
 
   constructor(private readonly options: CommunityUpdatePlatformOptions) { this.fetchImpl = options.fetchImpl ?? fetch }
 
@@ -126,8 +127,25 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
   async clearCache(): Promise<void> { await rm(this.options.cacheDirectory, { recursive: true, force: true }); this.manifest = undefined; this.stagedApp = undefined }
   async cacheSize(): Promise<number> { return directorySize(this.options.cacheDirectory) }
 
+  async confirmPendingStartup(): Promise<boolean> {
+    const pending = await readJson(join(this.options.cacheDirectory, 'install-pending.json'))
+    if (!pending || pending.version !== this.options.currentVersion) return false
+    this.confirmedStartupVersion = this.options.currentVersion
+    await writeJsonAtomic(join(this.options.cacheDirectory, 'launch-confirmed.json'), {
+      version: this.options.currentVersion,
+      confirmedAt: new Date().toISOString(),
+      phase: 'electron-ready'
+    })
+    return true
+  }
+
   async readStartupResult(): Promise<{ type: 'updated' | 'rolled-back' | 'interrupted'; version?: string; messageZh: string } | undefined> {
     await mkdir(this.options.cacheDirectory, { recursive: true })
+    if (this.confirmedStartupVersion) {
+      const version = this.confirmedStartupVersion
+      this.confirmedStartupVersion = undefined
+      return { type: 'updated', version, messageZh: `已安全更新到 v${version}。` }
+    }
     const resultPath = join(this.options.cacheDirectory, 'install-result.json')
     const pendingPath = join(this.options.cacheDirectory, 'install-pending.json')
     const result = await readJson(resultPath)
@@ -213,6 +231,7 @@ export interface InstallHelperScriptOptions {
   sleepSeconds?: number
   parentWaitIterations?: number
   confirmationWaitIterations?: number
+  launchWaitIterations?: number
   settleSeconds?: number
   languageSelectionSeconds?: number
   successCloseSeconds?: number
@@ -225,7 +244,8 @@ export function createInstallHelperScript(options: InstallHelperScriptOptions = 
   const sleepCommand = shellLiteral(options.sleepCommand ?? '/bin/sleep')
   const sleepSeconds = positiveNumber(options.sleepSeconds, 0.25)
   const parentWaitIterations = positiveInteger(options.parentWaitIterations, 240)
-  const confirmationWaitIterations = positiveInteger(options.confirmationWaitIterations, 480)
+  const confirmationWaitIterations = positiveInteger(options.confirmationWaitIterations, 120)
+  const launchWaitIterations = positiveInteger(options.launchWaitIterations, 40)
   const settleSeconds = positiveNumber(options.settleSeconds, 2)
   const languageSelectionSeconds = positiveNumber(options.languageSelectionSeconds, 4)
   const successCloseSeconds = positiveNumber(options.successCloseSeconds, 3)
@@ -236,8 +256,9 @@ PARENT_PID="$1"; APP_PATH="$2"; STAGED_APP="$3"; CACHE_DIR="$4"; VERSION="$5"
 BACKUP_PATH="$APP_PATH.community-update-backup"
 RESULT="$CACHE_DIR/install-result.json"; CONFIRMED="$CACHE_DIR/launch-confirmed.json"; PENDING="$CACHE_DIR/install-pending.json"
 LOG="$CACHE_DIR/install-last.log"
+LAUNCH_LOG="$CACHE_DIR/launch-last.log"
 OPEN_COMMAND=${openCommand}; XATTR_COMMAND=${xattrCommand}; PRIVILEGED_XATTR_COMMAND=${privilegedXattrCommand}; SLEEP_COMMAND=${sleepCommand}
-SLEEP_SECONDS=${sleepSeconds}; PARENT_WAIT_ITERATIONS=${parentWaitIterations}; CONFIRMATION_WAIT_ITERATIONS=${confirmationWaitIterations}
+SLEEP_SECONDS=${sleepSeconds}; PARENT_WAIT_ITERATIONS=${parentWaitIterations}; CONFIRMATION_WAIT_ITERATIONS=${confirmationWaitIterations}; LAUNCH_WAIT_ITERATIONS=${launchWaitIterations}
 LANGUAGE_SELECTION_SECONDS=${languageSelectionSeconds}; SUCCESS_CLOSE_SECONDS=${successCloseSeconds}
 INTERACTIVE=0; [ -t 0 ] && INTERACTIVE=1
 LANGUAGE="\${DEBATE_UPDATE_LANGUAGE:-zh}"
@@ -284,8 +305,8 @@ message() {
     en:QUARANTINE_DENIED) printf 'Authorization was not granted. Installation stopped and the previous version will be restored.' ;;
     zh:LAUNCH) printf '正在启动新版本（只启动一次，不会循环拉起）…' ;;
     en:LAUNCH) printf 'Launching the new version once; repeated launch attempts are disabled.' ;;
-    zh:WAIT_CONFIRM) printf '新版本已启动，正在等待健康确认…' ;;
-    en:WAIT_CONFIRM) printf 'The new version was launched; waiting for health confirmation…' ;;
+    zh:WAIT_CONFIRM) printf '新版本进程已启动，正在等待 Electron 就绪确认…' ;;
+    en:WAIT_CONFIRM) printf 'The new process is running; waiting for Electron readiness confirmation…' ;;
     zh:HEALTH_PROGRESS) printf '仍在等待新版本健康确认，已等待 %s 秒；不会重复启动。' "$2" ;;
     en:HEALTH_PROGRESS) printf 'Still waiting for startup confirmation after %s seconds; the app will not be launched again.' "$2" ;;
     zh:SUCCESS) printf '更新成功：Debate Studio v%s 已启动，旧版本备份已清理。' "$VERSION" ;;
@@ -430,12 +451,30 @@ say REPLACE
 if ! mv "$STAGED_APP" "$APP_PATH"; then rollback UPDATE_REPLACE_FAILED '无法替换应用文件，已自动恢复旧版本。'; exit 1; fi
 if ! clear_verified_app_quarantine; then rollback UPDATE_QUARANTINE_REMOVE_FAILED '无法清除新版本的 macOS 隔离属性，已自动恢复旧版本。'; exit 1; fi
 say LAUNCH
-if "$OPEN_COMMAND" -n "$APP_PATH"; then
-  technical "launch_request=accepted attempt=1"
+APP_EXECUTABLE="$APP_PATH/Contents/MacOS/Debate Studio"
+: > "$LAUNCH_LOG"
+if [ -x "$APP_EXECUTABLE" ]; then
+  "$APP_EXECUTABLE" >> "$LAUNCH_LOG" 2>&1 &
 else
-  launch_status=$?
-  technical "launch_request=failed attempt=1 exit_status=$launch_status"
+  technical "launch_executable=missing"
   rollback UPDATE_LAUNCH_FAILED 'macOS 未能启动新版本，已自动恢复旧版本。'
+  exit 1
+fi
+NEW_APP_PID=$!
+technical "launch_process_pid=$NEW_APP_PID attempt=1"
+i=0
+while [ ! -f "$CONFIRMED" ] && kill -0 "$NEW_APP_PID" 2>/dev/null && [ "$i" -lt "$LAUNCH_WAIT_ITERATIONS" ]; do
+  "$SLEEP_COMMAND" "$SLEEP_SECONDS"
+  i=$((i+1))
+done
+if [ ! -f "$CONFIRMED" ] && ! kill -0 "$NEW_APP_PID" 2>/dev/null; then
+  technical "launch_process=exited-before-ready pid=$NEW_APP_PID"
+  if [ -s "$LAUNCH_LOG" ]; then
+    technical "launch_log_tail_begin"
+    tail -n 30 "$LAUNCH_LOG"
+    technical "launch_log_tail_end"
+  fi
+  rollback UPDATE_LAUNCH_FAILED '新版本进程在就绪前退出，已自动恢复旧版本。'
   exit 1
 fi
 say WAIT_CONFIRM

@@ -87,6 +87,18 @@ function safeExportName(title: string): string {
 if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   configureDockIcon()
   const appDataDirectory = app.getPath('userData')
+  const applicationUpdatePlatform = new MacCommunityUpdatePlatform({
+    currentVersion: app.getVersion(),
+    cacheDirectory: join(app.getPath('home'), 'Library', 'Caches', 'debate-studio-community-updater'),
+    appPath: resolveRunningAppPath(process.execPath),
+    quit: () => app.quit(),
+    showItemInFolder: (path) => shell.showItemInFolder(path),
+    openExternal: (url) => shell.openExternal(url)
+  })
+  // Confirm the replacement as soon as Electron itself is ready. Database and
+  // application-service initialization can legitimately take longer on a large
+  // local workspace and must not make the installer misdiagnose a launch failure.
+  await applicationUpdatePlatform.confirmPendingStartup().catch(() => false)
   const credentialStore = new EncryptedFileCredentialStore({
     filePath: join(appDataDirectory, 'security', 'credentials.bin'),
     cipher: {
@@ -99,14 +111,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     appDataDirectory,
     credentialStore,
     appVersion: app.getVersion(),
-    applicationUpdatePlatform: new MacCommunityUpdatePlatform({
-      currentVersion: app.getVersion(),
-      cacheDirectory: join(app.getPath('home'), 'Library', 'Caches', 'debate-studio-community-updater'),
-      appPath: resolveRunningAppPath(process.execPath),
-      quit: () => app.quit(),
-      showItemInFolder: (path) => shell.showItemInFolder(path),
-      openExternal: (url) => shell.openExternal(url)
-    }),
+    applicationUpdatePlatform,
     applicationUpdaterSupported: app.isPackaged && process.platform === 'darwin',
     beforeInstallUpdate: prepareForUpdateInstall,
     createImageThumbnail: (bytes) => {
