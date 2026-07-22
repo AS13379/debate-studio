@@ -14,13 +14,14 @@ afterEach(async () => {
 })
 
 describe('community update install helper', () => {
-  it('retries launching until the new app confirms startup, then removes the backup', async () => {
+  it('clears quarantine and launches only once before accepting startup confirmation', async () => {
     const fixture = await createFixture(true)
     await execFileAsync('/bin/zsh', [fixture.helper, '99999999', fixture.currentApp, fixture.stagedApp, fixture.cache, '0.5.4'])
 
     expect(await readFile(join(fixture.currentApp, 'version.txt'), 'utf8')).toBe('new')
     await expect(access(`${fixture.currentApp}.community-update-backup`)).rejects.toThrow()
-    expect(Number(await readFile(fixture.attempts, 'utf8'))).toBeGreaterThanOrEqual(2)
+    expect(Number(await readFile(fixture.attempts, 'utf8'))).toBe(1)
+    expect(await readFile(fixture.xattrCalls, 'utf8')).toContain(`-dr com.apple.quarantine ${fixture.currentApp}`)
     expect(await readFile(join(fixture.cache, 'install-last.log'), 'utf8')).toContain('更新成功：Debate Studio v0.5.4 已启动')
   })
 
@@ -35,6 +36,8 @@ describe('community update install helper', () => {
     const log = await readFile(join(fixture.cache, 'install-last.log'), 'utf8')
     expect(log).toContain('正在恢复旧版本')
     expect(log).toContain('UPDATE_STARTUP_CONFIRMATION_TIMEOUT')
+    expect(log.match(/launch_request=accepted/g)).toHaveLength(1)
+    expect(Number(await readFile(fixture.attempts, 'utf8'))).toBe(2) // new app once, restored app once
   })
 
   it('can render the same installation progress in English', async () => {
@@ -46,6 +49,19 @@ describe('community update install helper', () => {
     const log = await readFile(join(fixture.cache, 'install-last.log'), 'utf8')
     expect(log).toContain('Starting installation of Debate Studio v0.5.5.')
     expect(log).toContain('Update succeeded: Debate Studio v0.5.5 is running')
+  })
+
+  it('does not launch an app when quarantine removal fails', async () => {
+    const fixture = await createFixture(true, false)
+    await expect(execFileAsync('/bin/zsh', [fixture.helper, '99999999', fixture.currentApp, fixture.stagedApp, fixture.cache, '0.5.6'])).rejects.toThrow()
+
+    expect(await readFile(join(fixture.currentApp, 'version.txt'), 'utf8')).toBe('old')
+    expect(Number(await readFile(fixture.attempts, 'utf8'))).toBe(1) // restored app only
+    expect(JSON.parse(await readFile(join(fixture.cache, 'install-result.json'), 'utf8'))).toMatchObject({
+      status: 'rolled-back',
+      version: '0.5.6',
+      detailCode: 'UPDATE_QUARANTINE_REMOVE_FAILED'
+    })
   })
 
   it('quotes every path in the Terminal launcher without changing arguments', async () => {
@@ -70,7 +86,7 @@ describe('community update install helper', () => {
   })
 })
 
-async function createFixture(confirmOnRetry: boolean) {
+async function createFixture(confirmOnLaunch: boolean, xattrSucceeds = true) {
   const root = await mkdtemp(join(tmpdir(), 'debate-studio-updater-'))
   roots.push(root)
   const currentApp = join(root, 'Debate Studio.app')
@@ -78,6 +94,8 @@ async function createFixture(confirmOnRetry: boolean) {
   const cache = join(root, 'cache')
   const helper = join(cache, 'install-update.sh')
   const openShim = join(root, 'open-shim.sh')
+  const xattrShim = join(root, 'xattr-shim.sh')
+  const xattrCalls = join(root, 'xattr-calls.txt')
   const attempts = join(root, 'launch-attempts.txt')
   await Promise.all([mkdir(currentApp, { recursive: true }), mkdir(stagedApp, { recursive: true }), mkdir(cache, { recursive: true })])
   await Promise.all([
@@ -85,27 +103,34 @@ async function createFixture(confirmOnRetry: boolean) {
     writeFile(join(stagedApp, 'version.txt'), 'new'),
     writeFile(join(cache, 'install-pending.json'), JSON.stringify({ version: '0.5.4' })),
     writeFile(join(cache, 'install-result.json'), JSON.stringify({ status: 'rolled-back', version: 'stale' })),
-    writeFile(attempts, '0')
+    writeFile(attempts, '0'),
+    writeFile(xattrCalls, '')
   ])
   const shim = `#!/bin/sh
 COUNT=$(cat '${attempts}')
 COUNT=$((COUNT+1))
 printf '%s' "$COUNT" > '${attempts}'
-${confirmOnRetry ? `if [ "$COUNT" -ge 2 ]; then printf '{}' > '${join(cache, 'launch-confirmed.json')}'; fi` : ':'}
+${confirmOnLaunch ? `printf '{}' > '${join(cache, 'launch-confirmed.json')}'` : ':'}
 exit 0
 `
+  const xattr = `#!/bin/sh
+printf '%s\n' "$*" >> '${xattrCalls}'
+exit ${xattrSucceeds ? 0 : 1}
+`
   await writeFile(openShim, shim, { mode: 0o700 })
+  await writeFile(xattrShim, xattr, { mode: 0o700 })
   await chmod(openShim, 0o700)
+  await chmod(xattrShim, 0o700)
   await writeFile(helper, createInstallHelperScript({
     openCommand: openShim,
+    xattrCommand: xattrShim,
     sleepSeconds: 0.01,
     parentWaitIterations: 2,
     confirmationWaitIterations: 8,
-    retryEveryIterations: 2,
     settleSeconds: 0,
     languageSelectionSeconds: 0,
     successCloseSeconds: 0
   }), { mode: 0o700 })
   await chmod(helper, 0o700)
-  return { root, currentApp, stagedApp, cache, helper, attempts }
+  return { root, currentApp, stagedApp, cache, helper, attempts, xattrCalls }
 }

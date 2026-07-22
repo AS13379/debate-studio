@@ -207,11 +207,12 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> { co
 
 export interface InstallHelperScriptOptions {
   openCommand?: string
+  xattrCommand?: string
+  privilegedXattrCommand?: string
   sleepCommand?: string
   sleepSeconds?: number
   parentWaitIterations?: number
   confirmationWaitIterations?: number
-  retryEveryIterations?: number
   settleSeconds?: number
   languageSelectionSeconds?: number
   successCloseSeconds?: number
@@ -219,11 +220,12 @@ export interface InstallHelperScriptOptions {
 
 export function createInstallHelperScript(options: InstallHelperScriptOptions = {}): string {
   const openCommand = shellLiteral(options.openCommand ?? '/usr/bin/open')
+  const xattrCommand = shellLiteral(options.xattrCommand ?? '/usr/bin/xattr')
+  const privilegedXattrCommand = options.privilegedXattrCommand ? shellLiteral(options.privilegedXattrCommand) : "''"
   const sleepCommand = shellLiteral(options.sleepCommand ?? '/bin/sleep')
   const sleepSeconds = positiveNumber(options.sleepSeconds, 0.25)
   const parentWaitIterations = positiveInteger(options.parentWaitIterations, 240)
   const confirmationWaitIterations = positiveInteger(options.confirmationWaitIterations, 480)
-  const retryEveryIterations = positiveInteger(options.retryEveryIterations, 20)
   const settleSeconds = positiveNumber(options.settleSeconds, 2)
   const languageSelectionSeconds = positiveNumber(options.languageSelectionSeconds, 4)
   const successCloseSeconds = positiveNumber(options.successCloseSeconds, 3)
@@ -234,8 +236,8 @@ PARENT_PID="$1"; APP_PATH="$2"; STAGED_APP="$3"; CACHE_DIR="$4"; VERSION="$5"
 BACKUP_PATH="$APP_PATH.community-update-backup"
 RESULT="$CACHE_DIR/install-result.json"; CONFIRMED="$CACHE_DIR/launch-confirmed.json"; PENDING="$CACHE_DIR/install-pending.json"
 LOG="$CACHE_DIR/install-last.log"
-OPEN_COMMAND=${openCommand}; SLEEP_COMMAND=${sleepCommand}
-SLEEP_SECONDS=${sleepSeconds}; PARENT_WAIT_ITERATIONS=${parentWaitIterations}; CONFIRMATION_WAIT_ITERATIONS=${confirmationWaitIterations}; RETRY_EVERY_ITERATIONS=${retryEveryIterations}
+OPEN_COMMAND=${openCommand}; XATTR_COMMAND=${xattrCommand}; PRIVILEGED_XATTR_COMMAND=${privilegedXattrCommand}; SLEEP_COMMAND=${sleepCommand}
+SLEEP_SECONDS=${sleepSeconds}; PARENT_WAIT_ITERATIONS=${parentWaitIterations}; CONFIRMATION_WAIT_ITERATIONS=${confirmationWaitIterations}
 LANGUAGE_SELECTION_SECONDS=${languageSelectionSeconds}; SUCCESS_CLOSE_SECONDS=${successCloseSeconds}
 INTERACTIVE=0; [ -t 0 ] && INTERACTIVE=1
 LANGUAGE="\${DEBATE_UPDATE_LANGUAGE:-zh}"
@@ -272,10 +274,20 @@ message() {
     en:BACKUP) printf 'Creating a temporary rollback backup…' ;;
     zh:REPLACE) printf '正在替换应用程序文件…' ;;
     en:REPLACE) printf 'Replacing application files…' ;;
-    zh:LAUNCH) printf '正在启动新版本（第 %s 次尝试）…' "$2" ;;
-    en:LAUNCH) printf 'Launching the new version (attempt %s)…' "$2" ;;
+    zh:QUARANTINE) printf '正在清除已验证新版本的 macOS 隔离属性…' ;;
+    en:QUARANTINE) printf 'Removing the macOS quarantine attribute from the verified update…' ;;
+    zh:QUARANTINE_DONE) printf '隔离属性已清除，正在进行启动前复查。' ;;
+    en:QUARANTINE_DONE) printf 'The quarantine attribute was removed; running a final pre-launch check.' ;;
+    zh:QUARANTINE_AUTH) printf '普通权限无法清除隔离属性。是否允许 macOS 弹出系统授权窗口后重试？[y/N] ' ;;
+    en:QUARANTINE_AUTH) printf 'Normal permissions could not remove quarantine. Allow a macOS authorization prompt and retry? [y/N] ' ;;
+    zh:QUARANTINE_DENIED) printf '未获得授权，已停止安装并恢复旧版本。' ;;
+    en:QUARANTINE_DENIED) printf 'Authorization was not granted. Installation stopped and the previous version will be restored.' ;;
+    zh:LAUNCH) printf '正在启动新版本（只启动一次，不会循环拉起）…' ;;
+    en:LAUNCH) printf 'Launching the new version once; repeated launch attempts are disabled.' ;;
     zh:WAIT_CONFIRM) printf '新版本已启动，正在等待健康确认…' ;;
     en:WAIT_CONFIRM) printf 'The new version was launched; waiting for health confirmation…' ;;
+    zh:HEALTH_PROGRESS) printf '仍在等待新版本健康确认，已等待 %s 秒；不会重复启动。' "$2" ;;
+    en:HEALTH_PROGRESS) printf 'Still waiting for startup confirmation after %s seconds; the app will not be launched again.' "$2" ;;
     zh:SUCCESS) printf '更新成功：Debate Studio v%s 已启动，旧版本备份已清理。' "$VERSION" ;;
     en:SUCCESS) printf 'Update succeeded: Debate Studio v%s is running and the old backup was removed.' "$VERSION" ;;
     zh:CLOSE) printf '此窗口将在 %s 秒后自动关闭。' "$SUCCESS_CLOSE_SECONDS" ;;
@@ -301,6 +313,42 @@ say() {
 }
 
 technical() { printf '    [debug] %s\n' "$*"; }
+
+run_privileged_xattr() {
+  if [ -n "$PRIVILEGED_XATTR_COMMAND" ]; then
+    "$PRIVILEGED_XATTR_COMMAND" "$APP_PATH"
+    return $?
+  fi
+  /usr/bin/osascript - "$APP_PATH" <<'APPLESCRIPT'
+on run argv
+  set appPath to item 1 of argv
+  do shell script "/usr/bin/xattr -dr com.apple.quarantine " & quoted form of appPath with administrator privileges
+end run
+APPLESCRIPT
+}
+
+clear_verified_app_quarantine() {
+  say QUARANTINE
+  technical "quarantine_target=$(basename "$APP_PATH") verification=project-signature+sha256+bundle-id"
+  if "$XATTR_COMMAND" -dr com.apple.quarantine "$APP_PATH"; then
+    say QUARANTINE_DONE
+    return 0
+  fi
+  technical "quarantine_remove=permission-denied"
+  if [ "$INTERACTIVE" -ne 1 ]; then return 1; fi
+  message QUARANTINE_AUTH
+  if ! read -r -t 30 quarantine_choice; then printf '\n'; return 1; fi
+  case "$quarantine_choice" in
+    y|Y|yes|YES|是) ;;
+    *) say QUARANTINE_DENIED; return 1 ;;
+  esac
+  if run_privileged_xattr; then
+    say QUARANTINE_DONE
+    return 0
+  fi
+  technical "quarantine_remove=authorized-attempt-failed"
+  return 1
+}
 
 keep_failure_visible() {
   say LOG_PATH
@@ -380,20 +428,22 @@ if ! mv "$APP_PATH" "$BACKUP_PATH"; then
 fi
 say REPLACE
 if ! mv "$STAGED_APP" "$APP_PATH"; then rollback UPDATE_REPLACE_FAILED '无法替换应用文件，已自动恢复旧版本。'; exit 1; fi
+if ! clear_verified_app_quarantine; then rollback UPDATE_QUARANTINE_REMOVE_FAILED '无法清除新版本的 macOS 隔离属性，已自动恢复旧版本。'; exit 1; fi
+say LAUNCH
+if "$OPEN_COMMAND" -n "$APP_PATH"; then
+  technical "launch_request=accepted attempt=1"
+else
+  launch_status=$?
+  technical "launch_request=failed attempt=1 exit_status=$launch_status"
+  rollback UPDATE_LAUNCH_FAILED 'macOS 未能启动新版本，已自动恢复旧版本。'
+  exit 1
+fi
+say WAIT_CONFIRM
 i=0
 while [ ! -f "$CONFIRMED" ] && [ "$i" -lt "$CONFIRMATION_WAIT_ITERATIONS" ]; do
-  if [ $((i % RETRY_EVERY_ITERATIONS)) -eq 0 ]; then
-    say LAUNCH "$((i / RETRY_EVERY_ITERATIONS + 1))"
-    if "$OPEN_COMMAND" -n "$APP_PATH"; then
-      technical "launch_request=accepted attempt=$((i / RETRY_EVERY_ITERATIONS + 1))"
-    else
-      launch_status=$?
-      technical "launch_request=failed attempt=$((i / RETRY_EVERY_ITERATIONS + 1)) exit_status=$launch_status"
-    fi
-  fi
-  if [ "$i" -eq 1 ]; then say WAIT_CONFIRM; fi
   "$SLEEP_COMMAND" "$SLEEP_SECONDS"
   i=$((i+1))
+  if [ "$i" -gt 0 ] && [ $((i % 40)) -eq 0 ]; then say HEALTH_PROGRESS "$((i * SLEEP_SECONDS))"; fi
 done
 if [ -f "$CONFIRMED" ]; then
   rm -rf "$BACKUP_PATH" 2>/dev/null || true
