@@ -1,16 +1,15 @@
-# Debate Studio v0.5.8
+# Debate Studio v0.5.9
 
-## 自动更新启动确认修复
+## 自动更新链路复验
 
-- 更新助手现在直接启动已校验的新 App 主进程，不再把系统“接受打开请求”误认为应用已经运行。
-- Electron 进程真正就绪后立即完成确认；若新进程提前退出，会显示启动日志并自动恢复旧版本。
-- 健康确认最长等待缩短为约 30 秒，不再无反馈地等待两分钟。
+- 这是一个没有产品功能或业务逻辑变化的空版本。
+- 仅用于验证 v0.5.8 修复后的项目签名下载、直接进程启动、Electron 就绪确认和失败回滚流程。
+- 更新仍只替换 Debate Studio 应用程序文件，不修改 SQLite、API Key、模型配置、Prompt、辩论或研究数据。
 
-## 数据安全
+## 隐私
 
-- 更新仍只替换 Debate Studio 应用程序文件。
-- SQLite、API Key、模型配置、Prompt、辩论和研究数据保持原位。
+- 应用更新只访问 GitHub Releases，不读取或上传本地模型凭据、SQLite 数据库、辩论和研究记录。
 
 ## macOS notice
 
-This community build is not notarized by Apple. The updater verifies the project signature, SHA256, version and bundle identity before replacing the application.
+This is an empty validation release for the project-signed community updater. It contains no product feature changes.
