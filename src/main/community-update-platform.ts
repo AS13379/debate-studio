@@ -96,7 +96,7 @@ export class MacCommunityUpdatePlatform implements CommunityUpdatePlatform {
   async launchInstaller(): Promise<void> {
     if (!this.manifest || !this.stagedApp) throw new Error('UPDATE_NOT_STAGED')
     const script = join(this.options.cacheDirectory, 'install-update.sh')
-    await writeFile(script, INSTALL_HELPER, { mode: 0o700 })
+    await writeFile(script, createInstallHelperScript(), { mode: 0o700 })
     await chmod(script, 0o700)
     const child = spawn('/bin/sh', [script, String(process.pid), this.options.appPath, this.stagedApp, this.options.cacheDirectory, this.manifest.version], { detached: true, stdio: 'ignore' })
     child.unref()
@@ -193,27 +193,70 @@ async function newestCachedUpdateArchive(directory: string): Promise<string | un
 async function readJson(path: string): Promise<Record<string, any> | undefined> { try { return JSON.parse(await readFile(path, 'utf8')) } catch { return undefined } }
 async function writeJsonAtomic(path: string, value: unknown): Promise<void> { const temp = `${path}.partial`; await writeFile(temp, JSON.stringify(value), { mode: 0o600 }); await rename(temp, path) }
 
-const INSTALL_HELPER = `#!/bin/sh
+export interface InstallHelperScriptOptions {
+  openCommand?: string
+  sleepCommand?: string
+  sleepSeconds?: number
+  parentWaitIterations?: number
+  confirmationWaitIterations?: number
+  retryEveryIterations?: number
+  settleSeconds?: number
+}
+
+export function createInstallHelperScript(options: InstallHelperScriptOptions = {}): string {
+  const openCommand = shellLiteral(options.openCommand ?? '/usr/bin/open')
+  const sleepCommand = shellLiteral(options.sleepCommand ?? '/bin/sleep')
+  const sleepSeconds = positiveNumber(options.sleepSeconds, 0.25)
+  const parentWaitIterations = positiveInteger(options.parentWaitIterations, 240)
+  const confirmationWaitIterations = positiveInteger(options.confirmationWaitIterations, 480)
+  const retryEveryIterations = positiveInteger(options.retryEveryIterations, 20)
+  const settleSeconds = positiveNumber(options.settleSeconds, 2)
+  return `#!/bin/sh
 set -u
 PARENT_PID="$1"; APP_PATH="$2"; STAGED_APP="$3"; CACHE_DIR="$4"; VERSION="$5"
 BACKUP_PATH="$APP_PATH.community-update-backup"
-RESULT="$4/install-result.json"; CONFIRMED="$4/launch-confirmed.json"
+RESULT="$CACHE_DIR/install-result.json"; CONFIRMED="$CACHE_DIR/launch-confirmed.json"; PENDING="$CACHE_DIR/install-pending.json"
+LOG="$CACHE_DIR/install-helper.log"
+OPEN_COMMAND=${openCommand}; SLEEP_COMMAND=${sleepCommand}
+SLEEP_SECONDS=${sleepSeconds}; PARENT_WAIT_ITERATIONS=${parentWaitIterations}; CONFIRMATION_WAIT_ITERATIONS=${confirmationWaitIterations}; RETRY_EVERY_ITERATIONS=${retryEveryIterations}
+exec >> "$LOG" 2>&1
+printf '[%s] installer started for v%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$VERSION"
 i=0
-while kill -0 "$PARENT_PID" 2>/dev/null && [ "$i" -lt 120 ]; do sleep 0.25; i=$((i+1)); done
+while kill -0 "$PARENT_PID" 2>/dev/null && [ "$i" -lt "$PARENT_WAIT_ITERATIONS" ]; do "$SLEEP_COMMAND" "$SLEEP_SECONDS"; i=$((i+1)); done
+if kill -0 "$PARENT_PID" 2>/dev/null; then
+  printf '{"status":"rolled-back","version":"%s","messageZh":"旧版本未能及时退出，安装尚未执行。"}' "$VERSION" > "$RESULT"
+  rm -f "$PENDING" "$CONFIRMED" 2>/dev/null || true
+  exit 1
+fi
+"$SLEEP_COMMAND" ${settleSeconds}
 rollback() {
+  printf '[%s] startup confirmation timed out; rolling back\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   rm -rf "$APP_PATH" 2>/dev/null || true
-  if [ -d "$BACKUP_PATH" ]; then mv "$BACKUP_PATH" "$APP_PATH" 2>/dev/null || true; /usr/bin/open "$APP_PATH" >/dev/null 2>&1 || true; fi
+  if [ -d "$BACKUP_PATH" ]; then mv "$BACKUP_PATH" "$APP_PATH" 2>/dev/null || true; "$OPEN_COMMAND" "$APP_PATH" >/dev/null 2>&1 || true; fi
+  rm -f "$PENDING" "$CONFIRMED" 2>/dev/null || true
   printf '{"status":"rolled-back","version":"%s","messageZh":"新版本未能成功启动，已自动恢复旧版本。"}' "$VERSION" > "$RESULT"
 }
-rm -rf "$BACKUP_PATH" "$CONFIRMED" 2>/dev/null || true
-mv "$APP_PATH" "$BACKUP_PATH" || { printf '{"status":"rolled-back","version":"%s","messageZh":"无法备份当前应用，安装未执行。"}' "$VERSION" > "$RESULT"; exit 1; }
+rm -rf "$BACKUP_PATH" 2>/dev/null || true
+rm -f "$CONFIRMED" "$RESULT" 2>/dev/null || true
+mv "$APP_PATH" "$BACKUP_PATH" || { rm -f "$PENDING" 2>/dev/null || true; printf '{"status":"rolled-back","version":"%s","messageZh":"无法备份当前应用，安装未执行。"}' "$VERSION" > "$RESULT"; exit 1; }
 mv "$STAGED_APP" "$APP_PATH" || { rollback; exit 1; }
-/usr/bin/open "$APP_PATH" >/dev/null 2>&1 || { rollback; exit 1; }
 i=0
-while [ ! -f "$CONFIRMED" ] && [ "$i" -lt 80 ]; do sleep 0.25; i=$((i+1)); done
+while [ ! -f "$CONFIRMED" ] && [ "$i" -lt "$CONFIRMATION_WAIT_ITERATIONS" ]; do
+  if [ $((i % RETRY_EVERY_ITERATIONS)) -eq 0 ]; then
+    printf '[%s] launch attempt %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$((i / RETRY_EVERY_ITERATIONS + 1))"
+    "$OPEN_COMMAND" -n "$APP_PATH" >/dev/null 2>&1 || true
+  fi
+  "$SLEEP_COMMAND" "$SLEEP_SECONDS"
+  i=$((i+1))
+done
 if [ -f "$CONFIRMED" ]; then rm -rf "$BACKUP_PATH" "$CACHE_DIR"/* 2>/dev/null || true; exit 0; fi
 rollback
 exit 1
 `
+}
+
+function shellLiteral(value: string): string { return `'${value.replace(/'/g, `'"'"'`)}'` }
+function positiveInteger(value: number | undefined, fallback: number): number { return Number.isInteger(value) && Number(value) > 0 ? Number(value) : fallback }
+function positiveNumber(value: number | undefined, fallback: number): number { return Number.isFinite(value) && Number(value) >= 0 ? Number(value) : fallback }
 
 export function resolveRunningAppPath(execPath: string): string { const marker = '.app/Contents/MacOS/'; const index = execPath.indexOf(marker); return index < 0 ? '' : execPath.slice(0, index + 4) }
