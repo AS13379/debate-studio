@@ -1,4 +1,5 @@
 import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 function normalizeBoldMarkers(line: string): string {
   const parts = line.split('**')
@@ -23,13 +24,23 @@ function normalizeModelMarkdown(content: string): string {
 }
 
 export function MarkdownContent({ content }: { content: string }) {
-  return <Markdown
-    skipHtml
-    components={{
-      h1: ({ children }) => <h3>{children}</h3>,
-      h2: ({ children }) => <h3>{children}</h3>,
-      h3: ({ children }) => <h4>{children}</h4>,
-      a: ({ children }) => <span className="markdown-link">{children}</span>
-    }}
-  >{normalizeModelMarkdown(content)}</Markdown>
+  return (
+    <div className="markdown-content">
+      <Markdown
+        skipHtml
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => <h3>{children}</h3>,
+          h2: ({ children }) => <h3>{children}</h3>,
+          h3: ({ children }) => <h4>{children}</h4>,
+          a: ({ children }) => <span className="markdown-link">{children}</span>,
+          table: ({ children }) => (
+            <div className="markdown-table-scroll">
+              <table>{children}</table>
+            </div>
+          )
+        }}
+      >{normalizeModelMarkdown(content)}</Markdown>
+    </div>
+  )
 }
