@@ -43,7 +43,7 @@ import { PromptStudioApplication } from '../prompt-studio'
 import { DebateEvaluationService, DebateReviewService } from '../debate-quality'
 import { DebateQualityApplication } from './debate-quality-application'
 import { LanWebApplication } from '../lan/lan-web-application'
-import { ApplicationUpdateService, type CommunityUpdatePlatform } from './application-update-service'
+import { ApplicationUpdateService, type DmgUpdatePlatform } from './application-update-service'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -56,9 +56,8 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
   onDatabaseRestoreCompleted?(): void
   createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined
   visionAdapter?: VisionAdapter
-  applicationUpdatePlatform?: CommunityUpdatePlatform
+  applicationUpdatePlatform?: DmgUpdatePlatform
   applicationUpdaterSupported?: boolean
-  beforeInstallUpdate?(): Promise<void>
 }
 
 export class DebateDesktopApplication {
@@ -238,8 +237,7 @@ export function initializeDebateDesktopApplication(
       settings: persistence.repositories.settings,
       platform: options.applicationUpdatePlatform,
       logger,
-      now: options.now,
-      beforeInstall: options.beforeInstallUpdate
+      now: options.now
     })
     let closed = false
     const closeApplication = async (): Promise<PersistenceResult<void>> => {

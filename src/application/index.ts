@@ -41,5 +41,5 @@ export { ApplicationUpdateService, normalizeReleaseNotes } from './application-u
 export type {
   ApplicationUpdateListener,
   ApplicationUpdatePreferences,
-  CommunityUpdatePlatform
+  DmgUpdatePlatform
 } from './application-update-service'

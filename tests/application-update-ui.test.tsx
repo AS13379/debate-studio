@@ -11,7 +11,7 @@ const base = {
   messageZh: '发现新版本 0.5.0。',
   cacheSizeBytes: 0,
   verificationStatus: 'not-verified' as const,
-  manualInstallAvailable: true
+  manualInstallAvailable: false
 }
 
 describe('ApplicationUpdatePanel', () => {
@@ -43,14 +43,29 @@ describe('ApplicationUpdatePanel', () => {
     expect(html).not.toContain('credentialRef')
   })
 
-  it('shows a retry and Finder entry when validation fails after download', () => {
+  it('shows manual installation steps after the verified DMG is downloaded', () => {
     const html = renderToStaticMarkup(<ApplicationUpdatePanel
-      state={{ ...base, status: 'error', availableVersion: '0.5.1', cacheSizeBytes: 100, error: { code: 'UPDATE_DOWNLOAD_FAILED', titleZh: '下载或校验更新失败', descriptionZh: '无法完整解压', retryable: true, detailCode: 'ARCHIVE_EXTRACT_FAILED' } }}
+      state={{ ...base, status: 'downloaded', availableVersion: '0.6.1', verificationStatus: 'verified', manualInstallAvailable: true, cacheSizeBytes: 100 }}
+      onAction={vi.fn()}
+      onPreferencesChange={vi.fn()}
+    />)
+    expect(html).toContain('新版安装包已下载')
+    expect(html).toContain('打开安装包')
+    expect(html).toContain('在 Finder 中显示')
+    expect(html).toContain('稍后安装')
+    expect(html).toContain('删除已下载文件')
+    expect(html).toContain('拖入 Applications')
+    expect(html).not.toContain('重启并安装')
+  })
+
+  it('shows a retry and Finder entry when DMG validation fails after download', () => {
+    const html = renderToStaticMarkup(<ApplicationUpdatePanel
+      state={{ ...base, status: 'error', availableVersion: '0.6.1', cacheSizeBytes: 100, error: { code: 'UPDATE_DOWNLOAD_FAILED', titleZh: '下载或校验更新失败', descriptionZh: 'SHA-256 不匹配', retryable: true, detailCode: 'ASSET_SHA256_MISMATCH' } }}
       onAction={vi.fn()}
       onPreferencesChange={vi.fn()}
     />)
     expect(html).toContain('重新下载并校验')
     expect(html).toContain('在 Finder 中显示')
-    expect(html).toContain('ARCHIVE_EXTRACT_FAILED')
+    expect(html).toContain('ASSET_SHA256_MISMATCH')
   })
 })

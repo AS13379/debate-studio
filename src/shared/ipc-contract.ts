@@ -202,8 +202,8 @@ export const IPC_CHANNELS = {
   downloadApplicationUpdate: 'update:download',
   cancelApplicationUpdateDownload: 'update:cancel-download',
   deferApplicationUpdate: 'update:defer',
-  installApplicationUpdate: 'update:install',
-  retryApplicationUpdateInstall: 'update:retry-install',
+  openDownloadedApplicationUpdate: 'update:open-downloaded',
+  deleteDownloadedApplicationUpdate: 'update:delete-downloaded',
   showDownloadedUpdateInFinder: 'update:show-in-finder',
   openLatestRelease: 'update:open-release',
   clearApplicationUpdateCache: 'update:clear-cache',
@@ -268,8 +268,8 @@ export interface DebateStudioApi extends LanDesktopApi {
   downloadApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
   cancelApplicationUpdateDownload(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
   deferApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
-  installApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
-  retryApplicationUpdateInstall(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  openDownloadedApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  deleteDownloadedApplicationUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
   showDownloadedUpdateInFinder(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
   openLatestRelease(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
   clearApplicationUpdateCache(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>

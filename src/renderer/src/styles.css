@@ -61,6 +61,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .update-progress { height: 8px; overflow: hidden; background: #e7e7ed; border-radius: 999px; }
 .update-progress span { display: block; height: 100%; background: linear-gradient(90deg, #6554da, #a496ff); border-radius: inherit; transition: width .2s ease; }
 .update-download-card .section-heading > strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.update-manual-steps { margin: 16px 0 0; padding-left: 22px; color: #555a65; line-height: 1.75; }
+.update-manual-steps li { padding-left: 4px; }
 .update-error-card { border-color: #e5aeb5; background: #fff4f5; }
 .update-error-card small { display: block; margin-top: 8px; color: #8f555d; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
 .update-build-notice { margin: 0; padding: 0 4px; color: #747782; font-size: 12px; line-height: 1.55; }
@@ -880,6 +882,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .update-policy-note, .update-release-notes { border-color: #383b44; }
   .update-release-notes { background: #1b1d22; }
   .update-progress { background: #343740; }
+  .update-manual-steps { color: #c6c8d0; }
   .update-error-card { border-color: #76434a; background: #351f23; }
   .update-error-card small { color: #d7a8ad; }
 }

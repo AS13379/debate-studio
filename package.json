@@ -1,6 +1,6 @@
 {
   "name": "debate-studio",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "A local macOS AI debate studio.",
   "author": "Leander",
   "license": "MIT",
@@ -10,7 +10,6 @@
     "build": "electron-vite build && vite build --config vite.lan.config.ts",
     "icon:mac": "zsh scripts/create-macos-icon.sh",
     "release:mac:arm64": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64",
-    "release:community-update": "node scripts/create-community-update.mjs",
     "release:mac:signed": "node scripts/build-macos-signed.mjs",
     "release:notarize": "node scripts/notarize-macos.mjs",
     "release:check": "node scripts/check-release-artifacts.mjs",
@@ -29,7 +28,6 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
-    "tar": "^7.5.20",
     "uqr": "^0.1.3",
     "zod": "^4.4.3"
   },

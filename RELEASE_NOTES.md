@@ -1,12 +1,13 @@
-# Debate Studio v0.6.0
+# Debate Studio v0.6.1
 
-## 简洁可靠的社区自动更新
+## 安全的 DMG 手动覆盖更新
 
-- 安装流程正式收缩为安全退出、替换应用、清除隔离属性和直接打开四步。
-- 移除进程健康等待、启动确认超时和循环拉起，避免新版已经替换却被错误回滚。
-- 只有必要安装步骤失败时才恢复旧版；macOS 接受打开请求后立即完成并自动关闭终端。
-- 旧版临时备份和更新缓存采用容错清理，不会把清理问题误报成安装失败。
-- 更新仍只替换 Debate Studio 应用程序文件，不修改 SQLite、API Key、模型配置、Prompt、辩论或研究数据。
+- 停用未签名 macOS 构建中的自定义 App 替换安装器。
+- 应用继续检查 GitHub Releases、显示版本与发布说明，并下载对应 arm64 DMG。
+- 下载完成后校验 GitHub Release 提供的文件大小和 SHA-256。
+- 用户通过标准 DMG 窗口手动把 Debate Studio 拖入 Applications 并选择替换。
+- 应用不会自行移动、删除或覆盖 `/Applications/Debate Studio.app`。
+- 本地 SQLite、API Key、模型配置、Prompt、辩论和研究数据继续保存在原 userData 目录。
 
 ## 隐私
 
@@ -14,4 +15,4 @@
 
 ## macOS notice
 
-This release makes the project-signed community updater intentionally simple and removes false startup-health rollbacks. It contains no cloud services, telemetry, or changes to local user data.
+This unsigned community build supports in-app update checks and verified DMG downloads, but it intentionally does not replace the installed application automatically. It contains no cloud services, telemetry, or changes to local user data.

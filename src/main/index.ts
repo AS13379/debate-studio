@@ -10,7 +10,7 @@ import { registerDebateIpc } from './ipc-handlers'
 import { createWindowOptions } from './window-options'
 import { resolveAppDataDirectory } from './app-paths'
 import { LanServerManager } from '../lan'
-import { MacCommunityUpdatePlatform, resolveRunningAppPath } from './community-update-platform'
+import { MacDmgUpdatePlatform } from './dmg-update-platform'
 
 let desktopApplication: DebateDesktopApplication | undefined
 let lanServer: LanServerManager | undefined
@@ -26,18 +26,6 @@ async function closeApplicationResources(): Promise<void> {
   const result = await (desktopApplication?.close() ?? Promise.resolve({ ok: true as const, value: undefined }))
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
   desktopApplication = undefined
-}
-
-async function prepareForUpdateInstall(): Promise<void> {
-  if (readyToQuit) return
-  shutdownStarted = true
-  try {
-    await closeApplicationResources()
-    readyToQuit = true
-  } catch (cause) {
-    shutdownStarted = false
-    throw cause
-  }
 }
 
 app.setPath('userData', resolveAppDataDirectory(app.getPath('appData')))
@@ -87,18 +75,13 @@ function safeExportName(title: string): string {
 if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   configureDockIcon()
   const appDataDirectory = app.getPath('userData')
-  const applicationUpdatePlatform = new MacCommunityUpdatePlatform({
+  const applicationUpdatePlatform = new MacDmgUpdatePlatform({
     currentVersion: app.getVersion(),
-    cacheDirectory: join(app.getPath('home'), 'Library', 'Caches', 'debate-studio-community-updater'),
-    appPath: resolveRunningAppPath(process.execPath),
-    quit: () => app.quit(),
+    cacheDirectory: join(app.getPath('home'), 'Library', 'Caches', 'debate-studio-dmg-updater'),
     showItemInFolder: (path) => shell.showItemInFolder(path),
+    openPath: (path) => shell.openPath(path),
     openExternal: (url) => shell.openExternal(url)
   })
-  // Confirm the replacement as soon as Electron itself is ready. Database and
-  // application-service initialization can legitimately take longer on a large
-  // local workspace and must not make the installer misdiagnose a launch failure.
-  await applicationUpdatePlatform.confirmPendingStartup().catch(() => false)
   const credentialStore = new EncryptedFileCredentialStore({
     filePath: join(appDataDirectory, 'security', 'credentials.bin'),
     cipher: {
@@ -113,7 +96,6 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     appVersion: app.getVersion(),
     applicationUpdatePlatform,
     applicationUpdaterSupported: app.isPackaged && process.platform === 'darwin',
-    beforeInstallUpdate: prepareForUpdateInstall,
     createImageThumbnail: (bytes) => {
       const image = nativeImage.createFromBuffer(Buffer.from(bytes))
       if (image.isEmpty()) return undefined
