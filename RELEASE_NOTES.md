@@ -1,16 +1,18 @@
-# Debate Studio v0.6.2
+# Debate Studio v0.6.3
 
-## 手动 DMG 更新链路验收
+## Markdown / GFM 表格修复
 
-- 本版本不包含产品功能、业务逻辑或数据结构变化。
-- 用于验证 v0.6.1 启用的 GitHub Release 检查、DMG 下载、大小与 SHA-256 校验以及手动覆盖安装流程。
-- 应用不会自行移动、删除或覆盖 `/Applications/Debate Studio.app`。
-- 本地 SQLite、API Key、模型配置、Prompt、辩论和研究数据保持原位。
+- 裁决、赛后分析、实时辩论和历史详情中的标准 Markdown 表格现在会显示为真正的表格。
+- Electron 客户端与局域网 Web 使用相同的 GFM 解析配置。
+- 增加适配深浅色界面的表格样式；手机端表格可独立横向滚动。
+- 同时支持 GFM 删除线、任务列表和自动链接。
+- 原始 HTML 继续保持禁用，不开放脚本或不安全内容执行。
 
 ## 隐私
 
-- 应用更新只访问 GitHub Releases，不读取或上传本地模型凭据、SQLite 数据库、辩论和研究记录。
+- 本版本不修改 SQLite 数据结构、模型配置、API Key、Prompt、辩论或研究数据。
+- 应用更新只访问 GitHub Releases，不读取或上传本地内容。
 
 ## macOS notice
 
-This no-feature-change validation release supports in-app update checks and verified DMG downloads, but it intentionally does not replace the installed application automatically. It contains no cloud services, telemetry, or changes to local user data.
+This unsigned Apple Silicon build renders GFM tables consistently in Electron and the LAN Web console. It contains no cloud services, telemetry, or changes to local user data. The in-app updater downloads and verifies the DMG but does not replace the installed application automatically.
