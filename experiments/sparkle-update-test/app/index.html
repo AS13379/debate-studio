@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>Debate Studio Update Test</title>
+    <style>
+      :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+      body { margin: 0; padding: 40px; background: #121318; color: #f7f7fb; }
+      main { max-width: 660px; margin: 0 auto; }
+      .eyebrow { color: #8470ff; font-weight: 700; letter-spacing: .12em; }
+      h1 { margin: 10px 0; font-size: 34px; }
+      .card { margin-top: 28px; padding: 24px; border: 1px solid #363943; border-radius: 18px; background: #202229; }
+      button { min-height: 44px; padding: 0 18px; margin: 8px 8px 0 0; border: 0; border-radius: 12px; font: inherit; font-weight: 700; cursor: pointer; }
+      button.primary { background: #6754dd; color: white; }
+      pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #b9bbc7; line-height: 1.55; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">ISOLATED SPARKLE 2 VALIDATION</div>
+      <h1>Debate Studio Update Test</h1>
+      <p>独立 Bundle ID、独立 userData、独立更新 Feed。不会读取正式 Debate Studio 数据。</p>
+      <section class="card">
+        <h2 id="version">读取版本中…</h2>
+        <button class="primary" id="check">使用 Sparkle 检查更新</button>
+        <button id="install">检查并立即安装</button>
+        <button id="cancel">取消</button>
+        <pre id="state"></pre>
+      </section>
+    </main>
+    <script src="./renderer.cjs"></script>
+  </body>
+</html>

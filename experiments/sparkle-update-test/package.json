@@ -1,0 +1,14 @@
+{
+  "name": "debate-studio-sparkle-update-test",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "main": "app/main.cjs",
+  "scripts": {
+    "test": "node --test tests/*.node-test.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "node-gyp": "13.0.1"
+  }
+}

@@ -1,0 +1,8 @@
+native/build/
+native/vendor/
+work/
+artifacts/
+feed/
+validation/
+*.log
+sparkle-public-key.txt
