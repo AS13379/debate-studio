@@ -6,7 +6,7 @@ This directory is an isolated macOS updater experiment. It deliberately uses:
 - bundle identifier `com.leander.debatestudio.update-test`
 - user data directory `debate-studio-update-test`
 - a local-only update feed during validation
-- a dedicated Sparkle EdDSA key stored in the macOS Keychain
+- a dedicated Sparkle EdDSA key read from an external file
 
 It does not import Debate Studio application code, repositories, SQLite databases,
 credentials, or settings. It must never replace `/Applications/Debate Studio.app`.
@@ -44,8 +44,9 @@ logs and validation state are ignored by Git.
   `~/Library/Application Support/debate-studio-update-test` only.
 - Test archives and feeds are generated below
   `/private/tmp/debate-studio-sparkle-validation`.
-- The Sparkle private signing key stays in the macOS Keychain. Only the public
-  key is embedded in the test application.
+- The Sparkle private signing key stays in a repository-external file selected
+  through `SPARKLE_PRIVATE_KEY_FILE`. Only the public key is embedded in the
+  test application.
 
 ## Commands
 
@@ -54,7 +55,8 @@ npm test
 ./scripts/fetch-sparkle.sh
 ./scripts/build-native.sh
 node scripts/build-test-version.mjs 1.0.0
-./scripts/make-appcast.sh 1.0.1
+SPARKLE_PRIVATE_KEY_FILE="$HOME/Documents/DebateStudio-secrets/sparkle_private_key" \
+  ./scripts/make-appcast.sh 1.0.1
 node scripts/feed-server.mjs
 ```
 

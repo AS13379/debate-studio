@@ -13,6 +13,7 @@
     "release:mac:signed": "node scripts/build-macos-signed.mjs",
     "release:notarize": "node scripts/notarize-macos.mjs",
     "release:check": "node scripts/check-release-artifacts.mjs",
+    "sparkle:key:check": "node scripts/sparkle-private-key.mjs",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",

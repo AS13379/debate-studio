@@ -78,8 +78,29 @@ GitHub Action tag was accepted.
 - dedicated Sparkle public key:
   `n4G+b8A6touR/ytKrzrjEWXbaqhWcZpJMSt70eFa+ug=`
 
-The matching private key is stored in the macOS Keychain and is absent from Git,
-generated files, logs, and this document.
+The matching private key is absent from Git, generated files, logs, and this
+document. Local release validation reads it from a repository-external file
+selected through `SPARKLE_PRIVATE_KEY_FILE`; CI reads the same secret from the
+GitHub Actions Secret `SPARKLE_PRIVATE_KEY`. The public key above is unchanged.
+
+## Developer signing secret
+
+Sparkle's EdDSA private key is a publisher secret, not an end-user credential.
+Local signing uses an external file:
+
+```sh
+mkdir -p "$HOME/Documents/DebateStudio-secrets"
+chmod 700 "$HOME/Documents/DebateStudio-secrets"
+chmod 600 "$HOME/Documents/DebateStudio-secrets/sparkle_private_key"
+export SPARKLE_PRIVATE_KEY_FILE="$HOME/Documents/DebateStudio-secrets/sparkle_private_key"
+npm run sparkle:key:check
+```
+
+`sign_update` is always invoked with `--ed-key-file`. The release scripts do not
+create, query, or update a macOS Keychain item and never fall back to an unsigned
+archive. GitHub Actions materializes the encrypted `SPARKLE_PRIVATE_KEY` Secret
+as a mode-600 temporary file, removes it in an `always()` cleanup step, and does
+not print its contents. End users do not configure or receive this key.
 
 ## Bundle layout and signing
 

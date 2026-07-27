@@ -32,6 +32,8 @@ builder-effective-config.yaml
 *.pfx
 *.pem
 *.key
+sparkle_private_key
+sparkle_private_key.*
 *.mobileprovision
 *.tsbuildinfo
 .DS_Store

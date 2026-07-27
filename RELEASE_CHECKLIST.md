@@ -31,6 +31,28 @@ git diff --check
 
 源码和测试中允许使用明确的 Mock/测试假凭据，但不得包含任何真实 API Key、Bearer Token 或服务商账号数据。
 
+## Sparkle 发布签名 Secret
+
+Sparkle EdDSA 私钥是开发者发布秘密，不是用户 API Key，也不应保存到
+macOS Keychain。公钥保持不变；用户端无需任何签名配置或授权弹窗。
+
+本地发布前，将私钥保存在仓库外并检查：
+
+```bash
+export SPARKLE_PRIVATE_KEY_FILE="$HOME/Documents/DebateStudio-secrets/sparkle_private_key"
+chmod 600 "$SPARKLE_PRIVATE_KEY_FILE"
+npm run sparkle:key:check
+```
+
+检查会拒绝不存在、空内容、权限过宽、位于仓库内或已被 Git 跟踪的文件。
+发布脚本必须显式向 `sign_update` 传入 `--ed-key-file`，不得读取 Keychain、
+自动生成新密钥或静默降级为未签名更新。
+
+GitHub Actions 使用仓库 Secret `SPARKLE_PRIVATE_KEY`。Workflow 只在
+`RUNNER_TEMP` 创建权限为 600 的临时文件，完成或失败后均删除；不得输出
+Secret 内容或上传私钥文件。详细流程见
+[`docs/SPARKLE_RELEASE_SIGNING.md`](docs/SPARKLE_RELEASE_SIGNING.md)。
+
 ## 干净构建
 
 从无旧产物的工作区安装依赖、验证并构建：
@@ -59,6 +81,10 @@ npm run release:check
 - 发布后从 GitHub 下载附件，重新核对 SHA-256，并在隔离的新用户数据目录中执行首次启动验收。
 
 GitHub Actions 会运行测试、类型检查、构建检查，并将未签名 DMG 作为 workflow artifact 或 Release 附件上传。
+
+Sparkle 主线迁移启用后，Workflow 还会对 ZIP 生成 EdDSA 签名和
+`appcast.xml`；签名失败必须终止发布。当前用户侧仍遵循下方未签名 DMG
+手动覆盖策略，不能把发布端签名基础设施描述为已启用自动安装。
 
 ## 未签名版本的更新策略
 

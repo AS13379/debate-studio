@@ -8,12 +8,14 @@ fi
 
 VERSION="$1"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WORKSPACE_ROOT="$(cd "$ROOT/../.." && pwd)"
 GENERATED_ROOT="${DST_SPARKLE_GENERATED_ROOT:-/private/tmp/debate-studio-sparkle-validation}"
 OUTPUT="$GENERATED_ROOT/artifacts/$VERSION"
 FEED="$GENERATED_ROOT/feed/$VERSION"
 ARCHIVE="$OUTPUT/Debate-Studio-Update-Test-${VERSION}-arm64.zip"
 ARCHIVE_NAME="$(basename "$ARCHIVE")"
 SIGN_UPDATE="$ROOT/native/vendor/bin/sign_update"
+PRIVATE_KEY_FILE="$(node "$WORKSPACE_ROOT/scripts/sparkle-private-key.mjs" --print-path)"
 
 [[ -f "$ARCHIVE" ]] || { echo "Archive does not exist: $ARCHIVE" >&2; exit 1; }
 rm -rf "$FEED"
@@ -28,7 +30,7 @@ if [[ -n "${SPARKLE_SIGNATURE_OUTPUT:-}" ]]; then
   SIGNATURE_OUTPUT="$SPARKLE_SIGNATURE_OUTPUT"
 else
   SIGNATURE_OUTPUT="$("$SIGN_UPDATE" \
-    --account com.leander.debatestudio.update-test \
+    --ed-key-file "$PRIVATE_KEY_FILE" \
     "$ARCHIVE")"
 fi
 SIGNATURE="$(printf '%s\n' "$SIGNATURE_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
