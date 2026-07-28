@@ -43,7 +43,15 @@ import { PromptStudioApplication } from '../prompt-studio'
 import { DebateEvaluationService, DebateReviewService } from '../debate-quality'
 import { DebateQualityApplication } from './debate-quality-application'
 import { LanWebApplication } from '../lan/lan-web-application'
-import { ApplicationUpdateService, type DmgUpdatePlatform } from './application-update-service'
+import {
+  ApplicationUpdateService,
+  type ApplicationUpdateController,
+  type DmgUpdatePlatform
+} from './application-update-service'
+import {
+  SparkleApplicationUpdateService,
+  type SparkleUpdatePlatform
+} from './sparkle-application-update-service'
 
 export interface DebateDesktopApplicationOptions extends DebateRunApplicationOptions {
   credentialStore?: CredentialStore
@@ -57,6 +65,7 @@ export interface DebateDesktopApplicationOptions extends DebateRunApplicationOpt
   createImageThumbnail?: (bytes: Uint8Array, mimeType: string) => Uint8Array | undefined
   visionAdapter?: VisionAdapter
   applicationUpdatePlatform?: DmgUpdatePlatform
+  sparkleUpdatePlatform?: SparkleUpdatePlatform
   applicationUpdaterSupported?: boolean
 }
 
@@ -76,7 +85,7 @@ export class DebateDesktopApplication {
     readonly promptStudio: PromptStudioApplication,
     readonly quality: DebateQualityApplication,
     readonly lanWeb: LanWebApplication,
-    readonly updates: ApplicationUpdateService,
+    readonly updates: ApplicationUpdateController,
     readonly logger: StructuredLogger,
     readonly errorCenter: ErrorCenter,
     private readonly closeApplication: () => Promise<PersistenceResult<void>>
@@ -231,14 +240,15 @@ export function initializeDebateDesktopApplication(
       logger,
       now: options.now
     })
-    const updates = new ApplicationUpdateService({
+    const updateOptions = {
       currentVersion: options.appVersion ?? '0.1.0',
       supported: options.applicationUpdaterSupported ?? false,
       settings: persistence.repositories.settings,
-      platform: options.applicationUpdatePlatform,
-      logger,
-      now: options.now
-    })
+      logger
+    }
+    const updates: ApplicationUpdateController = options.sparkleUpdatePlatform
+      ? new SparkleApplicationUpdateService({ ...updateOptions, platform: options.sparkleUpdatePlatform })
+      : new ApplicationUpdateService({ ...updateOptions, platform: options.applicationUpdatePlatform, now: options.now })
     let closed = false
     const closeApplication = async (): Promise<PersistenceResult<void>> => {
       if (closed) return { ok: true, value: undefined }

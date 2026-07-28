@@ -10,7 +10,7 @@ import { registerDebateIpc } from './ipc-handlers'
 import { createWindowOptions } from './window-options'
 import { resolveAppDataDirectory } from './app-paths'
 import { LanServerManager } from '../lan'
-import { MacDmgUpdatePlatform } from './dmg-update-platform'
+import { MacSparkleUpdatePlatform } from './sparkle-update-platform'
 
 let desktopApplication: DebateDesktopApplication | undefined
 let lanServer: LanServerManager | undefined
@@ -75,13 +75,12 @@ function safeExportName(title: string): string {
 if (hasSingleInstanceLock) void app.whenReady().then(async () => {
   configureDockIcon()
   const appDataDirectory = app.getPath('userData')
-  const applicationUpdatePlatform = new MacDmgUpdatePlatform({
-    currentVersion: app.getVersion(),
-    cacheDirectory: join(app.getPath('home'), 'Library', 'Caches', 'debate-studio-dmg-updater'),
-    showItemInFolder: (path) => shell.showItemInFolder(path),
-    openPath: (path) => shell.openPath(path),
-    openExternal: (url) => shell.openExternal(url)
-  })
+  const sparkleUpdatePlatform = app.isPackaged && process.platform === 'darwin'
+    ? new MacSparkleUpdatePlatform(
+        join(process.resourcesPath, 'sparkle_bridge.node'),
+        () => shell.openExternal('https://github.com/AS13379/debate-studio/releases/latest')
+      )
+    : undefined
   const credentialStore = new EncryptedFileCredentialStore({
     filePath: join(appDataDirectory, 'security', 'credentials.bin'),
     cipher: {
@@ -94,7 +93,7 @@ if (hasSingleInstanceLock) void app.whenReady().then(async () => {
     appDataDirectory,
     credentialStore,
     appVersion: app.getVersion(),
-    applicationUpdatePlatform,
+    sparkleUpdatePlatform,
     applicationUpdaterSupported: app.isPackaged && process.platform === 'darwin',
     createImageThumbnail: (bytes) => {
       const image = nativeImage.createFromBuffer(Buffer.from(bytes))

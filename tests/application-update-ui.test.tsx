@@ -12,6 +12,7 @@ const base = {
   cacheSizeBytes: 0,
   verificationStatus: 'not-verified' as const,
   manualInstallAvailable: false
+  , installationMode: 'manual-dmg' as const
 }
 
 describe('ApplicationUpdatePanel', () => {
@@ -67,5 +68,17 @@ describe('ApplicationUpdatePanel', () => {
     expect(html).toContain('重新下载并校验')
     expect(html).toContain('在 Finder 中显示')
     expect(html).toContain('ASSET_SHA256_MISMATCH')
+  })
+
+  it('shows Sparkle install and restart without DMG or Finder instructions', () => {
+    const html = renderToStaticMarkup(<ApplicationUpdatePanel
+      state={{ ...base, installationMode: 'sparkle', status: 'ready-to-install', availableVersion: '0.6.4', verificationStatus: 'verified' }}
+      onAction={vi.fn()}
+      onPreferencesChange={vi.fn()}
+    />)
+    expect(html).toContain('安装并重新启动')
+    expect(html).toContain('Sparkle')
+    expect(html).not.toContain('拖入 Applications')
+    expect(html).not.toContain('在 Finder 中显示')
   })
 })

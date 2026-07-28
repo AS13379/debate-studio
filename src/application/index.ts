@@ -39,7 +39,14 @@ export { DebateQualityApplication } from './debate-quality-application'
 export { PromptStudioApplication } from '../prompt-studio'
 export { ApplicationUpdateService, normalizeReleaseNotes } from './application-update-service'
 export type {
+  ApplicationUpdateController,
   ApplicationUpdateListener,
   ApplicationUpdatePreferences,
   DmgUpdatePlatform
 } from './application-update-service'
+export { SparkleApplicationUpdateService } from './sparkle-application-update-service'
+export type {
+  SparkleApplicationUpdateServiceOptions,
+  SparkleNativeState,
+  SparkleUpdatePlatform
+} from './sparkle-application-update-service'

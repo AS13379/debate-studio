@@ -45,7 +45,24 @@ export interface ApplicationUpdateServiceOptions {
 
 export type ApplicationUpdateListener = (state: ApplicationUpdateStateDto) => void
 
-export class ApplicationUpdateService {
+export interface ApplicationUpdateController {
+  initialize(): Promise<void>
+  getState(): ApplicationUpdateStateDto
+  subscribe(listener: ApplicationUpdateListener): () => void
+  checkForUpdates(input?: { automatic?: boolean }): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  setPreferences(input: ApplicationUpdatePreferences): ApplicationUpdateResultDto<ApplicationUpdateStateDto>
+  downloadUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  cancelDownload(): ApplicationUpdateResultDto<ApplicationUpdateStateDto>
+  deferUpdate(): ApplicationUpdateResultDto<ApplicationUpdateStateDto>
+  openDownloadedUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  showDownloadedUpdateInFinder(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  deleteDownloadedUpdate(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  openLatestRelease(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  clearCache(): Promise<ApplicationUpdateResultDto<ApplicationUpdateStateDto>>
+  close(): void
+}
+
+export class ApplicationUpdateService implements ApplicationUpdateController {
   private state: ApplicationUpdateStateDto
   private readonly listeners = new Set<ApplicationUpdateListener>()
   private readonly now: () => Date
@@ -65,6 +82,7 @@ export class ApplicationUpdateService {
       messageZh: '尚未检查更新。',
       verificationStatus: 'not-verified',
       manualInstallAvailable: false,
+      installationMode: 'manual-dmg',
       cacheSizeBytes: 0
     }
   }

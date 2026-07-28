@@ -11,6 +11,7 @@ const fallbackState: ApplicationUpdateStateDto = {
   messageZh: '正在读取更新状态…',
   verificationStatus: 'not-verified',
   manualInstallAvailable: true,
+  installationMode: 'sparkle',
   cacheSizeBytes: 0
 }
 
@@ -61,6 +62,7 @@ interface ApplicationUpdatePanelProps {
 export function ApplicationUpdatePanel({ state, busy = false, onAction, onPreferencesChange }: ApplicationUpdatePanelProps) {
   const checking = state.status === 'checking'
   const downloading = state.status === 'downloading'
+  const sparkle = state.installationMode === 'sparkle'
   return (
     <section className="page-stack application-update-page">
       <header className="page-header compact-page-header">
@@ -76,19 +78,19 @@ export function ApplicationUpdatePanel({ state, busy = false, onAction, onPrefer
         </button>
       </section>
       <section className="panel update-preferences-card">
-        <div><h3>更新偏好</h3><p>后台检查不会阻塞窗口；是否自动下载由你决定，安装始终通过 macOS DMG 手动完成。</p></div>
+        <div><h3>更新偏好</h3><p>{sparkle ? '后台检查不会阻塞窗口；Sparkle 会验证更新来源并负责安全安装与重启。' : '后台检查不会阻塞窗口；是否自动下载由你决定，安装始终通过 macOS DMG 手动完成。'}</p></div>
         <div className="update-toggle-group">
           <label className="update-toggle"><input type="checkbox" checked={state.automaticCheckEnabled} onChange={(event) => onPreferencesChange({ automaticCheckEnabled: event.target.checked, automaticDownloadEnabled: state.automaticDownloadEnabled })} /><span>自动检查更新</span></label>
           <label className="update-toggle"><input type="checkbox" checked={state.automaticDownloadEnabled} onChange={(event) => onPreferencesChange({ automaticCheckEnabled: state.automaticCheckEnabled, automaticDownloadEnabled: event.target.checked })} /><span>发现新版后自动下载</span></label>
         </div>
-        <div className="update-policy-note"><strong>自动下载：{state.automaticDownloadEnabled ? '开启' : '关闭'}</strong><span>{state.automaticDownloadEnabled ? '发现新版本后自动下载并校验 DMG，完成后由你手动覆盖安装。' : '发现新版本后由你决定何时下载 DMG。'}</span></div>
+        <div className="update-policy-note"><strong>自动下载：{state.automaticDownloadEnabled ? '开启' : '关闭'}</strong><span>{sparkle ? (state.automaticDownloadEnabled ? '发现新版本后由 Sparkle 自动下载并验证，安装前仍会提示。' : '发现新版本后由你决定何时进入 Sparkle 更新流程。') : (state.automaticDownloadEnabled ? '发现新版本后自动下载并校验 DMG，完成后由你手动覆盖安装。' : '发现新版本后由你决定何时下载 DMG。')}</span></div>
       </section>
       {state.status === 'available' && (
         <section className="panel update-release-card">
           <div className="section-heading"><div><h3>发现 v{state.availableVersion}</h3><p>当前版本 v{state.currentVersion}{state.releaseDate ? ` · 发布于 ${formatDate(state.releaseDate)}` : ''}</p></div></div>
           {state.releaseName && <strong className="update-release-name">{state.releaseName}</strong>}
           {state.releaseNotes && <pre className="update-release-notes">{state.releaseNotes}</pre>}
-          <div className="button-row"><button className="button primary" disabled={busy} onClick={() => onAction('download')}>下载更新</button><button className="button secondary" disabled={busy} onClick={() => onAction('defer')}>稍后提醒</button></div>
+          <div className="button-row"><button className="button primary" disabled={busy} onClick={() => onAction('download')}>{sparkle ? '打开 Sparkle 更新' : '下载更新'}</button><button className="button secondary" disabled={busy} onClick={() => onAction('defer')}>稍后提醒</button></div>
         </section>
       )}
       {downloading && (
@@ -98,9 +100,12 @@ export function ApplicationUpdatePanel({ state, busy = false, onAction, onPrefer
           <div className="button-row"><button className="button secondary" onClick={() => onAction('cancel')}>取消下载</button></div>
         </section>
       )}
-      {state.status === 'downloaded' && (
+      {(state.status === 'downloaded' || state.status === 'ready-to-install') && (
         <section className="panel update-ready-card">
-          <div>
+          {sparkle ? <div>
+            <h3>{state.status === 'ready-to-install' ? '更新已准备完成' : '正在验证更新'}</h3>
+            <p>更新由 Sparkle 验证并安装；安装时应用会退出，完成后自动重新打开，本地数据保持不变。</p>
+          </div> : <div>
             <h3>新版安装包已下载</h3>
             <p>由于当前社区构建未经过 Apple Developer ID 签名和公证，需要手动覆盖安装。您的数据库、API Key 和辩论记录不会受到影响。</p>
             <ol className="update-manual-steps">
@@ -109,26 +114,27 @@ export function ApplicationUpdatePanel({ state, busy = false, onAction, onPrefer
               <li>选择“替换”。</li>
               <li>重新打开 Debate Studio。</li>
             </ol>
-          </div>
+          </div>}
           <div className="button-row">
-            <button className="button primary" disabled={busy} onClick={() => onAction('open-downloaded')}>打开安装包</button>
-            <button className="button secondary" disabled={busy} onClick={() => onAction('show-in-finder')}>在 Finder 中显示</button>
+            <button className="button primary" disabled={busy} onClick={() => onAction('open-downloaded')}>{sparkle ? '安装并重新启动' : '打开安装包'}</button>
+            {!sparkle && <button className="button secondary" disabled={busy} onClick={() => onAction('show-in-finder')}>在 Finder 中显示</button>}
             <button className="button secondary" disabled={busy} onClick={() => onAction('defer')}>稍后安装</button>
-            <button className="button danger" disabled={busy} onClick={() => onAction('delete-downloaded')}>删除已下载文件</button>
+            {!sparkle && <button className="button danger" disabled={busy} onClick={() => onAction('delete-downloaded')}>删除已下载文件</button>}
           </div>
         </section>
       )}
+      {state.status === 'installing' && <section className="panel update-ready-card"><div><h3>正在安装更新</h3><p>{state.messageZh}</p></div></section>}
       {state.status === 'error' && (
         <section className="panel update-error-card"><div><h3>{state.error?.titleZh ?? '更新失败'}</h3><p>{state.error?.descriptionZh ?? state.messageZh}</p>{state.error?.detailCode && <small>校验步骤：{state.error.detailCode}</small>}</div><div className="button-row">{state.availableVersion && <button className="button secondary" disabled={busy} onClick={() => onAction('download')}>重新下载并校验</button>}{state.cacheSizeBytes > 0 && <button className="button secondary" disabled={busy} onClick={() => onAction('show-in-finder')}>在 Finder 中显示</button>}<button className="button secondary" disabled={busy} onClick={() => onAction('open-release')}>打开 GitHub Release</button></div></section>
       )}
-      <section className="panel update-cache-card"><div><h3>更新缓存</h3><p>{formatBytes(state.cacheSizeBytes)} · 已下载的 DMG 只会在你点击删除或清理缓存后移除。</p></div><button className="button secondary" disabled={busy || state.cacheSizeBytes === 0} onClick={() => onAction('clear-cache')}>清理更新缓存</button></section>
-      <p className="update-build-notice">{state.supported ? '未签名的 macOS 社区构建暂不支持可靠的自动覆盖安装。应用只负责检查、下载和校验 DMG，不会移动或删除 /Applications 中的程序。' : '更新检查只在安装后的 macOS arm64 应用中启用。'}</p>
+      {!sparkle && <section className="panel update-cache-card"><div><h3>更新缓存</h3><p>{formatBytes(state.cacheSizeBytes)} · 已下载的 DMG 只会在你点击删除或清理缓存后移除。</p></div><button className="button secondary" disabled={busy || state.cacheSizeBytes === 0} onClick={() => onAction('clear-cache')}>清理更新缓存</button></section>}
+      <p className="update-build-notice">{state.supported ? (sparkle ? 'macOS 更新由 Sparkle 验证、替换并重新启动；Debate Studio 不会自行移动应用或执行安装脚本。' : '当前使用 DMG 手动安装兼容路径。') : '更新检查只在安装后的 macOS arm64 应用中启用。'}</p>
     </section>
   )
 }
 
 function statusLabel(status: ApplicationUpdateStateDto['status']): string {
-  return ({ idle: '等待检查', checking: '检查中', 'up-to-date': '已是最新', available: '有新版本', downloading: '下载中', downloaded: 'DMG 已下载', error: '更新失败' })[status]
+  return ({ idle: '等待检查', checking: '检查中', 'up-to-date': '已是最新', available: '有新版本', downloading: '下载中', downloaded: '正在验证', 'ready-to-install': '等待安装', installing: '安装中', error: '更新失败' })[status]
 }
 
 function formatBytes(bytes: number): string {

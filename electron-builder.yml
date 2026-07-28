@@ -10,6 +10,12 @@ directories:
 extraResources:
   - from: build/icon.png
     to: icon.png
+extraFiles:
+  - from: native/sparkle/vendor/Sparkle.framework
+    to: Frameworks/Sparkle.framework
+  - from: native/sparkle/build/Release/sparkle_bridge.node
+    to: Resources/sparkle_bridge.node
+afterPack: scripts/after-pack-sparkle.cjs
 files:
   - out/**/*
   - package.json
@@ -25,6 +31,12 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
   identity: null
+  extendInfo:
+    SUFeedURL: https://github.com/AS13379/debate-studio/releases/latest/download/appcast.xml
+    SUPublicEDKey: n4G+b8A6touR/ytKrzrjEWXbaqhWcZpJMSt70eFa+ug=
+    SUEnableAutomaticChecks: false
+    SUEnableInstallerLauncherService: false
+    SUScheduledCheckInterval: 3600
   target:
     - target: dmg
       arch:

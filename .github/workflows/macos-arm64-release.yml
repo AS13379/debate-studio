@@ -24,10 +24,10 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v6
 
-      - name: Use Node.js 22
+      - name: Use Node.js 24
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           package-manager-cache: true
 
@@ -62,7 +62,7 @@ jobs:
           echo "SPARKLE_PRIVATE_KEY_FILE=$key_file" >> "$GITHUB_ENV"
 
       - name: Fetch pinned Sparkle release tools
-        run: zsh experiments/sparkle-update-test/scripts/fetch-sparkle.sh
+        run: zsh scripts/fetch-sparkle-runtime.sh
 
       - name: Sign update ZIP and generate appcast
         env:
@@ -75,6 +75,14 @@ jobs:
             --version "$version" \
             --tag "$RELEASE_TAG" \
             --output release/appcast.xml
+
+      - name: Re-run signed Sparkle release gate
+        run: |
+          set -euo pipefail
+          npm run release:check
+          test -s release/appcast.xml
+          grep -q 'sparkle:edSignature=' release/appcast.xml
+          grep -q "Debate-Studio-$(node -p "require('./package.json').version")-arm64.zip" release/appcast.xml
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v6

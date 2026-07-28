@@ -50,7 +50,7 @@ if (!existsSync(archive) || !statSync(archive).isFile() || statSync(archive).siz
 const key = validateSparklePrivateKeyFile({ repositoryRoot })
 const signUpdate = resolve(
   process.env.SPARKLE_SIGN_UPDATE_PATH
-    ?? `${repositoryRoot}/experiments/sparkle-update-test/native/vendor/bin/sign_update`
+    ?? `${repositoryRoot}/native/sparkle/vendor/bin/sign_update`
 )
 if (!existsSync(signUpdate)) {
   throw new Error(`未找到 Sparkle sign_update：${signUpdate}`)

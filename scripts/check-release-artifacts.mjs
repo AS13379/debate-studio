@@ -1,5 +1,17 @@
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  readdirSync,
+  rmSync,
+  statSync
+} from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { validateFormalSparkleBundle } from './validate-formal-sparkle-bundle.mjs'
 
 const releaseDirectory = join(process.cwd(), 'release')
 const { version } = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
@@ -24,4 +36,54 @@ if (!metadata.includes(`version: ${version}`) || !metadata.includes(dmg) || !met
   console.error('latest-mac.yml 与当前版本、DMG 或更新 ZIP 文件名不匹配。')
   process.exit(1)
 }
-console.log(JSON.stringify({ dmg: join(releaseDirectory, dmg), blockmap: join(releaseDirectory, blockmap), zip: join(releaseDirectory, zip), zipBlockmap: join(releaseDirectory, zipBlockmap), updateMetadata: join(releaseDirectory, updateMetadata), appPath, bytes }, null, 2))
+// afterPack already validates the signed bundle in a non-FileProvider staging
+// directory. The ZIP extraction below is the release artifact's authoritative
+// post-archive deep-signature gate.
+const packaged = validateFormalSparkleBundle(appPath, version, false)
+const packagedManifest = bundleManifest(appPath)
+const extractedRoot = mkdtempSync(join(tmpdir(), 'debate-studio-sparkle-gate-'))
+try {
+  execFileSync('ditto', ['-x', '-k', join(releaseDirectory, zip), extractedRoot], { stdio: 'inherit' })
+  const extractedApp = join(extractedRoot, 'Debate Studio.app')
+  const extracted = validateFormalSparkleBundle(extractedApp, version)
+  if (extracted.appAsarSize !== packaged.appAsarSize) {
+    throw new Error('SPARKLE_ZIP_APP_ASAR_SIZE_MISMATCH')
+  }
+  const extractedManifest = bundleManifest(extractedApp)
+  if (JSON.stringify(extractedManifest) !== JSON.stringify(packagedManifest)) {
+    throw new Error('SPARKLE_ZIP_FILE_MANIFEST_MISMATCH')
+  }
+  console.log(JSON.stringify({
+    dmg: join(releaseDirectory, dmg),
+    zip: join(releaseDirectory, zip),
+    appPath,
+    bytes,
+    packaged,
+    extracted,
+    bundleEntryCount: packagedManifest.length
+  }, null, 2))
+} finally {
+  rmSync(extractedRoot, { recursive: true, force: true })
+}
+
+function bundleManifest(root) {
+  const entries = []
+  const pending = [{ absolute: root, relative: '' }]
+  while (pending.length > 0) {
+    const current = pending.pop()
+    for (const name of readdirSync(current.absolute).sort()) {
+      const absolute = join(current.absolute, name)
+      const relative = current.relative ? join(current.relative, name) : name
+      const stats = lstatSync(absolute)
+      if (stats.isDirectory()) {
+        entries.push(`${relative}/`)
+        pending.push({ absolute, relative })
+      } else if (stats.isSymbolicLink()) {
+        entries.push(`${relative} -> ${readlinkSync(absolute)}`)
+      } else {
+        entries.push(`${relative} (${stats.size})`)
+      }
+    }
+  }
+  return entries.sort()
+}

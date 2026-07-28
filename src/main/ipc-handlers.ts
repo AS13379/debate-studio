@@ -1,7 +1,7 @@
 import type { ZodType } from 'zod'
 
 import type {
-  ApplicationUpdateService, CostApplication, DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateQualityApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ModelRoutingApplication, OnboardingApplication, PromptStudioApplication, ResearchApplication
+  ApplicationUpdateController, CostApplication, DataManagementApplication, DebateConfigurationApplication, DebateHistoryApplication, DebateQualityApplication, DebateRunApplication, DebateRunEvent, DiagnosticsApplication, ExportApplication, ModelRoutingApplication, OnboardingApplication, PromptStudioApplication, ResearchApplication
 } from '../application'
 import type { DebateTurn } from '../domain'
 import type { ErrorCenter, LoggerLike } from '../observability'
@@ -89,7 +89,7 @@ export interface DebateIpcDependencies {
   logger: LoggerLike
   errorCenter: ErrorCenter
   lanServer?: LanServerManager
-  updates?: ApplicationUpdateService
+  updates?: ApplicationUpdateController
   getAppVersion(): string
   openExternalUrl?(url: string): Promise<void>
   openLanPreviewUrl?(url: string): Promise<void>

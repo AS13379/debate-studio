@@ -1,5 +1,6 @@
 export const APPLICATION_UPDATE_STATUSES = [
-  'idle', 'checking', 'up-to-date', 'available', 'downloading', 'downloaded', 'error'
+  'idle', 'checking', 'up-to-date', 'available', 'downloading', 'downloaded',
+  'ready-to-install', 'installing', 'error'
 ] as const
 export type ApplicationUpdateStatusDto = typeof APPLICATION_UPDATE_STATUSES[number]
 export type UpdateVerificationStatusDto = 'not-verified' | 'verifying' | 'verified' | 'failed'
@@ -12,6 +13,7 @@ export interface ApplicationUpdateStateDto {
   releaseNotes?: string; releaseDate?: string; lastCheckedAt?: string; progress?: ApplicationUpdateProgressDto
   error?: ApplicationUpdateErrorDto; updatePackageSizeBytes?: number; cacheSizeBytes: number
   verificationStatus: UpdateVerificationStatusDto; manualInstallAvailable: boolean; sha256Available?: boolean
+  installationMode?: 'sparkle' | 'manual-dmg'
 }
 export type ApplicationUpdateResultDto<T> = { ok: true; value: T } | { ok: false; error: ApplicationUpdateErrorDto }
 

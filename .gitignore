@@ -34,6 +34,8 @@ builder-effective-config.yaml
 *.key
 sparkle_private_key
 sparkle_private_key.*
+native/sparkle/build/
+native/sparkle/vendor/
 *.mobileprovision
 *.tsbuildinfo
 .DS_Store
