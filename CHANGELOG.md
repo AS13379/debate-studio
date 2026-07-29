@@ -2,6 +2,13 @@
 
 本文件记录 Debate Studio 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.7.2] - 2026-07-29
+
+### README 展示修复
+
+- 移除无法通过 GitHub 图片代理加载的 Star History 令牌图，改用稳定的 GitHub Star 徽章与趋势页链接。
+- 在 README 和 Wiki 首页注明“本仓库由 AS13379 指导，Codex 托管”。
+
 ## [0.7.1] - 2026-07-29
 
 ### 中文文档与使用指南

@@ -8,6 +8,8 @@
 
 Debate Studio 把模型配置、辩题规划、资料研究、证据管理、流式辩论、裁判评分、赛后复盘、历史归档和导出放进一个桌面应用。它适合希望长期保存讨论过程、比较不同模型与 Prompt、又不想把个人资料交给云端平台的用户。
 
+> 本仓库由 **AS13379 指导，Codex 托管**。
+
 ![Debate Studio 首次使用界面](docs/screenshots/workbench.png)
 
 ## 丰富但不杂乱
@@ -86,12 +88,10 @@ npm run build
 
 项目采用 [MIT License](LICENSE)。提交 Issue、截图或日志前，请先移除真实 API Key、数据库、个人辩题、研究资料和本机绝对路径。
 
-## Star History
+## Star 趋势
 
-<a href="https://www.star-history.com/?repos=AS13379%2Fdebate-studio&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=AS13379/debate-studio&type=date&theme=dark&legend=top-left&sealed_token=6eVgpc0CpOqV_rlwh2UHFrFIwVocUrM60wvXcLR0V15BIlR9iwTsHrdSOSDiDaHG2aoQ_oqJMXnmLSh3VRDAzamRdDx45fAb5xvbgcZLoLynqokm7O5re5aD1n1VgUW4OYLyD0XFgvJkMezvpFqSVqXMOED2Z9LIFgi-i81lGSB8tkG6nbCGUjjOImUa" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=AS13379/debate-studio&type=date&legend=top-left&sealed_token=6eVgpc0CpOqV_rlwh2UHFrFIwVocUrM60wvXcLR0V15BIlR9iwTsHrdSOSDiDaHG2aoQ_oqJMXnmLSh3VRDAzamRdDx45fAb5xvbgcZLoLynqokm7O5re5aD1n1VgUW4OYLyD0XFgvJkMezvpFqSVqXMOED2Z9LIFgi-i81lGSB8tkG6nbCGUjjOImUa" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=AS13379/debate-studio&type=date&legend=top-left&sealed_token=6eVgpc0CpOqV_rlwh2UHFrFIwVocUrM60wvXcLR0V15BIlR9iwTsHrdSOSDiDaHG2aoQ_oqJMXnmLSh3VRDAzamRdDx45fAb5xvbgcZLoLynqokm7O5re5aD1n1VgUW4OYLyD0XFgvJkMezvpFqSVqXMOED2Z9LIFgi-i81lGSB8tkG6nbCGUjjOImUa" />
- </picture>
-</a>
+[![GitHub Stars](https://img.shields.io/github/stars/AS13379/debate-studio?style=for-the-badge&logo=github&label=Stars)](https://github.com/AS13379/debate-studio/stargazers)
+
+[在 Star History 查看趋势](https://www.star-history.com/?repos=AS13379%2Fdebate-studio&type=date&legend=top-left)
+
+> GitHub 自 2026 年 7 月起限制星标历史接口。实时趋势图需要一个正确授权并由 Star History 封装的令牌；为避免失效图片和在公开 README 中长期绑定访问令牌，本页默认只嵌入 GitHub Star 数量徽章。
