@@ -1,18 +1,18 @@
-# Debate Studio v0.6.3
+# Debate Studio v0.7.0
 
-## Markdown / GFM 表格修复
+## Sparkle 2 自动更新
 
-- 裁决、赛后分析、实时辩论和历史详情中的标准 Markdown 表格现在会显示为真正的表格。
-- Electron 客户端与局域网 Web 使用相同的 GFM 解析配置。
-- 增加适配深浅色界面的表格样式；手机端表格可独立横向滚动。
-- 同时支持 GFM 删除线、任务列表和自动链接。
-- 原始 HTML 继续保持禁用，不开放脚本或不安全内容执行。
+- macOS 客户端正式接入 Sparkle 2 原生更新。
+- 支持检查、下载、EdDSA 校验、自动替换应用和重新启动。
+- 更新包发布前会检查 `app.asar`、Sparkle Framework、原生桥接、Bundle 信息、ZIP 文件清单和深层代码签名。
+- 首次安装仍提供 DMG；后续版本可以通过应用内 Sparkle 更新。
 
-## 隐私
+## 数据与隐私
 
-- 本版本不修改 SQLite 数据结构、模型配置、API Key、Prompt、辩论或研究数据。
-- 应用更新只访问 GitHub Releases，不读取或上传本地内容。
+- 更新只替换 Debate Studio 应用程序。
+- SQLite、API Key、模型配置、历史辩论、研究资料和 LAN 设置保留在原位置。
+- 不提供云同步、遥测或用户数据收集。
 
-## macOS notice
+## macOS
 
-This unsigned Apple Silicon build renders GFM tables consistently in Electron and the LAN Web console. It contains no cloud services, telemetry, or changes to local user data. The in-app updater downloads and verifies the DMG but does not replace the installed application automatically.
+This is an unsigned Apple Silicon community build. Sparkle update archives are independently verified with the Debate Studio EdDSA release key.

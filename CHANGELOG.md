@@ -2,6 +2,16 @@
 
 本文件记录 Debate Studio 各公开版本的重要变化。版本号遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.7.0] - 2026-07-29
+
+### Sparkle 2 原生自动更新
+
+- 正式 macOS 客户端迁移至 Sparkle 2，支持应用内检查、下载、EdDSA 校验、自动替换和重新启动。
+- Sparkle Framework 与原生 N-API bridge 随正式 App 打包，Renderer 继续通过原有安全 IPC 边界访问更新服务。
+- 发布流程增加 App Bundle、`app.asar`、Sparkle Runtime、桥接模块、Info.plist、符号链接、ZIP 文件清单和深层代码签名门禁。
+- 保留首次安装 DMG；本地 SQLite、API Key、历史辩论、研究数据和局域网设置不会被更新流程覆盖。
+- 已使用隔离 userData 完成真实 `0.6.3 → 0.6.5-test` Sparkle 下载、替换、退出和重启验收。
+
 ## [0.6.3] - 2026-07-23
 
 ### Markdown 表格阅读修复
