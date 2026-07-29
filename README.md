@@ -86,8 +86,12 @@ npm run build
 
 项目采用 [MIT License](LICENSE)。提交 Issue、截图或日志前，请先移除真实 API Key、数据库、个人辩题、研究资料和本机绝对路径。
 
-## Star 趋势
+## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=AS13379/debate-studio&type=Date)](https://www.star-history.com/#AS13379/debate-studio&Date)
-
-> 上图由第三方 Star History 服务按需生成；若你不希望访问外站，可忽略或阻止该图片请求。
+<a href="https://www.star-history.com/?repos=AS13379%2Fdebate-studio&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=AS13379/debate-studio&type=date&theme=dark&legend=top-left&sealed_token=6eVgpc0CpOqV_rlwh2UHFrFIwVocUrM60wvXcLR0V15BIlR9iwTsHrdSOSDiDaHG2aoQ_oqJMXnmLSh3VRDAzamRdDx45fAb5xvbgcZLoLynqokm7O5re5aD1n1VgUW4OYLyD0XFgvJkMezvpFqSVqXMOED2Z9LIFgi-i81lGSB8tkG6nbCGUjjOImUa" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=AS13379/debate-studio&type=date&legend=top-left&sealed_token=6eVgpc0CpOqV_rlwh2UHFrFIwVocUrM60wvXcLR0V15BIlR9iwTsHrdSOSDiDaHG2aoQ_oqJMXnmLSh3VRDAzamRdDx45fAb5xvbgcZLoLynqokm7O5re5aD1n1VgUW4OYLyD0XFgvJkMezvpFqSVqXMOED2Z9LIFgi-i81lGSB8tkG6nbCGUjjOImUa" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=AS13379/debate-studio&type=date&legend=top-left&sealed_token=6eVgpc0CpOqV_rlwh2UHFrFIwVocUrM60wvXcLR0V15BIlR9iwTsHrdSOSDiDaHG2aoQ_oqJMXnmLSh3VRDAzamRdDx45fAb5xvbgcZLoLynqokm7O5re5aD1n1VgUW4OYLyD0XFgvJkMezvpFqSVqXMOED2Z9LIFgi-i81lGSB8tkG6nbCGUjjOImUa" />
+ </picture>
+</a>
