@@ -2,6 +2,7 @@ import {
   chmodSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync
 } from 'node:fs'
@@ -138,13 +139,10 @@ process.stdout.write('sparkle:edSignature="ZmFrZS1lZDI1NTE5LXNpZ25hdHVyZQ==" len
       ['ls-files', '*sparkle_private_key*'],
       { cwd: root, encoding: 'utf8' }
     )
-    const rendererFiles = execFileSync(
-      'rg',
-      ['--files', 'src/renderer', 'src/lan-renderer'],
-      { cwd: root, encoding: 'utf8' }
-    ).trim().split('\n').filter(Boolean)
+    const rendererFiles = ['src/renderer', 'src/lan-renderer']
+      .flatMap((directory) => listSourceFiles(join(root, directory)))
     const rendererSource = rendererFiles
-      .map((file) => readFileSync(join(root, file), 'utf8'))
+      .map((file) => readFileSync(file, 'utf8'))
       .join('\n')
 
     expect(tracked.stdout.trim()).toBe('')
@@ -161,6 +159,16 @@ function createTemporaryDirectory(): string {
 
 function testPrivateKey(): string {
   return Buffer.alloc(32, 0x5a).toString('base64')
+}
+
+function listSourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      return listSourceFiles(path)
+    }
+    return /\.(?:css|html|json|ts|tsx)$/.test(entry.name) ? [path] : []
+  })
 }
 
 function runValidator(keyFile?: string, repositoryRoot = root): string {
